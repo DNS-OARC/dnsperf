@@ -33,3 +33,7 @@ To configure, compile, and install these programs, follow these steps.
 
 The contrib directory contains additional software related to dnsperf and
 resperf.
+
+## Bug reports
+
+Bug reports may be filed on github.
