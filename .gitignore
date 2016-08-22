@@ -1,0 +1,8 @@
+*.o
+libperf.a
+Makefile
+config.log
+config.status
+dnsperf
+resperf
+.lineno
