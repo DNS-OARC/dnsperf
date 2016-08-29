@@ -2,6 +2,8 @@
 
 ## Overview
 
+[https://github.com/nominum/dnsperf](https://github.com/nominum/dnsperf)
+
 This is a collection of DNS server performance testing tools, including dnsperf
 and resperf.  For more information, see the dnsperf(1) and resperf(1) man pages.
 
@@ -33,7 +35,3 @@ To configure, compile, and install these programs, follow these steps.
 
 The contrib directory contains additional software related to dnsperf and
 resperf.
-
-## Bug reports
-
-Bug reports may be filed on github.
