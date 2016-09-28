@@ -140,7 +140,7 @@ parse_double(const char *desc, const char *str)
 
     s = str;
     while (*s != 0) {
-        c = *s;
+        c = *s++;
         if (c == '.') {
             if (seen_dot)
                 goto fail;
