@@ -1,0 +1,67 @@
+name: dnsperf
+# printf "version: '%s'\n" $(cat version.h | grep 'define VER' | cut -d\" -f 2)
+version: '2.1.1.0.d'
+summary: Tools to gather DNS latency and throughput metrics.
+description: |
+  DNSPerf and ResPerf are free tools developed by Nominum that make it simple
+  to gather accurate latency and throughput metrics for Domain Name Service
+  (DNS). These tools are easy-to-use and simulate typical Internet so network
+  operators can benchmark their naming and addressing infrastructure and plan
+  for upgrades. The latest version of the DNSPerf and ResPerf can be used with
+  test files that include IPv6 queries.
+  
+  DNSPerf "self-paces" the DNS query load to simulate network conditions. New
+  features in DNSPerf improve the precision of latency measurements and allow
+  for per packet per-query latency reporting is possible. DNSPerf is now
+  multithreaded, multiple DNSPerf clients can be supported in multicore
+  systems (each client requires two cores). The output of DNSPerf has also
+  been improved so it is more concise and useful. Latency data can be used to
+  make detailed graphs so it is simple for network operators to take advantage
+  of the data.
+  
+  ResPerf systematically increases the query rate and monitors the response
+  rate to simulate caching DNS services.
+  
+  Sample data files can be found at:
+      ftp://ftp.nominum.com/pub/nominum/dnsperf/data/
+
+grade: devel
+confinement: devmode
+
+
+apps:
+  dnsperf:
+    command: dnsperf
+    plugs:
+     - home
+  resperf:
+    command: resperf
+    plugs:
+     - home
+  resperf-report:
+    command: resperf-report
+    plugs:
+     - home
+
+parts:
+  dnsperf:
+    # See 'snapcraft plugins'
+    plugin: autotools
+    source: https://github.com/mpontillo/dnsperf
+    source-type: git
+    source-tag: master
+    build-packages: 
+     - build-essential
+     - libbind-dev
+     - libkrb5-dev
+     - libssl-dev
+     - libcap-dev
+     - libxml2-dev
+     - libgeoip-dev
+    stage-packages:
+     - bind9utils
+     - libbind9-140
+     - libkrb5support0
+     - libssl1.0.0
+     - libxml2
+     - libgeoip1
