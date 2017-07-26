@@ -1,5 +1,7 @@
 # dnsperf
 
+[![Snap Status](https://build.snapcraft.io/badge/mpontillo/dnsperf.svg)](https://build.snapcraft.io/user/mpontillo/dnsperf)
+
 ## Overview
 
 [https://github.com/nominum/dnsperf](https://github.com/nominum/dnsperf)
