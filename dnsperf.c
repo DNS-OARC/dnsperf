@@ -981,8 +981,37 @@ per_thread(isc_uint32_t total, isc_uint32_t nthreads, unsigned int offset)
     return value;
 }
 
+#ifdef __linux__
+static void set_thread_affinity(pthread_t thread, unsigned int num)
+{
+   cpu_set_t cpus;
+   unsigned int n, count;
+
+   sched_getaffinity(0, sizeof(cpus), &cpus);
+   count = CPU_COUNT(&cpus);
+   n = num % count;
+
+   for (int i = 0; n >= 0; ++i) {
+       if (CPU_ISSET(i, &cpus)) {
+           if (n-- == 0) {
+               CPU_ZERO(&cpus);
+               CPU_SET(i, &cpus);
+               if (pthread_setaffinity_np(thread, sizeof(cpus), &cpus) != 0) {
+                   perror("pthread_setaffinity_np");
+               }
+               return;
+           }
+       }
+   }
+}
+#define THREAD_AFFINITY(t, n) set_thread_affinity(t, n)
+#else
+#define THREAD_AFFINITY(t, n) {}
+#endif
+
 static void
-threadinfo_init(threadinfo_t *tinfo, const config_t *config,
+threadinfo_init(unsigned int threadnum,
+                threadinfo_t *tinfo, const config_t *config,
                 const times_t *times)
 {
     unsigned int offset, socket_offset, i;
@@ -1037,7 +1066,9 @@ threadinfo_init(threadinfo_t *tinfo, const config_t *config,
     tinfo->current_sock = 0;
 
     THREAD(&tinfo->receiver, do_recv, tinfo);
+    THREAD_AFFINITY(tinfo->receiver, threadnum);
     THREAD(&tinfo->sender, do_send, tinfo);
+    THREAD_AFFINITY(tinfo->sender, threadnum);
 }
 
 static void
@@ -1091,11 +1122,12 @@ main(int argc, char **argv)
     if (threads == NULL)
         perf_log_fatal("out of memory");
     for (i = 0; i < config.threads; i++)
-        threadinfo_init(&threads[i], &config, &times);
+        threadinfo_init(i, &threads[i], &config, &times);
     if (config.stats_interval > 0) {
         stats_thread.config = &config;
         stats_thread.times = &times;
         THREAD(&stats_thread.sender, do_interval_stats, &stats_thread);
+	THREAD_AFFINITY(stats_thread.sender, config.threads + 1);
     }
 
     times.start_time = get_time();
