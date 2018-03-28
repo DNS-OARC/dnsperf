@@ -16,6 +16,7 @@
 
 #include <getopt.h>
 #include <stdio.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -44,7 +45,7 @@ typedef struct {
         char **stringp;
         isc_boolean_t *boolp;
         unsigned int *uintp;
-        isc_uint64_t *uint64p;
+        uint64_t *uint64p;
         double *doublep;
         in_port_t *portp;
     } u;
@@ -114,11 +115,11 @@ perf_opt_usage(void)
     }
 }
 
-static isc_uint32_t
+static uint32_t
 parse_uint(const char *desc, const char *str,
            unsigned int min, unsigned int max)
 {
-    isc_uint32_t val;
+    uint32_t val;
     isc_result_t result;
 
     val = 0;
@@ -158,7 +159,7 @@ fail:
     exit(1);
 }
 
-static isc_uint64_t
+static uint64_t
 parse_timeval(const char *desc, const char *str)
 {
     return MILLION * parse_double(desc, str);
