@@ -19,10 +19,15 @@ To configure, compile, and install these programs, follow these steps.
 1. Make sure that BIND 9 (9.4.0 or greater) is installed, including libraries
    and header files, and that the isc-config.sh program distributed with BIND
    is in your path.
-   
+
    Note: many versions of bind do not correctly install the <isc/hmacsha.h>
    header file, so if the compilation fails, obtain this file from the BIND
    source distribution, and install it in the appropriate place.
+
+   On Ubuntu / Debian:
+   ```
+   sudo apt-get install -y bind9utils libbind-dev libkrb5-dev libssl-dev libcap-dev libxml2-dev libjson-c-dev libgeoip-dev
+   ```
 
 2. Run "sh configure" to configure the software.  Most standard configure
    options are supported.
