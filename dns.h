@@ -41,7 +41,7 @@ void
 perf_dns_destroyednsoption(perf_dnsednsoption_t **optionp);
 
 perf_dnsctx_t *
-perf_dns_createctx(isc_boolean_t updates);
+perf_dns_createctx(bool updates);
 
 void
 perf_dns_destroyctx(perf_dnsctx_t **ctxp);
@@ -49,7 +49,7 @@ perf_dns_destroyctx(perf_dnsctx_t **ctxp);
 isc_result_t
 perf_dns_buildrequest(perf_dnsctx_t *ctx, const isc_textregion_t *record,
                       uint16_t qid,
-                      isc_boolean_t edns, isc_boolean_t dnssec,
+                      bool edns, bool dnssec,
                       perf_dnstsigkey_t *tsigkey,
                       perf_dnsednsoption_t *edns_option, isc_buffer_t *msg);
 
