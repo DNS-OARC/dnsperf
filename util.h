@@ -16,6 +16,7 @@
 
 #include <pthread.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include <string.h>
 
 #include <sys/time.h>
@@ -101,12 +102,12 @@
 
 #define TIMEDWAIT(cond, mutex, when, timedout) do {                         \
     int __n = pthread_cond_timedwait((cond), (mutex), (when));              \
-    isc_boolean_t *res = (timedout);                                        \
+    bool *res = (timedout);                                                 \
     if (__n != 0 && __n != ETIMEDOUT) {                                     \
         perf_log_fatal("pthread_cond_timedwait failed: %s", strerror(__n)); \
     }                                                                       \
     if (res != NULL) {                                                      \
-        *res = ISC_TF(__n != 0);                                            \
+        *res = (__n != 0);                                                  \
     }                                                                       \
 } while (0)
 

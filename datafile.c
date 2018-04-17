@@ -15,6 +15,7 @@
  */
 
 #include <fcntl.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -37,14 +38,14 @@ struct perf_datafile {
     pthread_mutex_t lock;
     int pipe_fd;
     int fd;
-    isc_boolean_t is_file;
+    bool is_file;
     size_t size;
-    isc_boolean_t cached;
+    bool cached;
     char databuf[BUFFER_SIZE + 1];
     isc_buffer_t data;
     unsigned int maxruns;
     unsigned int nruns;
-    isc_boolean_t read_any;
+    bool read_any;
 };
 
 static inline void
@@ -216,7 +217,7 @@ read_one_line(perf_datafile_t *dfile, isc_buffer_t *lines)
 
 isc_result_t
 perf_datafile_next(perf_datafile_t *dfile, isc_buffer_t *lines,
-                   isc_boolean_t is_update)
+                   bool is_update)
 {
     const char *current;
     isc_result_t result;
