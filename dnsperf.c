@@ -937,9 +937,7 @@ do_interval_stats(void *arg)
         interval_time = now - last_interval_time;
         num_completed = total.num_completed - last_completed;
         qps = num_completed / (((double)interval_time) / MILLION);
-        perf_log_printf("%u.%06u: %.6lf",
-                        (unsigned int)(now / MILLION),
-                        (unsigned int)(now % MILLION), qps);
+        perf_log_sameline("qps: %.6lf", qps);
         last_interval_time = now;
         last_completed = total.num_completed;
     }

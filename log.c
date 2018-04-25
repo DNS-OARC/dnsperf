@@ -25,15 +25,23 @@
 pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void
-vlog(FILE *stream, const char *prefix, const char *fmt, va_list args)
+vlog(FILE *stream, const char *prefix, const char term, const char *fmt, va_list args)
 {
     LOCK(&log_lock);
     fflush(stdout);
     if (prefix != NULL)
         fprintf(stream, "%s: ", prefix);
     vfprintf(stream, fmt, args);
-    fprintf(stream, "\n");
+    fprintf(stream, "%c", term);
     UNLOCK(&log_lock);
+}
+
+void
+perf_log_sameline(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    vlog(stderr, NULL, '\r', fmt, args);
 }
 
 void
@@ -41,7 +49,7 @@ perf_log_printf(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    vlog(stdout, NULL, fmt, args);
+    vlog(stdout, NULL, '\n', fmt, args);
 }
 
 void
@@ -49,7 +57,7 @@ perf_log_fatal(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    vlog(stderr, "Error", fmt, args);
+    vlog(stderr, "Error", '\n', fmt, args);
     exit(1);
 }
 
@@ -58,5 +66,5 @@ perf_log_warning(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    vlog(stderr, "Warning", fmt, args);
+    vlog(stderr, "Warning", '\n', fmt, args);
 }
