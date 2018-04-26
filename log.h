@@ -26,4 +26,7 @@ perf_log_fatal(const char *fmt, ...);
 void
 perf_log_warning(const char *fmt, ...);
 
+void
+perf_log_sameline(const char *fmt, ...);
+
 #endif
