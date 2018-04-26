@@ -5,6 +5,7 @@ exec_prefix = @exec_prefix@
 bindir = @bindir@
 mandir = @mandir@
 datarootdir = @datarootdir@
+datadir = @datadir@
 
 INSTALL = @INSTALL@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@ 
@@ -12,7 +13,7 @@ INSTALL_DATA = @INSTALL_DATA@
 RANLIB = @RANLIB@
 
 CC = @PTHREAD_CC@
-CFLAGS = @CFLAGS@ @DNSCFLAGS@ @DEFS@ @PTHREAD_CFLAGS@
+CFLAGS = @CFLAGS@ @DNSCFLAGS@ @DEFS@ @PTHREAD_CFLAGS@  -DDATADIR=\"$(datadir)/dnsperf\"
 LIBS = libperf.a @LIBS@ @DNSLIBS@ @PTHREAD_LIBS@ -lm
 LIBOBJS = @LIBOBJS@
 LDFLAGS = @LDFLAGS@ @PTHREAD_CFLAGS@

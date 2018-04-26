@@ -448,6 +448,9 @@ setup(int argc, char **argv, config_t *config)
 
     perf_opt_parse(argc, argv);
 
+    if (filename == NULL)
+        filename = DATADIR "/queryfile-example-10million-201202";
+
     if (family != NULL)
         config->family = perf_net_parsefamily(family);
     perf_net_parseserver(config->family, server_name, server_port,
