@@ -58,8 +58,9 @@ def main(argv):
             packet = pcap.next()
         except:
             break
-   
-    
+
+        if packet[0] is None:
+            break
         packet = packet[1]
         # Toss the stuff before the IP header
         packet = packet[IPHDRSTART:]
@@ -102,16 +103,16 @@ def main(argv):
     if outfile is not sys.stdout:
         outfile.close()
     sum = 0
-    print "Statistics:"
+    print("Statistics:")
     qtypes = qtypecount.keys()
     qtypes.sort()
     for qtype in qtypes:
         qtype_str = dns.rdatatype.to_text(qtype)
         count = qtypecount[qtype]
-        print "    %10s:\t%d" % (qtype_str, count)
+        print("    %10s:\t%d" % (qtype_str, count))
         sum += count
-    print "-------------------------"
-    print "         TOTAL:\t%d" % sum
+    print("-------------------------")
+    print("         TOTAL:\t%d" % sum)
 
 if __name__ == '__main__':
     main(sys.argv[1:])
