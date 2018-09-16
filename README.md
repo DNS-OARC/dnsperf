@@ -2,7 +2,7 @@
 
 ## Overview
 
-[https://github.com/nominum/dnsperf](https://github.com/nominum/dnsperf)
+[https://github.com/akamai/dnsperf](https://github.com/akamai/dnsperf)
 
 This is a collection of DNS server performance testing tools, including dnsperf
 and resperf.  For more information, see the dnsperf(1) and resperf(1) man pages.
