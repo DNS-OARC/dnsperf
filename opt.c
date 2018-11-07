@@ -15,6 +15,7 @@
  */
 
 #include <getopt.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <inttypes.h>
 #include <stdlib.h>
@@ -43,7 +44,7 @@ typedef struct {
     union {
         void *valp;
         char **stringp;
-        isc_boolean_t *boolp;
+        bool *boolp;
         unsigned int *uintp;
         uint64_t *uint64p;
         double *doublep;
@@ -137,7 +138,7 @@ parse_double(const char *desc, const char *str)
 {
     const char *s;
     char c;
-    isc_boolean_t seen_dot = ISC_FALSE;
+    bool seen_dot = false;
 
     s = str;
     while (*s != 0) {
@@ -145,7 +146,7 @@ parse_double(const char *desc, const char *str)
         if (c == '.') {
             if (seen_dot)
                 goto fail;
-            seen_dot = ISC_TRUE;
+            seen_dot = true;
         } else if (c < '0' || c > '9') {
             goto fail;
         }
@@ -195,7 +196,7 @@ perf_opt_parse(int argc, char **argv)
             *opt->u.stringp = optarg;
             break;
         case perf_opt_boolean:
-            *opt->u.boolp = ISC_TRUE;
+            *opt->u.boolp = true;
             break;
         case perf_opt_uint:
             *opt->u.uintp = parse_uint(opt->desc, optarg,
