@@ -976,10 +976,17 @@ static isc_uint32_t
 per_thread(isc_uint32_t total, isc_uint32_t nthreads, unsigned int offset)
 {
     isc_uint32_t value;
+    isc_uint32_t temp_total;
 
     value = total / nthreads;
-    if (value % nthreads > offset)
+
+    /*
+     * work out if there's a shortfall and adjust if necessary
+     */
+    temp_total = value * nthreads;
+    if (temp_total < total && offset < total - temp_total)
         value++;
+
     return value;
 }
 
