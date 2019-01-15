@@ -341,8 +341,10 @@ sum_stats(const config_t *config, stats_t *total)
 
         total->latency_sum += stats->latency_sum;
         total->latency_sum_squares += stats->latency_sum_squares;
-        total->latency_min += stats->latency_min;
-        total->latency_max += stats->latency_max;
+        if (stats->latency_min < total->latency_min || i == 0)
+            total->latency_min = stats->latency_min;
+        if (stats->latency_max > total->latency_max)
+            total->latency_max = stats->latency_max;
     }
 }
 
