@@ -1,4 +1,21 @@
 #!/usr/bin/env python
+#
+# Copyright 2019 OARC, Inc.
+# Copyright 2017-2018 Akamai Technologies
+# Copyright 2006-2016 Nominum, Inc.
+# All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import dns.message
 import dns.rrset
@@ -13,7 +30,7 @@ from optparse import OptionParser
 
 __author__ = "Nominum, Inc."
 __version__ = "1.0.2.0"
-__date__ = "2007-05-14" 
+__date__ = "2007-05-14"
 
 IPHeader = '!BBHHHBBHLL'
 
@@ -35,7 +52,7 @@ def main(argv):
     parser.add_option("-r", "--recursion", dest="recurse", action="store_true",
                      default=False,
                      help="Keep queries whose RD flag is 0 (default: discard)")
-    parser.add_option("-R", "--responses", dest="responses", 
+    parser.add_option("-R", "--responses", dest="responses",
                      action="store_true", default=False,
                      help="Parse query responses instead of queries")
     (opts, args) = parser.parse_args()
@@ -65,13 +82,13 @@ def main(argv):
         # Toss the stuff before the IP header
         packet = packet[IPHDRSTART:]
 
-        # Grab the rest of the packet so we can parse proto 
+        # Grab the rest of the packet so we can parse proto
         iphdr = packet[0:IPHDRLEN]
         if len(iphdr) < IPHDRLEN:
-            continue 
+            continue
         (vhl, tos, tlen, ipid, fragoff, ttl, proto, cksum, srcip, dstip) = \
                 struct.unpack(IPHeader, iphdr)
- 
+
         # Toss the IP header, we're done with it.  We need to account
         # for any IP header options.
         ihl = (vhl & 0xF) * 4
@@ -97,7 +114,7 @@ def main(argv):
                 fqdn = query.name.to_text()
                 qtype = dns.rdatatype.to_text(query.rdtype)
                 outfile.write("%s %s\n" % (fqdn, qtype))
-                # add qtype to dict if not present, otherwise increment 
+                # add qtype to dict if not present, otherwise increment
                 qtypecount[query.rdtype] = qtypecount.get(query.rdtype, 0) + 1
 
     if outfile is not sys.stdout:
@@ -116,4 +133,3 @@ def main(argv):
 
 if __name__ == '__main__':
     main(sys.argv[1:])
-
