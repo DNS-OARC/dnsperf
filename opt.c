@@ -15,7 +15,9 @@
  */
 
 #include <getopt.h>
+#include <stdbool.h>
 #include <stdio.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -42,9 +44,9 @@ typedef struct {
     union {
         void *valp;
         char **stringp;
-        isc_boolean_t *boolp;
+        bool *boolp;
         unsigned int *uintp;
-        isc_uint64_t *uint64p;
+        uint64_t *uint64p;
         double *doublep;
         in_port_t *portp;
     } u;
@@ -114,11 +116,11 @@ perf_opt_usage(void)
     }
 }
 
-static isc_uint32_t
+static uint32_t
 parse_uint(const char *desc, const char *str,
            unsigned int min, unsigned int max)
 {
-    isc_uint32_t val;
+    uint32_t val;
     isc_result_t result;
 
     val = 0;
@@ -136,7 +138,7 @@ parse_double(const char *desc, const char *str)
 {
     const char *s;
     char c;
-    isc_boolean_t seen_dot = ISC_FALSE;
+    bool seen_dot = false;
 
     s = str;
     while (*s != 0) {
@@ -144,7 +146,7 @@ parse_double(const char *desc, const char *str)
         if (c == '.') {
             if (seen_dot)
                 goto fail;
-            seen_dot = ISC_TRUE;
+            seen_dot = true;
         } else if (c < '0' || c > '9') {
             goto fail;
         }
@@ -158,7 +160,7 @@ fail:
     exit(1);
 }
 
-static isc_uint64_t
+static uint64_t
 parse_timeval(const char *desc, const char *str)
 {
     return MILLION * parse_double(desc, str);
@@ -194,7 +196,7 @@ perf_opt_parse(int argc, char **argv)
             *opt->u.stringp = optarg;
             break;
         case perf_opt_boolean:
-            *opt->u.boolp = ISC_TRUE;
+            *opt->u.boolp = true;
             break;
         case perf_opt_uint:
             *opt->u.uintp = parse_uint(opt->desc, optarg,
