@@ -1,8 +1,24 @@
+.\" Copyright 2019 OARC, Inc.
+.\" Copyright 2017-2018 Akamai Technologies
+.\" Copyright 2006-2016 Nominum, Inc.
+.\" All rights reserved.
+.\"
+.\" Licensed under the Apache License, Version 2.0 (the "License");
+.\" you may not use this file except in compliance with the License.
+.\" You may obtain a copy of the License at
+.\"
+.\"     http://www.apache.org/licenses/LICENSE-2.0
+.\"
+.\" Unless required by applicable law or agreed to in writing, software
+.\" distributed under the License is distributed on an "AS IS" BASIS,
+.\" WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+.\" See the License for the specific language governing permissions and
+.\" limitations under the License.
 .TH "queryparse" 1
 .SH NAME
 queryparse \- extract DNS queries from pcap capture files.
 .SH SYNOPSIS
-.B queryparse [-i 
+.B queryparse [-i
 .I input file
 .B ] [-o
 .I output file
@@ -14,7 +30,7 @@ queryparse \- extract DNS queries from pcap capture files.
 .SH DESCRIPTION
 .B queryparse
 is a tool designed to extract DNS queries from pcap-formatted packet
-capture files and save them in a form suitable for input to Nominum's 
+capture files and save them in a form suitable for input to Nominum's
 dnsperf or resperf benchmarking tools.
 .B queryparse
 will only examine UDP packets, and currently supports Ethernet and Cisco HDLC frame types.
@@ -25,11 +41,11 @@ Attempt to extract DNS queries from
 which should be a pcap-formatted packet capture session (e.g., a file created
 by tcpdump or ethereal).
 .IP "\-o filename"
-Write queries to 
+Write queries to
 .I filename
 in a format suitable for input to Nominum's dnsperf or resperf benchmarking tools.
 .IP "\-r"
-Keep queries that do not have the RD (recursion desired) flag set.  This is useful when parsing packet captures from authoritative nameservers.  When parsing captures from caching nameservers, do not use it unless you also want to parse the outgoing queries from the nameserver.  Defaults to discarding queries with RD=0.     
+Keep queries that do not have the RD (recursion desired) flag set.  This is useful when parsing packet captures from authoritative nameservers.  When parsing captures from caching nameservers, do not use it unless you also want to parse the outgoing queries from the nameserver.  Defaults to discarding queries with RD=0.
 .IP "\-R"
 Parse responses (QR=1) instead of queries (QR=0).
 .SH FILES
@@ -47,4 +63,3 @@ Nominum, Inc.
 .BR resperf (1),
 .BR pcap (3),
 .BR tcpdump (8)
-
