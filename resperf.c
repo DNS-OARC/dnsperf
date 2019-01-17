@@ -15,7 +15,7 @@
  */
 
 /***
- ***    DNS Resolution Performance Testing Tool
+ ***	DNS Resolution Performance Testing Tool
  ***/
 
 #include <errno.h>

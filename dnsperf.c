@@ -15,7 +15,7 @@
  */
 
 /***
- ***    DNS Performance Testing Tool
+ ***	DNS Performance Testing Tool
  ***/
 
 #include <inttypes.h>
