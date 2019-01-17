@@ -60,6 +60,11 @@
 #include "util.h"
 #include "version.h"
 
+#ifndef ISC_UINT64_MAX
+#include <stdint.h>
+#define ISC_UINT64_MAX UINT64_MAX
+#endif
+
 #define DEFAULT_SERVER_NAME             "127.0.0.1"
 #define DEFAULT_SERVER_PORT             53
 #define DEFAULT_LOCAL_PORT              0
@@ -785,7 +790,7 @@ do_recv(void *arg)
     threadinfo_t *tinfo;
     stats_t *stats;
     unsigned char packet_buffer[MAX_EDNS_PACKET];
-    received_query_t recvd[RECV_BATCH_SIZE];
+    received_query_t recvd[RECV_BATCH_SIZE] = { { 0, 0, 0, 0, 0, 0, false, false, 0 } };
     unsigned int nrecvd;
     int saved_errno;
     unsigned char socketbits[MAX_SOCKETS / 8];

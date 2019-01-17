@@ -82,8 +82,12 @@ perf_opt_add(char c, perf_opttype_t type, const char *desc, const char *help,
     }
     opt->u.valp = valp;
 
-    sprintf(s, "%c%s", c, (type == perf_opt_boolean ? "" : ":"));
+    snprintf(s, sizeof(s), "%c%s", c, (type == perf_opt_boolean ? "" : ":"));
+#ifdef __OpenBSD__
+    strlcat(optstr, s, sizeof(optstr));
+#else
     strcat(optstr, s);
+#endif
 }
 
 void
