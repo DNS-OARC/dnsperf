@@ -177,7 +177,7 @@ name_fromstring(dns_name_t *name, dns_name_t *origin,
     isc_buffer_t buffer;
     isc_result_t result;
 
-    isc_buffer_init(&buffer, str, len);
+    isc_buffer_constinit(&buffer, str, len);
     isc_buffer_add(&buffer, len);
     result = dns_name_fromtext(name, &buffer, origin, 0, target);
     if (result != ISC_R_SUCCESS)
@@ -252,7 +252,12 @@ perf_dns_parsetsigkey(const char *arg, isc_mem_t *mctx)
 
     /* Name */
 
+#ifdef dns_fixedname_init
+    dns_fixedname_init(&tsigkey->fname);
+    tsigkey->name = dns_fixedname_name(&tsigkey->fname);
+#else
 	tsigkey->name = dns_fixedname_initname(&tsigkey->fname);
+#endif
     result = name_fromstring(tsigkey->name, dns_rootname, name, namelen,
                              NULL, "TSIG key");
     if (result != ISC_R_SUCCESS) {
@@ -734,11 +739,20 @@ build_update(perf_dnsctx_t *ctx, const isc_textregion_t *record,
     msgbase = isc_buffer_base(msg);
 
     /* Initialize */
-
+#ifdef dns_fixedname_init
+    dns_fixedname_init(&foname);
+    oname = dns_fixedname_name(&foname);
+#else
 	oname = dns_fixedname_initname(&foname);
+#endif
 
     /* Parse zone name */
+#ifdef dns_fixedname_init
+    dns_fixedname_init(&fzname);
+    zname = dns_fixedname_name(&fzname);
+#else
 	zname = dns_fixedname_initname(&fzname);
+#endif
 	result = name_fromstring(zname, dns_rootname,
 				 input.base, strlen(input.base),
 				 NULL, "zone");

@@ -187,7 +187,7 @@ static void
 handle_sigint(int sig)
 {
     (void)sig;
-    write(intrpipe[1], "", 1);
+    if (write(intrpipe[1], "", 1)) {}
 }
 
 static void
@@ -674,7 +674,7 @@ do_send(void *arg)
     }
     tinfo->done_send_time = get_time();
     tinfo->done_sending = true;
-    write(mainpipe[1], "", 1);
+    if (write(mainpipe[1], "", 1)) {}
     return NULL;
 }
 
@@ -1133,7 +1133,7 @@ main(int argc, char **argv)
 
     times.end_time = get_time();
 
-    write(threadpipe[1], "", 1);
+    if (write(threadpipe[1], "", 1)) {}
     for (i = 0; i < config.threads; i++)
         threadinfo_stop(&threads[i]);
     if (config.stats_interval > 0)
