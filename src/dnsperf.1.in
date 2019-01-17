@@ -14,9 +14,9 @@
 .\" WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 .\" See the License for the specific language governing permissions and
 .\" limitations under the License.
-.TH DNSPERF 1 "Dec 9, 2015" Nominum Nominum
+.TH dnsperf 1 "@PACKAGE_VERSION@" "dnsperf"
 .SH NAME
-\%dnsperf - test the performance of a DNS server
+dnsperf \- test the performance of a DNS server
 .SH SYNOPSIS
 .hy 0
 .ad l
@@ -329,7 +329,27 @@ Add a TSIG record [RFC2845] to all packets sent, using the specified TSIG
 key algorithm, name and secret, where the algorithm defaults to hmac-md5 and
 the secret is expressed as a base-64 encoded string.
 .RE
-.SH AUTHOR
-Nominum, Inc.
 .SH "SEE ALSO"
 \fBresperf\fR(1)
+.SH AUTHOR
+Nominum, Inc.
+.LP
+Maintained by DNS-OARC
+.LP
+.RS
+.I https://www.dns-oarc.net/
+.RE
+.LP
+.SH BUGS
+For issues and feature requests please use:
+.LP
+.RS
+\fI@PACKAGE_URL@\fP
+.RE
+.LP
+For question and help please use:
+.LP
+.RS
+\fI@PACKAGE_BUGREPORT@\fP
+.RE
+.LP

@@ -15,49 +15,41 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-AC_INIT(dnsperf.c)
+AC_PREREQ(2.64)
+AC_INIT([dnsperf], [2.2.0], [admin@dns-oarc.net], [dnsperf], [https://github.com/DNS-OARC/dnsperf/issues])
+AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
+AC_CONFIG_SRCDIR([src/dnsperf.c])
+AC_CONFIG_HEADER([src/config.h])
+AC_CONFIG_MACRO_DIR([m4])
 
-AC_PREREQ(2.13)
-
+# Checks for programs.
 AC_PROG_CC
-AC_PROG_INSTALL
-AC_PROG_RANLIB
-
+AM_PROG_CC_C_O
+AC_CANONICAL_HOST
 AC_C_INLINE
+LT_INIT([disable-static])
 
-AC_DEFUN(AC_TYPE_SOCKLEN_T,
-[AC_CACHE_CHECK([for socklen_t], ac_cv_type_socklen_t,
-[
-  AC_TRY_COMPILE(
-  [#include <sys/types.h>
-   #include <sys/socket.h>],
-  [socklen_t len = 42; return len;],
-  ac_cv_type_socklen_t=yes,
-  ac_cv_type_socklen_t=no)
-])
-  if test $ac_cv_type_socklen_t != yes; then
-    AC_DEFINE(socklen_t, int)
-  fi
+# Check --enable-warn-all
+AC_ARG_ENABLE([warn-all], [AS_HELP_STRING([--enable-warn-all], [Enable all compiler warnings])], [AX_CFLAGS_WARN_ALL()])
+
+# Check --with-extra-cflags
+AC_ARG_WITH([extra-cflags], [AS_HELP_STRING([--with-extra-cflags=CFLAGS], [Add extra CFLAGS])], [
+  AC_MSG_NOTICE([appending extra CFLAGS... $withval])
+  AS_VAR_APPEND(CFLAGS, [" $withval"])
 ])
 
-AC_DEFUN(AC_SA_LEN,
-[AC_CACHE_CHECK([for sa_len], ac_cv_sa_len,
-[
-  AC_TRY_COMPILE(
-  [#include <sys/types.h>
-   #include <sys/socket.h>],
-  [struct sockaddr sa; sa.sa_len = 0;],
-  ac_cv_sa_len=yes,
-  ac_cv_sa_len=no)
-])
-  if test $ac_cv_sa_len = yes; then
-    AC_DEFINE(HAVE_SA_LEN)
-  fi
+# Check --with-extra-ldflags
+AC_ARG_WITH([extra-ldflags], [AS_HELP_STRING([--with-extra-ldflags=CFLAGS], [Add extra LDFLAGS])], [
+  AC_MSG_NOTICE([appending extra LDFLAGS... $withval])
+  AS_VAR_APPEND(LDFLAGS, [" $withval"])
 ])
 
+# Checks for support.
+AX_PTHREAD
 AC_CHECK_LIB(socket, socket)
 AC_CHECK_LIB(nsl, inet_ntoa)
 
+# Check for bind
 AC_ARG_WITH(bind,
 [  --with-bind=[[PATH]]      Specify ISC BIND 9 prefix path],
     use_bind="$withval", use_bind="yes")
@@ -77,9 +69,13 @@ fi
 AC_SUBST(DNSLIBS, "`$ac_cv_isc_config --libs dns bind9`")
 AC_SUBST(DNSCFLAGS, "`$ac_cv_isc_config --cflags dns bind9`")
 
-AC_TYPE_SOCKLEN_T
-AC_SA_LEN
+# Checks for sizes
+AX_TYPE_SOCKLEN_T
+AX_SA_LEN
 
-ACX_PTHREAD
-
-AC_OUTPUT(Makefile)
+# Output Makefiles
+AC_CONFIG_FILES([
+  Makefile
+  src/Makefile
+])
+AC_OUTPUT

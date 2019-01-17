@@ -1,45 +1,74 @@
 # dnsperf
 
-## Overview
-
 [https://github.com/DNS-OARC/dnsperf](https://github.com/DNS-OARC/dnsperf)
 
-This is a collection of DNS server performance testing tools, including dnsperf
-and resperf.  For more information, see the dnsperf(1) and resperf(1) man pages.
+`dnsperf` and `resperf` are free tools developed by Nominum/Akamai (2006-2018)
+and DNS-OARC (since 2019) that make it simple to gather accurate latency and
+throughput metrics for Domain Name Service (DNS). These tools are easy-to-use
+and simulate typical Internet, so network operators can benchmark their naming
+and addressing infrastructure and plan for upgrades. The latest version of
+the `dnsperf` and `resperf` can be used with test files that include IPv6
+queries.
+
+`dnsperf` "self-paces" the DNS query load to simulate network conditions.
+New features in `dnsperf` improve the precision of latency measurements and
+allow for per packet per-query latency reporting is possible. `dnsperf` is
+now multithreaded, multiple `dnsperf` clients can be supported in multicore
+systems (each client requires two cores). The output of `dnsperf` has also
+been improved so it is more concise and useful. Latency data can be used to
+make detailed graphs, so it is simple for network operators to take advantage
+of the data.
+
+`resperf` systematically increases the query rate and monitors the response
+rate to simulate caching DNS services.
+
+For more information, see the `dnsperf(1)` and `resperf(1)` man pages.
 
 ## Usage
 
-dnsperf and resperf read input files describing DNS queries, and send those
-queries to DNS servers to measure performance.
+`dnsperf` and `resperf` read input files describing DNS queries, and send
+those queries to DNS servers to measure performance.
 
-## Installation
+## Dependencies
 
-To configure, compile, and install these programs, follow these steps.
+`dnsperf` requires a couple of libraries beside a normal C compiling
+environment with autoconf, automake, libtool.
 
-1. Make sure that BIND 9 (9.4.0 or greater) is installed, including libraries
-   and header files, and that the isc-config.sh program distributed with BIND
-   is in your path.
+`dnsperf` has a non-optional dependency on the BIND library and development
+files along with all dependencies it requires.
 
-   Note: many versions of bind do not correctly install the <isc/hmacsha.h>
-   header file, so if the compilation fails, obtain this file from the BIND
-   source distribution, and install it in the appropriate place.
+To install the dependencies under Debian/Ubuntu:
+```
+apt-get install -y libbind-dev libkrb5-dev libssl-dev libcap-dev libxml2-dev libjson-c-dev libgeoip-dev
+```
 
-   On Ubuntu / Debian:
-   ```
-   sudo apt-get install -y bind9utils libbind-dev libkrb5-dev libssl-dev libcap-dev libxml2-dev libjson-c-dev libgeoip-dev
-   ```
+## Building from source tarball
 
-2. Run "sh configure" to configure the software.  Most standard configure
-   options are supported.
+The source tarball from DNS-OARC comes prepared with `configure`:
 
-3. Run "make" to build dnsperf and resperf
+```
+tar zxvf dnsperf-version.tar.gz
+cd dnsperf-version
+./configure [options]
+make
+make install
+```
 
-4. Run "make install" to install dnsperf and resperf.
+## Building from Git repository
+
+```
+git clone https://github.com/DNS-OARC/dnsperf.git
+cd dnsperf
+./autogen.sh
+./configure [options]
+make
+make install
+```
 
 ## Additional Software
 
-The contrib directory contains additional software related to dnsperf and
-resperf.
+The contrib directory contains additional software related to `dnsperf` and
+`resperf`.
 
 ## License
 

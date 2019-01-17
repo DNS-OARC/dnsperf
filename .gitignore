@@ -1,8 +1,95 @@
+# Prerequisites
+*.d
+
+# Object files
 *.o
-libperf.a
+*.ko
+*.obj
+*.elf
+
+# Linker output
+*.ilk
+*.map
+*.exp
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Kernel Module Compile Results
+*.mod*
+*.cmd
+.tmp_versions/
+modules.order
+Module.symvers
+Mkfile.old
+dkms.conf
+
+# Automake
+Makefile.in
+aclocal.m4
+ar-lib
+autom4te.cache
+compile
+config.guess
+config.sub
+configure
+depcomp
+install-sh
+ltmain.sh
+m4/libtool.m4
+m4/ltoptions.m4
+m4/ltsugar.m4
+m4/ltversion.m4
+m4/lt~obsolete.m4
+missing
+config.h.in
+config.h.in~
+test-driver
+
+# Configure
 Makefile
 config.log
 config.status
-dnsperf
-resperf
-.lineno
+libtool
+.deps
+src/config.h
+src/stamp-h1
+build
+.dirstamp
+
+# Project specific files
+src/dnsperf
+src/dnsperf.1
+src/resperf
+src/resperf.1
+src/test/test-suite.log
+src/test/test*.sh.log
+src/test/test*.sh.trs
+src/test/*.dist

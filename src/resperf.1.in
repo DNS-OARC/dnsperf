@@ -14,9 +14,9 @@
 .\" WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 .\" See the License for the specific language governing permissions and
 .\" limitations under the License.
-.TH RESPERF 1 "Dec 9, 2015" Nominum Nominum
+.TH resperf 1 "@PACKAGE_VERSION@" "resperf"
 .SH NAME
-\%resperf - test the resolution performance of a caching DNS server
+resperf \- test the resolution performance of a caching DNS server
 .SH SYNOPSIS
 .hy 0
 .ad l
@@ -605,7 +605,27 @@ length of the interval
 The average time between sending the query and receiving a response, for
 queries sent in this time interval
 .RE
-.SH AUTHOR
-Nominum, Inc.
 .SH "SEE ALSO"
 \fBdnsperf\fR(1)
+.SH AUTHOR
+Nominum, Inc.
+.LP
+Maintained by DNS-OARC
+.LP
+.RS
+.I https://www.dns-oarc.net/
+.RE
+.LP
+.SH BUGS
+For issues and feature requests please use:
+.LP
+.RS
+\fI@PACKAGE_URL@\fP
+.RE
+.LP
+For question and help please use:
+.LP
+.RS
+\fI@PACKAGE_BUGREPORT@\fP
+.RE
+.LP
