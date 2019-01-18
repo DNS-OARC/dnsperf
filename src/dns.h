@@ -25,35 +25,32 @@
 #define MAX_UDP_PACKET 512
 #define MAX_EDNS_PACKET 4096
 
-typedef struct perf_dnstsigkey perf_dnstsigkey_t;
+typedef struct perf_dnstsigkey    perf_dnstsigkey_t;
 typedef struct perf_dnsednsoption perf_dnsednsoption_t;
-typedef struct perf_dnsctx perf_dnsctx_t;
+typedef struct perf_dnsctx        perf_dnsctx_t;
 
-extern const char *perf_dns_rcode_strings[];
+extern const char* perf_dns_rcode_strings[];
 
-perf_dnstsigkey_t *
-perf_dns_parsetsigkey(const char *arg, isc_mem_t *mctx);
+perf_dnstsigkey_t*
+perf_dns_parsetsigkey(const char* arg, isc_mem_t* mctx);
 
-void
-perf_dns_destroytsigkey(perf_dnstsigkey_t **tsigkeyp);
+void perf_dns_destroytsigkey(perf_dnstsigkey_t** tsigkeyp);
 
-perf_dnsednsoption_t *
-perf_dns_parseednsoption(const char *arg, isc_mem_t *mctx);
+perf_dnsednsoption_t*
+perf_dns_parseednsoption(const char* arg, isc_mem_t* mctx);
 
-void
-perf_dns_destroyednsoption(perf_dnsednsoption_t **optionp);
+void perf_dns_destroyednsoption(perf_dnsednsoption_t** optionp);
 
-perf_dnsctx_t *
+perf_dnsctx_t*
 perf_dns_createctx(bool updates);
 
-void
-perf_dns_destroyctx(perf_dnsctx_t **ctxp);
+void perf_dns_destroyctx(perf_dnsctx_t** ctxp);
 
 isc_result_t
-perf_dns_buildrequest(perf_dnsctx_t *ctx, const isc_textregion_t *record,
-                      uint16_t qid,
-                      bool edns, bool dnssec,
-                      perf_dnstsigkey_t *tsigkey,
-                      perf_dnsednsoption_t *edns_option, isc_buffer_t *msg);
+perf_dns_buildrequest(perf_dnsctx_t* ctx, const isc_textregion_t* record,
+    uint16_t qid,
+    bool edns, bool dnssec,
+    perf_dnstsigkey_t*    tsigkey,
+    perf_dnsednsoption_t* edns_option, isc_buffer_t* msg);
 
 #endif

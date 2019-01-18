@@ -32,8 +32,7 @@
 #include "net.h"
 #include "opt.h"
 
-int
-perf_net_parsefamily(const char *family)
+int perf_net_parsefamily(const char* family)
 {
     if (family == NULL || strcmp(family, "any") == 0)
         return AF_UNSPEC;
@@ -50,13 +49,12 @@ perf_net_parsefamily(const char *family)
     }
 }
 
-void
-perf_net_parseserver(int family, const char *name, unsigned int port,
-                     isc_sockaddr_t *addr)
+void perf_net_parseserver(int family, const char* name, unsigned int port,
+    isc_sockaddr_t* addr)
 {
     isc_sockaddr_t addrs[8];
-    int count, i;
-    isc_result_t result;
+    int            count, i;
+    isc_result_t   result;
 
     if (port == 0) {
         fprintf(stderr, "server port cannot be 0\n");
@@ -64,13 +62,11 @@ perf_net_parseserver(int family, const char *name, unsigned int port,
         exit(1);
     }
 
-    count = 0;
+    count  = 0;
     result = bind9_getaddresses(name, port, addrs, 8, &count);
     if (result == ISC_R_SUCCESS) {
         for (i = 0; i < count; i++) {
-            if (isc_sockaddr_pf(&addrs[i]) == family ||
-                family == AF_UNSPEC)
-            {
+            if (isc_sockaddr_pf(&addrs[i]) == family || family == AF_UNSPEC) {
                 *addr = addrs[i];
                 return;
             }
@@ -82,11 +78,10 @@ perf_net_parseserver(int family, const char *name, unsigned int port,
     exit(1);
 }
 
-void
-perf_net_parselocal(int family, const char *name, unsigned int port,
-                    isc_sockaddr_t *addr)
+void perf_net_parselocal(int family, const char* name, unsigned int port,
+    isc_sockaddr_t* addr)
 {
-    struct in_addr in4a;
+    struct in_addr  in4a;
     struct in6_addr in6a;
 
     if (name == NULL) {
@@ -103,16 +98,15 @@ perf_net_parselocal(int family, const char *name, unsigned int port,
     }
 }
 
-int
-perf_net_opensocket(const isc_sockaddr_t *server, const isc_sockaddr_t *local,
-                    unsigned int offset, int bufsize)
+int perf_net_opensocket(const isc_sockaddr_t* server, const isc_sockaddr_t* local,
+    unsigned int offset, int bufsize)
 {
-    int family;
-    int sock;
+    int            family;
+    int            sock;
     isc_sockaddr_t tmp;
-    int port;
-    int ret;
-    int flags;
+    int            port;
+    int            ret;
+    int            flags;
 
     family = isc_sockaddr_pf(server);
 
@@ -128,14 +122,13 @@ perf_net_opensocket(const isc_sockaddr_t *server, const isc_sockaddr_t *local,
     if (family == AF_INET6) {
         int on = 1;
 
-        if (setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on)) == -1)
-        {
+        if (setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on)) == -1) {
             perf_log_warning("setsockopt(IPV6_V6ONLY) failed");
         }
     }
 #endif
 
-    tmp = *local;
+    tmp  = *local;
     port = isc_sockaddr_getport(&tmp);
     if (port != 0 && offset != 0) {
         port += offset;
@@ -151,12 +144,12 @@ perf_net_opensocket(const isc_sockaddr_t *server, const isc_sockaddr_t *local,
         bufsize *= 1024;
 
         ret = setsockopt(sock, SOL_SOCKET, SO_RCVBUF,
-                         &bufsize, sizeof(bufsize));
+            &bufsize, sizeof(bufsize));
         if (ret < 0)
             perf_log_warning("setsockbuf(SO_RCVBUF) failed");
 
         ret = setsockopt(sock, SOL_SOCKET, SO_SNDBUF,
-                         &bufsize, sizeof(bufsize));
+            &bufsize, sizeof(bufsize));
         if (ret < 0)
             perf_log_warning("setsockbuf(SO_SNDBUF) failed");
     }

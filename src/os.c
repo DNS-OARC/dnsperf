@@ -33,33 +33,26 @@
 #include "os.h"
 #include "util.h"
 
-void
-perf_os_blocksignal(int sig, bool block)
+void perf_os_blocksignal(int sig, bool block)
 {
     sigset_t sset;
-    int op;
+    int      op;
 
     op = block ? SIG_BLOCK : SIG_UNBLOCK;
 
-    if (sigemptyset(&sset) < 0 ||
-        sigaddset(&sset, sig) < 0 ||
-        pthread_sigmask(op, &sset, NULL) < 0)
-    {
+    if (sigemptyset(&sset) < 0 || sigaddset(&sset, sig) < 0 || pthread_sigmask(op, &sset, NULL) < 0) {
         perf_log_fatal("pthread_sigmask: %s", strerror(errno));
     }
 }
 
-void
-perf_os_handlesignal(int sig, void (*handler)(int))
+void perf_os_handlesignal(int sig, void (*handler)(int))
 {
     struct sigaction sa;
 
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = handler;
 
-    if (sigfillset(&sa.sa_mask) < 0 ||
-        sigaction(sig, &sa, NULL) < 0)
-    {
+    if (sigfillset(&sa.sa_mask) < 0 || sigaction(sig, &sa, NULL) < 0) {
         perf_log_fatal("sigaction: %s", strerror(errno));
     }
 }
@@ -71,14 +64,14 @@ perf_os_waituntilreadable(int fd, int pipe_fd, int64_t timeout)
 }
 
 isc_result_t
-perf_os_waituntilanyreadable(int *fds, unsigned int nfds, int pipe_fd,
-                             int64_t timeout)
+perf_os_waituntilanyreadable(int* fds, unsigned int nfds, int pipe_fd,
+    int64_t timeout)
 {
-    fd_set read_fds;
-    unsigned int i;
-    int maxfd;
+    fd_set         read_fds;
+    unsigned int   i;
+    int            maxfd;
     struct timeval tv, *tvp;
-    int n;
+    int            n;
 
     FD_ZERO(&read_fds);
     maxfd = 0;
@@ -94,9 +87,9 @@ perf_os_waituntilanyreadable(int *fds, unsigned int nfds, int pipe_fd,
     if (timeout < 0) {
         tvp = NULL;
     } else {
-        tv.tv_sec = timeout / MILLION;
+        tv.tv_sec  = timeout / MILLION;
         tv.tv_usec = timeout % MILLION;
-        tvp = &tv;
+        tvp        = &tv;
     }
     n = select(maxfd + 1, &read_fds, NULL, NULL, tvp);
     if (n < 0) {

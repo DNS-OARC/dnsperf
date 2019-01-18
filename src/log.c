@@ -28,7 +28,7 @@
 pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void
-vlog(FILE *stream, const char *prefix, const char *fmt, va_list args)
+vlog(FILE* stream, const char* prefix, const char* fmt, va_list args)
 {
     LOCK(&log_lock);
     fflush(stdout);
@@ -39,16 +39,14 @@ vlog(FILE *stream, const char *prefix, const char *fmt, va_list args)
     UNLOCK(&log_lock);
 }
 
-void
-perf_log_printf(const char *fmt, ...)
+void perf_log_printf(const char* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
     vlog(stdout, NULL, fmt, args);
 }
 
-void
-perf_log_fatal(const char *fmt, ...)
+void perf_log_fatal(const char* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
@@ -56,8 +54,7 @@ perf_log_fatal(const char *fmt, ...)
     exit(1);
 }
 
-void
-perf_log_warning(const char *fmt, ...)
+void perf_log_warning(const char* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
