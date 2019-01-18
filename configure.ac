@@ -50,24 +50,36 @@ AC_CHECK_LIB(socket, socket)
 AC_CHECK_LIB(nsl, inet_ntoa)
 
 # Check for bind
-AC_ARG_WITH(bind,
-[  --with-bind=[[PATH]]      Specify ISC BIND 9 prefix path],
-    use_bind="$withval", use_bind="yes")
+AC_ARG_WITH([bind], [AS_HELP_STRING([--with-bind=PATH], [Specify ISC BIND 9 prefix path])], [
+  use_bind="$withval"
+],[
+  use_bind="yes"
+])
 
-AC_MSG_CHECKING(for BIND 9 libraries)
+AC_MSG_CHECKING([for BIND 9 libraries])
 if test $use_bind = no; then
-    AC_MSG_ERROR(BIND 9 libraries must be installed)
+  AC_MSG_ERROR([BIND 9 libraries must be installed])
 elif test $use_bind = yes; then
-    bindpath="$PATH"
+  bindpath="$PATH"
 else
-    bindpath="$withval/bin"
+  bindpath="$withval/bin"
 fi
-AC_PATH_PROG(ac_cv_isc_config, [isc-config.sh], "no", [$bindpath])
+AC_PATH_PROG(ac_cv_isc_config, [isc-config.sh], [no], [$bindpath])
 if test "$ac_cv_isc_config" = "no"; then
-  AC_MSG_ERROR(BIND 9 libraries must be installed)
+  AC_MSG_ERROR([BIND 9 libraries must be installed])
 fi
-AC_SUBST(DNSLIBS, "`$ac_cv_isc_config --libs dns bind9`")
-AC_SUBST(DNSCFLAGS, "`$ac_cv_isc_config --cflags dns bind9`")
+
+case "$host_os" in
+  freebsd*)
+    AC_MSG_NOTICE([Add workaround for FreeBSD by using static libcrypto])
+    AS_VAR_APPEND(LDFLAGS, [" /usr/lib/libcrypto.a"])
+    ;;
+esac
+
+AS_VAR_APPEND(CFLAGS, [" `$ac_cv_isc_config --cflags dns bind9`"])
+AS_VAR_APPEND(LDFLAGS, [" `$ac_cv_isc_config --libs dns bind9`"])
+
+AC_CHECK_HEADERS([isc/hmacmd5.h isc/hmacsha.h])
 
 # Checks for sizes
 AX_TYPE_SOCKLEN_T

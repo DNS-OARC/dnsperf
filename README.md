@@ -42,6 +42,21 @@ To install the dependencies under Debian/Ubuntu:
 apt-get install -y libbind-dev libkrb5-dev libssl-dev libcap-dev libxml2-dev libjson-c-dev libgeoip-dev
 ```
 
+To install the dependencies under CentOS (with EPEL enabled):
+```
+yum install -y bind-devel krb5-devel openssl-devel libcap-devel libxml2-devel json-c-devel GeoIP-devel
+```
+
+To install the dependencies under FreeBSD 12+ using `pkg`:
+```
+pkg install -y bind913-9.13.5 openssl-devel GeoIP
+```
+
+To install the dependencies under OpenBSD 6+ using `pkg_add`:
+```
+pkg_add isc-bind-9.11.4pl2 GeoIP
+```
+
 ## Building from source tarball
 
 The source tarball from DNS-OARC comes prepared with `configure`:

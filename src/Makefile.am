@@ -22,8 +22,7 @@ SUBDIRS =
 
 AM_CFLAGS = -I$(srcdir) \
   -I$(top_srcdir) \
-  $(PTHREAD_CFLAGS) \
-  $(DNSCFLAGS)
+  $(PTHREAD_CFLAGS)
 
 EXTRA_DIST = dnsperf.1.in resperf-report resperf.1.in
 
@@ -35,11 +34,11 @@ _libperf_headers = datafile.h dns.h log.h net.h opt.h os.h util.h version.h
 
 dnsperf_SOURCES = $(_libperf_sources) dnsperf.c
 dist_dnsperf_SOURCES = $(_libperf_headers)
-dnsperf_LDADD = $(PTHREAD_LIBS) $(DNSLIBS)
+dnsperf_LDADD = $(PTHREAD_LIBS)
 
 resperf_SOURCES = $(_libperf_sources) resperf.c
 dist_resperf_SOURCES = $(_libperf_headers)
-resperf_LDADD = $(PTHREAD_LIBS) $(DNSLIBS)
+resperf_LDADD = $(PTHREAD_LIBS)
 
 man1_MANS = dnsperf.1 resperf.1
 

@@ -36,6 +36,13 @@
 
 #define BUFFER_SIZE (64 * 1024)
 
+#ifndef ISC_TRUE
+#define ISC_TRUE true
+#endif
+#ifndef ISC_FALSE
+#define ISC_FALSE false
+#endif
+
 struct perf_datafile {
     isc_mem_t *mctx;
     pthread_mutex_t lock;
@@ -67,8 +74,10 @@ perf_datafile_open(isc_mem_t *mctx, const char *filename)
     struct stat buf;
 
     dfile = isc_mem_get(mctx, sizeof(*dfile));
-    if (dfile == NULL)
+    if (dfile == NULL) {
         perf_log_fatal("out of memory");
+        return 0; // fix clang scan-build
+    }
 
     dfile->mctx = mctx;
     MUTEX_INIT(&dfile->lock);
