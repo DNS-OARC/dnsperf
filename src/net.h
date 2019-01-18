@@ -20,19 +20,15 @@
 #ifndef PERF_NET_H
 #define PERF_NET_H 1
 
-int
-perf_net_parsefamily(const char *family);
+int perf_net_parsefamily(const char* family);
 
-void
-perf_net_parseserver(int family, const char *name, unsigned int port,
-                     isc_sockaddr_t *addr);
+void perf_net_parseserver(int family, const char* name, unsigned int port,
+    isc_sockaddr_t* addr);
 
-void
-perf_net_parselocal(int family, const char *name, unsigned int port,
-                    isc_sockaddr_t *addr);
+void perf_net_parselocal(int family, const char* name, unsigned int port,
+    isc_sockaddr_t* addr);
 
-int
-perf_net_opensocket(const isc_sockaddr_t *server, const isc_sockaddr_t *local,
-                    unsigned int offset, int bufsize);
+int perf_net_opensocket(const isc_sockaddr_t* server, const isc_sockaddr_t* local,
+    unsigned int offset, int bufsize);
 
 #endif

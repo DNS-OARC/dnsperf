@@ -54,14 +54,14 @@
  * Global stuff
  */
 
-#define DEFAULT_SERVER_NAME             "127.0.0.1"
-#define DEFAULT_SERVER_PORT             53
-#define DEFAULT_LOCAL_PORT              0
-#define DEFAULT_SOCKET_BUFFER           32
-#define DEFAULT_TIMEOUT                 45
-#define DEFAULT_MAX_OUTSTANDING         (64 * 1024)
+#define DEFAULT_SERVER_NAME "127.0.0.1"
+#define DEFAULT_SERVER_PORT 53
+#define DEFAULT_LOCAL_PORT 0
+#define DEFAULT_SOCKET_BUFFER 32
+#define DEFAULT_TIMEOUT 45
+#define DEFAULT_MAX_OUTSTANDING (64 * 1024)
 
-#define MAX_INPUT_DATA                  (4 * 1024)
+#define MAX_INPUT_DATA (4 * 1024)
 
 struct query_info;
 
@@ -73,30 +73,31 @@ typedef struct query_info {
      * This link links the query into the list of outstanding
      * queries or the list of available query IDs.
      */
-    ISC_LINK(struct query_info) link;
+    ISC_LINK(struct query_info)
+    link;
     /*
      * The list this query is on.
      */
-    query_list *list;
+    query_list* list;
 } query_info;
 
 static query_list outstanding_list;
 static query_list instanding_list;
 
-static query_info *queries;
+static query_info* queries;
 
-static isc_mem_t *mctx;
+static isc_mem_t* mctx;
 
 static isc_sockaddr_t server_addr;
 static isc_sockaddr_t local_addr;
-static unsigned int nsocks;
-static int *socks;
+static unsigned int   nsocks;
+static int*           socks;
 
 static uint64_t query_timeout;
-static bool edns;
-static bool dnssec;
+static bool     edns;
+static bool     dnssec;
 
-static perf_datafile_t *input;
+static perf_datafile_t* input;
 
 /* The target traffic level at the end of the ramp-up */
 double max_qps = 100000.0;
@@ -126,7 +127,7 @@ static uint64_t bucket_interval;
 static int n_buckets;
 
 /* The plot data file */
-static const char *plotfile = "resperf.gnuplot";
+static const char* plotfile = "resperf.gnuplot";
 
 /* The largest acceptable query loss when reporting max throughput */
 static double max_loss_percent = 100.0;
@@ -156,14 +157,14 @@ static int last_bucket_used;
  * of the traffic sending phase.
  */
 typedef struct {
-    int queries;
-    int responses;
-    int failures;
+    int    queries;
+    int    responses;
+    int    failures;
     double latency_sum;
 } ramp_bucket;
 
 /* Pointer to array of n_buckets ramp_bucket structures */
-static ramp_bucket *buckets;
+static ramp_bucket* buckets;
 
 enum phase {
     /*
@@ -186,9 +187,9 @@ static enum phase phase = PHASE_RAMP;
 /* The time when the sustain/wait phase began */
 static uint64_t sustain_phase_began, wait_phase_began;
 
-static perf_dnstsigkey_t *tsigkey;
+static perf_dnstsigkey_t* tsigkey;
 
-static char *
+static char*
 stringify(double value, int precision)
 {
     static char buf[20];
@@ -198,16 +199,16 @@ stringify(double value, int precision)
 }
 
 static void
-setup(int argc, char **argv)
+setup(int argc, char** argv)
 {
-    const char *family = NULL;
-    const char *server_name = DEFAULT_SERVER_NAME;
-    in_port_t server_port = DEFAULT_SERVER_PORT;
-    const char *local_name = NULL;
-    in_port_t local_port = DEFAULT_LOCAL_PORT;
-    const char *filename = NULL;
-    const char *tsigkey_str = NULL;
-    int sock_family;
+    const char*  family      = NULL;
+    const char*  server_name = DEFAULT_SERVER_NAME;
+    in_port_t    server_port = DEFAULT_SERVER_PORT;
+    const char*  local_name  = NULL;
+    in_port_t    local_port  = DEFAULT_LOCAL_PORT;
+    const char*  filename    = NULL;
+    const char*  tsigkey_str = NULL;
+    int          sock_family;
     unsigned int bufsize;
     unsigned int i;
     isc_result_t result;
@@ -215,77 +216,78 @@ setup(int argc, char **argv)
     result = isc_mem_create(0, 0, &mctx);
     if (result != ISC_R_SUCCESS)
         perf_log_fatal("creating memory context: %s",
-                       isc_result_totext(result));
+            isc_result_totext(result));
 
     dns_result_register();
 
-    sock_family = AF_UNSPEC;
-    server_port = DEFAULT_SERVER_PORT;
-    local_port = DEFAULT_LOCAL_PORT;
-    bufsize = DEFAULT_SOCKET_BUFFER;
-    query_timeout = DEFAULT_TIMEOUT * MILLION;
-    ramp_time = DEFAULT_RAMP_TIME * MILLION;
-    sustain_time = DEFAULT_SUSTAIN_TIME * MILLION;
+    sock_family     = AF_UNSPEC;
+    server_port     = DEFAULT_SERVER_PORT;
+    local_port      = DEFAULT_LOCAL_PORT;
+    bufsize         = DEFAULT_SOCKET_BUFFER;
+    query_timeout   = DEFAULT_TIMEOUT * MILLION;
+    ramp_time       = DEFAULT_RAMP_TIME * MILLION;
+    sustain_time    = DEFAULT_SUSTAIN_TIME * MILLION;
     bucket_interval = DEFAULT_BUCKET_INTERVAL * MILLION;
     max_outstanding = DEFAULT_MAX_OUTSTANDING;
-    nsocks = 1;
+    nsocks          = 1;
 
     perf_opt_add('f', perf_opt_string, "family",
-                 "address family of DNS transport, inet or inet6", "any",
-                 &family);
+        "address family of DNS transport, inet or inet6", "any",
+        &family);
     perf_opt_add('s', perf_opt_string, "server_addr",
-                 "the server to query", DEFAULT_SERVER_NAME, &server_name);
+        "the server to query", DEFAULT_SERVER_NAME, &server_name);
     perf_opt_add('p', perf_opt_port, "port",
-                 "the port on which to query the server",
-                 stringify(DEFAULT_SERVER_PORT, 0), &server_port);
+        "the port on which to query the server",
+        stringify(DEFAULT_SERVER_PORT, 0), &server_port);
     perf_opt_add('a', perf_opt_string, "local_addr",
-                 "the local address from which to send queries", NULL,
-                 &local_name);
+        "the local address from which to send queries", NULL,
+        &local_name);
     perf_opt_add('x', perf_opt_port, "local_port",
-                 "the local port from which to send queries",
-                 stringify(DEFAULT_LOCAL_PORT, 0), &local_port);
+        "the local port from which to send queries",
+        stringify(DEFAULT_LOCAL_PORT, 0), &local_port);
     perf_opt_add('d', perf_opt_string, "datafile",
-                 "the input data file", "stdin", &filename);
+        "the input data file", "stdin", &filename);
     perf_opt_add('t', perf_opt_timeval, "timeout",
-                 "the timeout for query completion in seconds",
-                 stringify(DEFAULT_TIMEOUT, 0), &query_timeout);
+        "the timeout for query completion in seconds",
+        stringify(DEFAULT_TIMEOUT, 0), &query_timeout);
     perf_opt_add('b', perf_opt_uint, "buffer_size",
-                 "socket send/receive buffer size in kilobytes", NULL,
-                 &bufsize);
+        "socket send/receive buffer size in kilobytes", NULL,
+        &bufsize);
     perf_opt_add('e', perf_opt_boolean, NULL,
-                 "enable EDNS 0", NULL, &edns);
+        "enable EDNS 0", NULL, &edns);
     perf_opt_add('D', perf_opt_boolean, NULL,
-                 "set the DNSSEC OK bit (implies EDNS)", NULL, &dnssec);
+        "set the DNSSEC OK bit (implies EDNS)", NULL, &dnssec);
     perf_opt_add('y', perf_opt_string, "[alg:]name:secret",
-                 "the TSIG algorithm, name and secret", NULL, &tsigkey_str);
+        "the TSIG algorithm, name and secret", NULL, &tsigkey_str);
     perf_opt_add('i', perf_opt_timeval, "plot_interval",
-                 "the time interval between plot data points, in seconds",
-                 stringify(DEFAULT_BUCKET_INTERVAL, 1), &bucket_interval);
+        "the time interval between plot data points, in seconds",
+        stringify(DEFAULT_BUCKET_INTERVAL, 1), &bucket_interval);
     perf_opt_add('m', perf_opt_double, "max_qps",
-                 "the maximum number of queries per second",
-                 stringify(max_qps, 0), &max_qps);
+        "the maximum number of queries per second",
+        stringify(max_qps, 0), &max_qps);
     perf_opt_add('P', perf_opt_string, "plotfile",
-                 "the name of the plot data file", plotfile, &plotfile);
+        "the name of the plot data file", plotfile, &plotfile);
     perf_opt_add('r', perf_opt_timeval, "ramp_time",
-                 "the ramp-up time in seconds",
-                 stringify(DEFAULT_RAMP_TIME, 0), &ramp_time);
+        "the ramp-up time in seconds",
+        stringify(DEFAULT_RAMP_TIME, 0), &ramp_time);
     perf_opt_add('c', perf_opt_timeval, "constant_traffic_time",
-                 "how long to send constant traffic, in seconds",
-                 stringify(DEFAULT_SUSTAIN_TIME, 0), &sustain_time);
+        "how long to send constant traffic, in seconds",
+        stringify(DEFAULT_SUSTAIN_TIME, 0), &sustain_time);
     perf_opt_add('L', perf_opt_double, "max_query_loss",
-                 "the maximum acceptable query loss, in percent",
-                 stringify(max_loss_percent, 0), &max_loss_percent);
+        "the maximum acceptable query loss, in percent",
+        stringify(max_loss_percent, 0), &max_loss_percent);
     perf_opt_add('C', perf_opt_uint, "clients",
-                 "the number of clients to act as", NULL, &nsocks);
+        "the number of clients to act as", NULL, &nsocks);
     perf_opt_add('q', perf_opt_uint, "num_outstanding",
-                 "the maximum number of queries outstanding",
-                 stringify(DEFAULT_MAX_OUTSTANDING, 0), &max_outstanding);
+        "the maximum number of queries outstanding",
+        stringify(DEFAULT_MAX_OUTSTANDING, 0), &max_outstanding);
 
     perf_opt_parse(argc, argv);
 
     if (max_outstanding > nsocks * DEFAULT_MAX_OUTSTANDING)
         perf_log_fatal("number of outstanding packets (%u) must not "
-                       "be more than 64K per client", max_outstanding);
+                       "be more than 64K per client",
+            max_outstanding);
 
     if (ramp_time + sustain_time == 0)
         perf_log_fatal("rampup_time and constant_traffic_time must not "
@@ -302,12 +304,11 @@ setup(int argc, char **argv)
         queries[i].list = &instanding_list;
     }
 
-
     if (family != NULL)
         sock_family = perf_net_parsefamily(family);
     perf_net_parseserver(sock_family, server_name, server_port, &server_addr);
     perf_net_parselocal(isc_sockaddr_pf(&server_addr), local_name,
-                        local_port, &local_addr);
+        local_port, &local_addr);
 
     input = perf_datafile_open(mctx, filename);
 
@@ -320,7 +321,7 @@ setup(int argc, char **argv)
     socks = isc_mem_get(mctx, nsocks * sizeof(int));
     if (socks == NULL)
         perf_log_fatal("out of memory");
-    for (i = 0; i < nsocks; i++)
+    for (i       = 0; i < nsocks; i++)
         socks[i] = perf_net_opensocket(&server_addr, &local_addr, i, bufsize);
 }
 
@@ -331,7 +332,7 @@ cleanup(void)
 
     perf_datafile_close(&input);
     for (i = 0; i < nsocks; i++)
-        (void) close(socks[i]);
+        (void)close(socks[i]);
     isc_mem_put(mctx, socks, nsocks * sizeof(int));
     isc_mem_put(mctx, queries, max_outstanding * sizeof(query_info));
     isc_mem_put(mctx, buckets, n_buckets * sizeof(ramp_bucket));
@@ -339,10 +340,11 @@ cleanup(void)
 
 /* Find the ramp_bucket for queries sent at time "when" */
 
-static ramp_bucket *
-find_bucket(uint64_t when) {
+static ramp_bucket*
+find_bucket(uint64_t when)
+{
     uint64_t sent_at = when - time_of_program_start;
-    int i = (int) ((n_buckets * sent_at) / traffic_time);
+    int      i       = (int)((n_buckets * sent_at) / traffic_time);
     /*
      * Guard against array bounds violations due to roundoff
      * errors or scheduling jitter
@@ -359,21 +361,22 @@ find_bucket(uint64_t when) {
  *   Print out statistics based on the results of the test
  */
 static void
-print_statistics(void) {
-    int i;
-    double max_throughput;
-    double loss_at_max_throughput;
-    bool first_rcode;
+print_statistics(void)
+{
+    int      i;
+    double   max_throughput;
+    double   loss_at_max_throughput;
+    bool     first_rcode;
     uint64_t run_time = time_of_end_of_run - time_of_program_start;
 
     printf("\nStatistics:\n\n");
 
     printf("  Queries sent:         %" PRIu64 "u\n",
-           num_queries_sent);
+        num_queries_sent);
     printf("  Queries completed:    %" PRIu64 "u\n",
-           num_responses_received);
+        num_responses_received);
     printf("  Queries lost:         %" PRIu64 "u\n",
-           num_queries_sent - num_responses_received);
+        num_queries_sent - num_responses_received);
     printf("  Response codes:       ");
     first_rcode = true;
     for (i = 0; i < 16; i++) {
@@ -384,28 +387,26 @@ print_statistics(void) {
         else
             printf(", ");
         printf("%s %" PRIu64 "u (%.2lf%%)",
-               perf_dns_rcode_strings[i], rcodecounts[i],
-               (rcodecounts[i] * 100.0) / num_responses_received);
+            perf_dns_rcode_strings[i], rcodecounts[i],
+            (rcodecounts[i] * 100.0) / num_responses_received);
     }
     printf("\n");
     printf("  Run time (s):         %u.%06u\n",
-           (unsigned int)(run_time / MILLION),
-           (unsigned int)(run_time % MILLION));
+        (unsigned int)(run_time / MILLION),
+        (unsigned int)(run_time % MILLION));
 
     /* Find the maximum throughput, subject to the -L option */
-    max_throughput = 0.0;
+    max_throughput         = 0.0;
     loss_at_max_throughput = 0.0;
     for (i = 0; i <= last_bucket_used; i++) {
-        ramp_bucket *b = &buckets[i];
-        double responses_per_sec =
-            b->responses / (bucket_interval / (double) MILLION);
-        double loss = b->queries ?
-            (b->queries - b->responses) / (double) b->queries : 0.0;
-        double loss_percent = loss * 100.0;
+        ramp_bucket* b                 = &buckets[i];
+        double       responses_per_sec = b->responses / (bucket_interval / (double)MILLION);
+        double       loss              = b->queries ? (b->queries - b->responses) / (double)b->queries : 0.0;
+        double       loss_percent      = loss * 100.0;
         if (loss_percent > max_loss_percent)
             break;
         if (responses_per_sec > max_throughput) {
-            max_throughput = responses_per_sec;
+            max_throughput         = responses_per_sec;
             loss_at_max_throughput = loss_percent;
         }
     }
@@ -413,17 +414,18 @@ print_statistics(void) {
     printf("  Lost at that point:   %.2f%%\n", loss_at_max_throughput);
 }
 
-static ramp_bucket *
-init_buckets(int n) {
-    ramp_bucket *p;
-    int i;
+static ramp_bucket*
+init_buckets(int n)
+{
+    ramp_bucket* p;
+    int          i;
 
     p = isc_mem_get(mctx, n * sizeof(*p));
     if (p == NULL)
         perf_log_fatal("out of memory");
     for (i = 0; i < n; i++) {
         p[i].queries = p[i].responses = p[i].failures = 0;
-        p[i].latency_sum = 0.0;
+        p[i].latency_sum                              = 0.0;
     }
     return p;
 }
@@ -433,14 +435,15 @@ init_buckets(int n) {
  * Return ISC_R_NOMORE if we ran out of query IDs.
  */
 static isc_result_t
-do_one_line(isc_buffer_t *lines, isc_buffer_t *msg) {
-    query_info *q;
-    unsigned int qid;
-    unsigned int sock;
-    isc_region_t used;
-    unsigned char *base;
-    unsigned int length;
-    isc_result_t result;
+do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
+{
+    query_info*    q;
+    unsigned int   qid;
+    unsigned int   sock;
+    isc_region_t   used;
+    unsigned char* base;
+    unsigned int   length;
+    isc_result_t   result;
 
     isc_buffer_clear(lines);
     result = perf_datafile_next(input, lines, false);
@@ -449,24 +452,24 @@ do_one_line(isc_buffer_t *lines, isc_buffer_t *msg) {
     isc_buffer_usedregion(lines, &used);
 
     q = ISC_LIST_HEAD(instanding_list);
-    if (! q)
+    if (!q)
         return (ISC_R_NOMORE);
-    qid = (q - queries) / nsocks;
+    qid  = (q - queries) / nsocks;
     sock = (q - queries) % nsocks;
 
     isc_buffer_clear(msg);
-    result = perf_dns_buildrequest(NULL, (isc_textregion_t *) &used,
-                                   qid, edns, dnssec, tsigkey, NULL, msg);
+    result = perf_dns_buildrequest(NULL, (isc_textregion_t*)&used,
+        qid, edns, dnssec, tsigkey, NULL, msg);
     if (result != ISC_R_SUCCESS)
         return (result);
 
     q->sent_timestamp = time_now;
 
-    base = isc_buffer_base(msg);
+    base   = isc_buffer_base(msg);
     length = isc_buffer_usedlength(msg);
     if (sendto(socks[sock], base, length, 0,
-               &server_addr.type.sa, server_addr.length) < 1)
-    {
+            &server_addr.type.sa, server_addr.length)
+        < 1) {
         perf_log_warning("failed to send packet: %s", strerror(errno));
         return (ISC_R_FAILURE);
     }
@@ -482,7 +485,8 @@ do_one_line(isc_buffer_t *lines, isc_buffer_t *msg) {
 }
 
 static void
-enter_sustain_phase(void) {
+enter_sustain_phase(void)
+{
     phase = PHASE_SUSTAIN;
     if (sustain_time != 0.0)
         printf("[Status] Ramp-up done, sending constant traffic\n");
@@ -490,7 +494,8 @@ enter_sustain_phase(void) {
 }
 
 static void
-enter_wait_phase(void) {
+enter_wait_phase(void)
+{
     phase = PHASE_WAIT;
     printf("[Status] Waiting for more responses\n");
     wait_phase_began = time_now;
@@ -504,31 +509,32 @@ enter_wait_phase(void) {
  *   number of outstanding queries if it matches an open query.
  */
 static void
-try_process_response(unsigned int sockindex) {
+try_process_response(unsigned int sockindex)
+{
     unsigned char packet_buffer[MAX_EDNS_PACKET];
-    uint16_t *packet_header;
-    uint16_t qid, rcode;
-    query_info *q;
-    double latency;
-    ramp_bucket *b;
-    int n;
+    uint16_t*     packet_header;
+    uint16_t      qid, rcode;
+    query_info*   q;
+    double        latency;
+    ramp_bucket*  b;
+    int           n;
 
-    packet_header = (uint16_t *) packet_buffer;
-    n = recvfrom(socks[sockindex], packet_buffer, sizeof(packet_buffer),
-                 0, NULL, NULL);
+    packet_header = (uint16_t*)packet_buffer;
+    n             = recvfrom(socks[sockindex], packet_buffer, sizeof(packet_buffer),
+        0, NULL, NULL);
     if (n < 0) {
         if (errno == EAGAIN || errno == EINTR) {
             return;
         } else {
             perf_log_fatal("failed to receive packet: %s",
-                           strerror(errno));
+                strerror(errno));
         }
     } else if (n < 4) {
         perf_log_warning("received short response");
         return;
     }
 
-    qid = ntohs(packet_header[0]);
+    qid   = ntohs(packet_header[0]);
     rcode = ntohs(packet_header[1]) & 0xF;
 
     q = &queries[qid * nsocks + sockindex];
@@ -544,7 +550,7 @@ try_process_response(unsigned int sockindex) {
     num_queries_outstanding--;
 
     latency = (time_now - q->sent_timestamp) / (double)MILLION;
-    b = find_bucket(q->sent_timestamp);
+    b       = find_bucket(q->sent_timestamp);
     b->responses++;
     if (!(rcode == dns_rcode_noerror || rcode == dns_rcode_nxdomain))
         b->failures++;
@@ -556,7 +562,7 @@ try_process_response(unsigned int sockindex) {
 static void
 retire_old_queries(void)
 {
-    query_info *q;
+    query_info* q;
 
     while (true) {
         q = ISC_LIST_TAIL(outstanding_list);
@@ -575,24 +581,22 @@ static inline int
 num_scheduled(uint64_t time_since_start)
 {
     if (phase == PHASE_RAMP) {
-        return 0.5 * max_qps * (double)time_since_start * time_since_start /
-            (ramp_time * MILLION);
+        return 0.5 * max_qps * (double)time_since_start * time_since_start / (ramp_time * MILLION);
     } else { /* PHASE_SUSTAIN */
-        return 0.5 * max_qps * (ramp_time / (double)MILLION) +
-            max_qps * (time_since_start - ramp_time) / (double)MILLION;
+        return 0.5 * max_qps * (ramp_time / (double)MILLION) + max_qps * (time_since_start - ramp_time) / (double)MILLION;
     }
 }
 
-int
-main(int argc, char **argv) {
-    int i;
-    FILE *plotf;
-    isc_buffer_t lines, msg;
-    char input_data[MAX_INPUT_DATA];
+int main(int argc, char** argv)
+{
+    int           i;
+    FILE*         plotf;
+    isc_buffer_t  lines, msg;
+    char          input_data[MAX_INPUT_DATA];
     unsigned char outpacket_buffer[MAX_EDNS_PACKET];
-    unsigned int max_packet_size;
-    unsigned int current_sock;
-    isc_result_t result;
+    unsigned int  max_packet_size;
+    unsigned int  current_sock;
+    isc_result_t  result;
 
     printf("DNS Resolution Performance Testing Tool\n"
            "Nominum Version " VERSION "\n\n");
@@ -605,12 +609,12 @@ main(int argc, char **argv) {
     isc_buffer_init(&msg, outpacket_buffer, max_packet_size);
 
     traffic_time = ramp_time + sustain_time;
-    end_time = traffic_time + wait_time;
+    end_time     = traffic_time + wait_time;
 
     n_buckets = (traffic_time + bucket_interval - 1) / bucket_interval;
-    buckets = init_buckets(n_buckets);
+    buckets   = init_buckets(n_buckets);
 
-    time_now = get_time();
+    time_now              = get_time();
     time_of_program_start = time_now;
 
     printf("[Status] Command line: %s", isc_file_basename(argv[0]));
@@ -623,7 +627,7 @@ main(int argc, char **argv) {
 
     current_sock = 0;
     for (;;) {
-        int should_send;
+        int      should_send;
         uint64_t time_since_start = time_now - time_of_program_start;
         switch (phase) {
         case PHASE_RAMP:
@@ -635,8 +639,7 @@ main(int argc, char **argv) {
                 enter_wait_phase();
             break;
         case PHASE_WAIT:
-            if (time_since_start >= end_time ||
-                ISC_LIST_EMPTY(outstanding_list))
+            if (time_since_start >= end_time || ISC_LIST_EMPTY(outstanding_list))
                 goto end_loop;
             break;
         }
@@ -645,7 +648,7 @@ main(int argc, char **argv) {
             if (should_send >= 1000) {
                 printf("[Status] Fell behind by %d queries, "
                        "ending test at %.0f qps\n",
-                       should_send, (max_qps * time_since_start) / ramp_time);
+                    should_send, (max_qps * time_since_start) / ramp_time);
                 enter_wait_phase();
             }
             if (should_send > 0) {
@@ -654,7 +657,7 @@ main(int argc, char **argv) {
                     find_bucket(time_now)->queries++;
                 if (result == ISC_R_NOMORE) {
                     printf("[Status] Reached %u outstanding queries\n",
-                           max_outstanding);
+                        max_outstanding);
                     enter_wait_phase();
                 }
             }
@@ -665,20 +668,20 @@ main(int argc, char **argv) {
         time_now = get_time();
     }
 end_loop:
-    time_now = get_time();
+    time_now           = get_time();
     time_of_end_of_run = time_now;
 
     printf("[Status] Testing complete\n");
 
     plotf = fopen(plotfile, "w");
-    if (! plotf) {
+    if (!plotf) {
         perf_log_fatal("could not open %s: %s", plotfile,
-                       strerror(errno));
+            strerror(errno));
     }
 
     /* Print column headers */
     fprintf(plotf, "# time target_qps actual_qps "
-            "responses_per_sec failures_per_sec avg_latency\n");
+                   "responses_per_sec failures_per_sec avg_latency\n");
 
     /* Don't print unused buckets */
     last_bucket_used = find_bucket(wait_phase_began) - buckets;
@@ -688,20 +691,18 @@ end_loop:
         --last_bucket_used;
 
     for (i = 0; i <= last_bucket_used; i++) {
-        double t = (i + 0.5) * traffic_time / (n_buckets * (double)MILLION);
+        double t          = (i + 0.5) * traffic_time / (n_buckets * (double)MILLION);
         double ramp_dtime = ramp_time / (double)MILLION;
-        double target_qps =
-            t <= ramp_dtime ? (t / ramp_dtime) * max_qps : max_qps;
-        double latency = buckets[i].responses ?
-            buckets[i].latency_sum / buckets[i].responses : 0;
-        double interval = bucket_interval / (double) MILLION;
+        double target_qps = t <= ramp_dtime ? (t / ramp_dtime) * max_qps : max_qps;
+        double latency    = buckets[i].responses ? buckets[i].latency_sum / buckets[i].responses : 0;
+        double interval   = bucket_interval / (double)MILLION;
         fprintf(plotf, "%7.3f %8.2f %8.2f %8.2f %8.2f %8.6f\n",
-                t,
-                target_qps,
-                buckets[i].queries / interval,
-                buckets[i].responses / interval,
-                buckets[i].failures / interval,
-                latency);
+            t,
+            target_qps,
+            buckets[i].queries / interval,
+            buckets[i].responses / interval,
+            buckets[i].failures / interval,
+            latency);
     }
 
     fclose(plotf);

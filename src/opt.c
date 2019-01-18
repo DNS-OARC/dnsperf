@@ -38,39 +38,38 @@
 #define LINE_LENGTH 80
 
 typedef struct {
-    char c;
+    char           c;
     perf_opttype_t type;
-    const char *desc;
-    const char *help;
-    const char *defval;
-    char defvalbuf[32];
+    const char*    desc;
+    const char*    help;
+    const char*    defval;
+    char           defvalbuf[32];
     union {
-        void *valp;
-        char **stringp;
-        bool *boolp;
-        unsigned int *uintp;
-        uint64_t *uint64p;
-        double *doublep;
-        in_port_t *portp;
+        void*         valp;
+        char**        stringp;
+        bool*         boolp;
+        unsigned int* uintp;
+        uint64_t*     uint64p;
+        double*       doublep;
+        in_port_t*    portp;
     } u;
 } opt_t;
 
-static opt_t opts[MAX_OPTS];
+static opt_t        opts[MAX_OPTS];
 static unsigned int nopts;
-static char optstr[MAX_OPTS * 2 + 2];
-static const char *progname;
+static char         optstr[MAX_OPTS * 2 + 2];
+static const char*  progname;
 
-void
-perf_opt_add(char c, perf_opttype_t type, const char *desc, const char *help,
-             const char *defval, void *valp)
+void perf_opt_add(char c, perf_opttype_t type, const char* desc, const char* help,
+    const char* defval, void* valp)
 {
-    opt_t *opt;
-    char s[3];
+    opt_t* opt;
+    char   s[3];
 
     if (nopts == MAX_OPTS)
         perf_log_fatal("too many defined options");
-    opt = &opts[nopts++];
-    opt->c = c;
+    opt       = &opts[nopts++];
+    opt->c    = c;
     opt->type = type;
     opt->desc = desc;
     opt->help = help;
@@ -90,13 +89,12 @@ perf_opt_add(char c, perf_opttype_t type, const char *desc, const char *help,
 #endif
 }
 
-void
-perf_opt_usage(void)
+void perf_opt_usage(void)
 {
     unsigned int prefix_len, position, arg_len, i, j;
 
     prefix_len = fprintf(stderr, "Usage: %s", progname);
-    position = prefix_len;
+    position   = prefix_len;
     for (i = 0; i < nopts; i++) {
         arg_len = 6;
         if (opts[i].desc != NULL)
@@ -124,13 +122,13 @@ perf_opt_usage(void)
 }
 
 static uint32_t
-parse_uint(const char *desc, const char *str,
-           unsigned int min, unsigned int max)
+parse_uint(const char* desc, const char* str,
+    unsigned int min, unsigned int max)
 {
-    uint32_t val;
+    uint32_t     val;
     isc_result_t result;
 
-    val = 0;
+    val    = 0;
     result = isc_parse_uint32(&val, str, 10);
     if (result != ISC_R_SUCCESS || val < min || val > max) {
         fprintf(stderr, "invalid %s: %s\n", desc, str);
@@ -141,11 +139,11 @@ parse_uint(const char *desc, const char *str,
 }
 
 static double
-parse_double(const char *desc, const char *str)
+parse_double(const char* desc, const char* str)
 {
-    const char *s;
-    char c;
-    bool seen_dot = false;
+    const char* s;
+    char        c;
+    bool        seen_dot = false;
 
     s = str;
     while (*s != 0) {
@@ -168,16 +166,15 @@ fail:
 }
 
 static uint64_t
-parse_timeval(const char *desc, const char *str)
+parse_timeval(const char* desc, const char* str)
 {
     return MILLION * parse_double(desc, str);
 }
 
-void
-perf_opt_parse(int argc, char **argv)
+void perf_opt_parse(int argc, char** argv)
 {
-    int c;
-    opt_t *opt;
+    int          c;
+    opt_t*       opt;
     unsigned int i;
 
     progname = isc_file_basename(argv[0]);
@@ -207,7 +204,7 @@ perf_opt_parse(int argc, char **argv)
             break;
         case perf_opt_uint:
             *opt->u.uintp = parse_uint(opt->desc, optarg,
-                                       1, 0xFFFFFFFF);
+                1, 0xFFFFFFFF);
             break;
         case perf_opt_timeval:
             *opt->u.uint64p = parse_timeval(opt->desc, optarg);
@@ -217,7 +214,7 @@ perf_opt_parse(int argc, char **argv)
             break;
         case perf_opt_port:
             *opt->u.portp = parse_uint(opt->desc, optarg,
-                                       0, 0xFFFF);
+                0, 0xFFFF);
             break;
         }
     }
