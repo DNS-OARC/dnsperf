@@ -1,0 +1,20 @@
+extraction:
+  cpp:
+    prepare:
+      packages:
+        - build-essential
+        - automake
+        - autoconf
+        - libtool
+        - pkg-config
+        - libbind-dev
+        - libkrb5-dev
+        - libssl-dev
+        - libcap-dev
+        - libxml2-dev
+        - libjson-c-dev
+        - libgeoip-dev
+    configure:
+      command:
+        - ./autogen.sh
+        - ./configure

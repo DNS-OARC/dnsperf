@@ -1,0 +1,6 @@
+BasedOnStyle: webkit
+IndentWidth: 4
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignOperands: true
+SortIncludes: false

@@ -1,0 +1,48 @@
+Source: dnsperf
+Section: net
+Priority: optional
+Maintainer: Jerry Lundström <lundstrom.jerry@gmail.com>
+Build-Depends: debhelper (>= 8.0.0), build-essential, automake, autoconf,
+ libtool, libbind-dev, libkrb5-dev, libssl-dev, libcap-dev, libxml2-dev,
+ libjson-c-dev, libgeoip-dev, libprotobuf-c-dev, libfstrm-dev, liblmdb-dev
+Standards-Version: 3.9.4
+Homepage: https://www.dns-oarc.net/tools/dnsperf
+Vcs-Git: https://github.com/DNS-OARC/dnsperf.git
+Vcs-Browser: https://github.com/DNS-OARC/dnsperf
+
+Package: dnsperf
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: DNS Performance Testing Tool
+ dnsperf and resperf are free tools developed by Nominum/Akamai (2006-2018)
+ and DNS-OARC (since 2019) that make it simple to gather accurate latency and
+ throughput metrics for Domain Name Service (DNS). These tools are easy-to-use
+ and simulate typical Internet, so network operators can benchmark their naming
+ and addressing infrastructure and plan for upgrades. The latest version of
+ the dnsperf and resperf can be used with test files that include IPv6
+ queries.
+ .
+ dnsperf "self-paces" the DNS query load to simulate network conditions.
+ .
+ New features in dnsperf improve the precision of latency measurements and
+ allow for per packet per-query latency reporting is possible. dnsperf is
+ now multithreaded, multiple dnsperf clients can be supported in multicore
+ systems (each client requires two cores). The output of dnsperf has also
+ been improved so it is more concise and useful. Latency data can be used to
+ make detailed graphs, so it is simple for network operators to take advantage
+ of the data.
+
+Package: resperf
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: DNS Resolution Performance Testing Tool
+ dnsperf and resperf are free tools developed by Nominum/Akamai (2006-2018)
+ and DNS-OARC (since 2019) that make it simple to gather accurate latency and
+ throughput metrics for Domain Name Service (DNS). These tools are easy-to-use
+ and simulate typical Internet, so network operators can benchmark their naming
+ and addressing infrastructure and plan for upgrades. The latest version of
+ the dnsperf and resperf can be used with test files that include IPv6
+ queries.
+ .
+ resperf systematically increases the query rate and monitors the response
+ rate to simulate caching DNS services.
