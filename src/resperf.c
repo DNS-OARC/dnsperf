@@ -21,6 +21,8 @@
  ***	DNS Resolution Performance Testing Tool
  ***/
 
+#include "config.h"
+
 #include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -48,7 +50,6 @@
 #include "net.h"
 #include "opt.h"
 #include "util.h"
-#include "version.h"
 
 /*
  * Global stuff
@@ -599,7 +600,7 @@ int main(int argc, char** argv)
     isc_result_t  result;
 
     printf("DNS Resolution Performance Testing Tool\n"
-           "Nominum Version " VERSION "\n\n");
+           "Version " PACKAGE_VERSION "\n\n");
 
     setup(argc, argv);
 

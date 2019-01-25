@@ -1,3 +1,54 @@
+2019-01-25 Jerry Lundström
+
+    Release 2.2.0
+
+    First release by DNS-OARC with a rework of the code to use autotools,
+    semantic versioning 2.0 and bugfixes pulled from other's forks.
+
+    Bugfixes:
+    - Fix infinite loop in argument parsing
+    - Fix min/max latency summing for multithreaded runs
+    - Fix calculation of per_thread socket counts
+    - Fixes to queryparse
+      - Mark correctly end of file
+      - Support python3
+      - Stop looping on end of file undefinitely
+    - Fix compilation issues and work around missing `dns_fixedname_initname()`
+    - Clang `scan-build` fixes
+
+    Other changes:
+    - add "configure --with-bind" option
+    - Handle bind library changes to HMAC (see #22) and other differences
+      between versions
+    - Workaround issue on FreeBSD (see #23)
+    - Use `snprintf()` and OpenBSD's `strlcat()`
+    - Add/update build dependencies for Debia, Ubuntu, CentOS, FreeBSD
+      and OpenBSD
+
+    ae9bc91 Clang format
+    b9bb085 CI, buildbot
+    b84e41b Autotools, README, changelog
+    a2e1732 License
+    9dcb661 Remove $Id markers, Principal Author and Reviewed tags from the
+            full source tree
+    0677bf0 Use dns_fixedname_initname() where possible
+    d8d4696 [master] add "configure --with-bind" option to dnsperf
+    b71a280 Add deb based distros dependencies
+    439c614 Replace custom isc_boolean_t with C standard bool type
+    407ae7c Replace custom isc_u?intNN_t types with C99 u?intNN_t types
+    c27afd4 Replace ISC_PRINT_QUADFORMAT with inttypes.h format constants
+    6fdb2f7 Fix queryparse
+    4909b78 README
+    2782d50 README.md: Rectify link to software
+    e31ddf4 fix calculation of per_thread socket counts
+    3bd7fb4 Fix min/max latency summing for multithreaded runs
+    2207e27 Fix infinite loop in argument parsing.
+    3bfe97a Include the github URL; remove the bug reports section.
+    0cee04a Add note about bug reports.
+    62c4b32 add .gitignore
+    c45f0be Initial import.
+    149172b Initial commit
+
 2015-12-15
 
     Release 2.1.0.0
