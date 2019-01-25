@@ -21,6 +21,8 @@
  ***	DNS Performance Testing Tool
  ***/
 
+#include "config.h"
+
 #include <inttypes.h>
 #include <errno.h>
 #include <math.h>
@@ -58,7 +60,6 @@
 #include "opt.h"
 #include "os.h"
 #include "util.h"
-#include "version.h"
 
 #ifndef ISC_UINT64_MAX
 #include <stdint.h>
@@ -1085,7 +1086,7 @@ int main(int argc, char** argv)
     isc_result_t result;
 
     printf("DNS Performance Testing Tool\n"
-           "Nominum Version " VERSION "\n\n");
+           "Version " PACKAGE_VERSION "\n\n");
 
     setup(argc, argv, &config);
 

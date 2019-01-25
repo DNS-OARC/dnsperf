@@ -42,6 +42,12 @@ To install the dependencies under Debian/Ubuntu:
 apt-get install -y libbind-dev libkrb5-dev libssl-dev libcap-dev libxml2-dev libjson-c-dev libgeoip-dev
 ```
 
+Depending on how BIND is compiled on Debian and Ubuntu you might need these
+dependencies also:
+```
+apt-get install -y libprotobuf-c-dev libfstrm-dev liblmdb-dev
+```
+
 To install the dependencies under CentOS (with EPEL enabled):
 ```
 yum install -y bind-devel krb5-devel openssl-devel libcap-devel libxml2-devel json-c-devel GeoIP-devel
