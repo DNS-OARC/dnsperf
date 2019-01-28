@@ -1,3 +1,13 @@
+2019-01-28 Jerry Lundström
+
+    Release 2.2.1
+
+    The commit pulled from a fork that used `inttypes.h`, instead of ISC
+    internal types, missed to remove the old conversion specifier.
+    This was reported and fixed by Vladimír Čunát.
+
+    9534ce1 remove visible "u" characters after numbers
+
 2019-01-25 Jerry Lundström
 
     Release 2.2.0
