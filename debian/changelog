@@ -1,3 +1,15 @@
+dnsperf (2.2.1-1~unstable+1) unstable; urgency=low
+
+  * Release 2.2.1
+
+    The commit pulled from a fork that used `inttypes.h`, instead of ISC
+    internal types, missed to remove the old conversion specifier.
+    This was reported and fixed by Vladimír Čunát.
+
+    9534ce1 remove visible "u" characters after numbers
+
+ -- Jerry Lundström <lundstrom.jerry@gmail.com>  Mon, 28 Jan 2019 08:15:32 +0100
+
 dnsperf (2.2.0-1~unstable+1) unstable; urgency=low
 
   * Release 2.2.0

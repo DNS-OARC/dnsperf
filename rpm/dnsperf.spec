@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.2.0
+Version:        2.2.1
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -101,6 +101,13 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Mon Jan 28 2019 Jerry Lundström <lundstrom.jerry@gmail.com> 2.2.1-1
+- Release 2.2.1
+  * The commit pulled from a fork that used `inttypes.h`, instead of ISC
+    internal types, missed to remove the old conversion specifier.
+    This was reported and fixed by Vladimír Čunát.
+  * Commits:
+    9534ce1 remove visible "u" characters after numbers
 * Mon Dec 03 2018 Jerry Lundström <lundstrom.jerry@gmail.com> 2.2.0-1
 - Release 2.2.0
   * First release by DNS-OARC with a rework of the code to use autotools,
