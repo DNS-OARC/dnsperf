@@ -372,11 +372,11 @@ print_statistics(void)
 
     printf("\nStatistics:\n\n");
 
-    printf("  Queries sent:         %" PRIu64 "u\n",
+    printf("  Queries sent:         %" PRIu64 "\n",
         num_queries_sent);
-    printf("  Queries completed:    %" PRIu64 "u\n",
+    printf("  Queries completed:    %" PRIu64 "\n",
         num_responses_received);
-    printf("  Queries lost:         %" PRIu64 "u\n",
+    printf("  Queries lost:         %" PRIu64 "\n",
         num_queries_sent - num_responses_received);
     printf("  Response codes:       ");
     first_rcode = true;
@@ -387,7 +387,7 @@ print_statistics(void)
             first_rcode = false;
         else
             printf(", ");
-        printf("%s %" PRIu64 "u (%.2lf%%)",
+        printf("%s %" PRIu64 " (%.2lf%%)",
             perf_dns_rcode_strings[i], rcodecounts[i],
             (rcodecounts[i] * 100.0) / num_responses_received);
     }
