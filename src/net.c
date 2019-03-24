@@ -22,15 +22,24 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <errno.h>
+#include <poll.h>
 
 #include <isc/result.h>
 #include <isc/sockaddr.h>
 
 #include <bind9/getaddresses.h>
 
+#include <arpa/inet.h>
+
 #include "log.h"
 #include "net.h"
 #include "opt.h"
+#include "os.h"
+
+#define TCP_RECV_BUF_SIZE (16 * 1024)
+#define TCP_SEND_BUF_SIZE (4 * 1024)
 
 int perf_net_parsefamily(const char* family)
 {
@@ -98,15 +107,15 @@ void perf_net_parselocal(int family, const char* name, unsigned int port,
     }
 }
 
-int perf_net_opensocket(const isc_sockaddr_t* server, const isc_sockaddr_t* local,
+struct perf_net_socket perf_net_opensocket(enum perf_net_mode mode, const isc_sockaddr_t* server, const isc_sockaddr_t* local,
     unsigned int offset, int bufsize)
 {
-    int            family;
-    int            sock;
-    isc_sockaddr_t tmp;
-    int            port;
-    int            ret;
-    int            flags;
+    int                    family;
+    isc_sockaddr_t         tmp;
+    int                    port;
+    int                    ret;
+    int                    flags;
+    struct perf_net_socket sock = {.mode = mode, .is_ready = 1 };
 
     family = isc_sockaddr_pf(server);
 
@@ -114,15 +123,25 @@ int perf_net_opensocket(const isc_sockaddr_t* server, const isc_sockaddr_t* loca
         perf_log_fatal("server and local addresses have "
                        "different families");
 
-    sock = socket(family, SOCK_DGRAM, 0);
-    if (sock == -1)
+    switch (mode) {
+    case sock_udp:
+        sock.fd = socket(family, SOCK_DGRAM, 0);
+        break;
+    case sock_tcp:
+        sock.fd = socket(family, SOCK_STREAM, 0);
+        break;
+    default:
+        perf_log_fatal("perf_net_opensocket(): invalid mode");
+    }
+
+    if (sock.fd == -1)
         perf_log_fatal("socket: %s", strerror(errno));
 
 #if defined(AF_INET6) && defined(IPV6_V6ONLY)
     if (family == AF_INET6) {
         int on = 1;
 
-        if (setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on)) == -1) {
+        if (setsockopt(sock.fd, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on)) == -1) {
             perf_log_warning("setsockopt(IPV6_V6ONLY) failed");
         }
     }
@@ -137,29 +156,179 @@ int perf_net_opensocket(const isc_sockaddr_t* server, const isc_sockaddr_t* loca
         isc_sockaddr_setport(&tmp, port);
     }
 
-    if (bind(sock, &tmp.type.sa, tmp.length) == -1)
+    if (bind(sock.fd, &tmp.type.sa, tmp.length) == -1)
         perf_log_fatal("bind: %s", strerror(errno));
 
     if (bufsize > 0) {
         bufsize *= 1024;
 
-        ret = setsockopt(sock, SOL_SOCKET, SO_RCVBUF,
+        ret = setsockopt(sock.fd, SOL_SOCKET, SO_RCVBUF,
             &bufsize, sizeof(bufsize));
         if (ret < 0)
             perf_log_warning("setsockbuf(SO_RCVBUF) failed");
 
-        ret = setsockopt(sock, SOL_SOCKET, SO_SNDBUF,
+        ret = setsockopt(sock.fd, SOL_SOCKET, SO_SNDBUF,
             &bufsize, sizeof(bufsize));
         if (ret < 0)
             perf_log_warning("setsockbuf(SO_SNDBUF) failed");
     }
 
-    flags = fcntl(sock, F_GETFL, 0);
+    flags = fcntl(sock.fd, F_GETFL, 0);
     if (flags < 0)
         perf_log_fatal("fcntl(F_GETFL)");
-    ret = fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+    ret = fcntl(sock.fd, F_SETFL, flags | O_NONBLOCK);
     if (ret < 0)
         perf_log_fatal("fcntl(F_SETFL)");
 
+    if (mode == sock_tcp) {
+        if (connect(sock.fd, &server->type.sa, server->length)) {
+            if (errno == EINPROGRESS) {
+                sock.is_ready = 0;
+            } else {
+                perf_log_fatal("connect() failed: %s", strerror(errno));
+            }
+        }
+        sock.recvbuf   = malloc(TCP_RECV_BUF_SIZE);
+        sock.at        = 0;
+        sock.have_more = 0;
+        sock.sendbuf   = malloc(TCP_SEND_BUF_SIZE);
+        if (!sock.recvbuf || !sock.sendbuf) {
+            perf_log_fatal("perf_net_opensocket() failed: unable to allocate buffers");
+        }
+    }
+
     return sock;
+}
+
+ssize_t perf_net_recv(struct perf_net_socket* sock, void* buf, size_t len, int flags)
+{
+    switch (sock->mode) {
+    case sock_tcp: {
+        ssize_t  n;
+        uint16_t dnslen, dnslen2;
+
+        if (!sock->have_more) {
+            // Poll TCP sock to not choke it with recv(), increased throughput by ~50%
+            struct pollfd p = { sock->fd, POLLIN, 0 };
+            if (poll(&p, 1, 10) == 1 && !(p.revents & POLLIN)) {
+                errno = EAGAIN;
+                return -1;
+            }
+
+            n = recv(sock->fd, sock->recvbuf + sock->at, TCP_RECV_BUF_SIZE - sock->at, flags);
+            if (n < 0) {
+                return n;
+            }
+            sock->at += n;
+            if (sock->at < 3) {
+                errno = EAGAIN;
+                return -1;
+            }
+        }
+
+        memcpy(&dnslen, sock->recvbuf, 2);
+        dnslen = ntohs(dnslen);
+        if (sock->at < dnslen + 2) {
+            errno = EAGAIN;
+            return -1;
+        }
+        memcpy(buf, sock->recvbuf + 2, len < dnslen ? len : dnslen);
+        memmove(sock->recvbuf, sock->recvbuf + 2 + dnslen, sock->at - 2 - dnslen);
+        sock->at -= 2 + dnslen;
+
+        if (sock->at > 2) {
+            memcpy(&dnslen2, sock->recvbuf, 2);
+            dnslen2 = ntohs(dnslen2);
+            if (sock->at >= dnslen + 2) {
+                sock->have_more = 1;
+                return dnslen;
+            }
+        }
+
+        sock->have_more = 0;
+        return dnslen;
+    }
+    default:
+        break;
+    }
+
+    return recv(sock->fd, buf, len, flags);
+}
+
+ssize_t perf_net_sendto(struct perf_net_socket* sock, const void* buf, size_t len, int flags,
+    const struct sockaddr* dest_addr, socklen_t addrlen)
+{
+    switch (sock->mode) {
+    case sock_tcp: {
+        size_t send = len < TCP_SEND_BUF_SIZE - 2 ? len : (TCP_SEND_BUF_SIZE - 2);
+        // TODO: We only send what we can send, because we can't continue sending
+        uint16_t dnslen = htons(send);
+        ssize_t  n;
+
+        memcpy(sock->sendbuf, &dnslen, 2);
+        memcpy(sock->sendbuf + 2, buf, send);
+        n = sendto(sock->fd, sock->sendbuf, send + 2, flags, dest_addr, addrlen);
+        // TODO: If we end up sending bytes but less then 3 it will put the sock in an invalid state
+        return n > 2 ? n - 2 : n;
+    }
+    default:
+        break;
+    }
+    return sendto(sock->fd, buf, len, flags, dest_addr, addrlen);
+}
+
+int perf_net_close(struct perf_net_socket* sock)
+{
+    return close(sock->fd);
+}
+
+int perf_net_sockeq(struct perf_net_socket* sock_a, struct perf_net_socket* sock_b)
+{
+    return sock_a->fd == sock_b->fd;
+}
+
+enum perf_net_mode perf_net_parsemode(const char* mode)
+{
+    if (!strcmp(mode, "udp")) {
+        return sock_udp;
+    } else if (!strcmp(mode, "tcp")) {
+        return sock_tcp;
+    }
+
+    perf_log_warning("invalid socket mode");
+    perf_opt_usage();
+    exit(1);
+}
+
+int perf_net_sockready(struct perf_net_socket* sock, int pipe_fd, int64_t timeout)
+{
+    if (sock->is_ready) {
+        return 1;
+    }
+
+    switch (sock->mode) {
+    case sock_tcp:
+        switch (perf_os_waituntilanywritable(sock, 1, pipe_fd, timeout)) {
+        case ISC_R_TIMEDOUT:
+            return -1;
+        case ISC_R_SUCCESS: {
+            int       error = 0;
+            socklen_t len   = (socklen_t)sizeof(error);
+
+            getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, (void*)&error, &len);
+            if (error != 0) {
+                if (error == EINPROGRESS || error == EWOULDBLOCK || error == EAGAIN) {
+                    return 0;
+                }
+                return -1;
+            }
+            sock->is_ready = 1;
+            return 1;
+        }
+        }
+    default:
+        break;
+    }
+
+    return -1;
 }

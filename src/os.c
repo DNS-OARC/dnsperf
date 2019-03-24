@@ -58,13 +58,13 @@ void perf_os_handlesignal(int sig, void (*handler)(int))
 }
 
 isc_result_t
-perf_os_waituntilreadable(int fd, int pipe_fd, int64_t timeout)
+perf_os_waituntilreadable(struct perf_net_socket* sock, int pipe_fd, int64_t timeout)
 {
-    return perf_os_waituntilanyreadable(&fd, 1, pipe_fd, timeout);
+    return perf_os_waituntilanyreadable(sock, 1, pipe_fd, timeout);
 }
 
 isc_result_t
-perf_os_waituntilanyreadable(int* fds, unsigned int nfds, int pipe_fd,
+perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
     int64_t timeout)
 {
     fd_set         read_fds;
@@ -76,9 +76,11 @@ perf_os_waituntilanyreadable(int* fds, unsigned int nfds, int pipe_fd,
     FD_ZERO(&read_fds);
     maxfd = 0;
     for (i = 0; i < nfds; i++) {
-        FD_SET(fds[i], &read_fds);
-        if (fds[i] > maxfd)
-            maxfd = fds[i];
+        if (socks[i].have_more)
+            return (ISC_R_SUCCESS);
+        FD_SET(socks[i].fd, &read_fds);
+        if (socks[i].fd > maxfd)
+            maxfd = socks[i].fd;
     }
     FD_SET(pipe_fd, &read_fds);
     if (pipe_fd > maxfd)
@@ -92,6 +94,49 @@ perf_os_waituntilanyreadable(int* fds, unsigned int nfds, int pipe_fd,
         tvp        = &tv;
     }
     n = select(maxfd + 1, &read_fds, NULL, NULL, tvp);
+    if (n < 0) {
+        if (errno != EINTR)
+            perf_log_fatal("select(): %s", strerror(errno));
+        return (ISC_R_CANCELED);
+    } else if (n == 0) {
+        return (ISC_R_TIMEDOUT);
+    } else if (FD_ISSET(pipe_fd, &read_fds)) {
+        return (ISC_R_CANCELED);
+    } else {
+        return (ISC_R_SUCCESS);
+    }
+}
+
+isc_result_t
+perf_os_waituntilanywritable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
+    int64_t timeout)
+{
+    fd_set         write_fds, read_fds;
+    unsigned int   i;
+    int            maxfd;
+    struct timeval tv, *tvp;
+    int            n;
+
+    FD_ZERO(&read_fds);
+    FD_ZERO(&write_fds);
+    maxfd = 0;
+    for (i = 0; i < nfds; i++) {
+        FD_SET(socks[i].fd, &write_fds);
+        if (socks[i].fd > maxfd)
+            maxfd = socks[i].fd;
+    }
+    FD_SET(pipe_fd, &read_fds);
+    if (pipe_fd > maxfd)
+        maxfd = pipe_fd;
+
+    if (timeout < 0) {
+        tvp = NULL;
+    } else {
+        tv.tv_sec  = timeout / MILLION;
+        tv.tv_usec = timeout % MILLION;
+        tvp        = &tv;
+    }
+    n = select(maxfd + 1, &read_fds, &write_fds, NULL, tvp);
     if (n < 0) {
         if (errno != EINTR)
             perf_log_fatal("select(): %s", strerror(errno));
