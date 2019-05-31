@@ -36,6 +36,7 @@
 #include <unistd.h>
 
 #include <sys/time.h>
+#include <sys/uio.h>
 
 #define ISC_BUFFER_USEINLINE
 
@@ -101,6 +102,7 @@ typedef struct {
     uint64_t              stats_interval;
     bool                  updates;
     bool                  verbose;
+    bool                  tcp;
 } config_t;
 
 typedef struct {
@@ -142,6 +144,14 @@ typedef struct query_info {
     link;
 } query_info;
 
+typedef struct {
+    bool          connecting;
+    bool          failed;
+    unsigned int  num_read;
+    unsigned int  skip;
+    unsigned char packet[MAX_TCP_PACKET + 2];
+} tcp_state_t;
+
 #define NQIDS 65536
 
 typedef struct {
@@ -158,6 +168,7 @@ typedef struct {
     unsigned int nsocks;
     int          current_sock;
     int*         socks;
+    tcp_state_t *tcp_state;
 
     perf_dnsctx_t* dnsctx;
 
@@ -460,6 +471,9 @@ setup(int argc, char** argv, config_t* config)
     perf_opt_add('v', perf_opt_boolean, NULL,
         "verbose: report each query to stdout",
         NULL, &config->verbose);
+    perf_opt_add('z', perf_opt_boolean, NULL,
+        "send queries using TCP",
+        NULL, &config->tcp);
 
     perf_opt_parse(argc, argv);
 
@@ -620,10 +634,50 @@ do_send(void* arg)
             continue;
         }
 
+        unsigned int socknum;
+
+        if (tinfo->config->tcp) {
+            unsigned int i;
+            for (i = 0; i < tinfo->nsocks; ++i) {
+                socknum = tinfo->current_sock++ % tinfo->nsocks;
+                tcp_state_t *state = &tinfo->tcp_state[socknum];
+                if (state->connecting) {
+                    int sock = tinfo->socks[socknum];
+                    if (perf_os_iswritable(sock) == ISC_R_SUCCESS) {
+                        int error;
+                        socklen_t len = sizeof(error);
+                        int n = getsockopt(sock, SOL_SOCKET, SO_ERROR,
+                            (void*)&error, &len);
+                        if (n < 0)
+                            perf_log_fatal("getsockopt failure");
+                        if (error == 0) {
+                            state->connecting = false;
+                        } else if (error != EINPROGRESS && error != EAGAIN) {
+                            state->connecting = false;
+                            state->failed = true;
+                            perf_log_warning("connect failed: %s",
+                                strerror(error));
+                        }
+                    }
+                }
+                if (state->failed)
+                    continue;
+                else if (! state->connecting)
+                    break;
+            }
+            if (i == tinfo->nsocks) {
+                UNLOCK(&tinfo->lock);
+                now = get_time();
+                continue;
+            }
+        } else {
+            socknum = tinfo->current_sock++ % tinfo->nsocks;
+        }
+
         q = ISC_LIST_HEAD(tinfo->unused_queries);
         query_move(tinfo, q, prepend_outstanding);
         q->timestamp = ISC_UINT64_MAX;
-        q->sock      = tinfo->socks[tinfo->current_sock++ % tinfo->nsocks];
+        q->sock      = tinfo->socks[socknum];
 
         UNLOCK(&tinfo->lock);
 
@@ -664,8 +718,21 @@ do_send(void* arg)
 
         stats->num_sent++;
 
-        n = sendto(q->sock, base, length, 0, &config->server_addr.type.sa,
-            config->server_addr.length);
+        if (config->tcp) {
+            struct iovec iov[2];
+            unsigned char lenbuf[2];
+            lenbuf[0] = length / 256;
+            lenbuf[1] = length % 256;
+            iov[0].iov_base = lenbuf;
+            iov[0].iov_len = sizeof(lenbuf);
+            iov[1].iov_base = base;
+            iov[1].iov_len = length;
+            length += 2;
+            n = writev(q->sock, iov, 2);
+        } else {
+            n = sendto(q->sock, base, length, 0, &config->server_addr.type.sa,
+                config->server_addr.length);
+        }
         if (n < 0 || (unsigned int)n != length) {
             perf_log_warning("failed to send packet: %s",
                 strerror(errno));
@@ -730,30 +797,80 @@ typedef struct {
     char*        desc;
 } received_query_t;
 
+static inline uint16_t
+get_uint16(unsigned char* p)
+{
+    return (p[0] << 8) | p[1];
+}
+
+static inline bool
+have_tcp_packet(unsigned char* start, unsigned int length, uint16_t* sizep)
+{
+    if (length < 2)
+        return false;
+    *sizep = get_uint16(start);
+    return (length >= 2 + *sizep);
+}
+
 static bool
 recv_one(threadinfo_t* tinfo, int which_sock,
     unsigned char* packet_buffer, unsigned int packet_size,
     received_query_t* recvd, int* saved_errnop)
 {
-    uint16_t* packet_header;
+    unsigned char* packet_header;
     int       s;
-    uint64_t  now;
     int       n;
 
-    packet_header = (uint16_t*)packet_buffer;
-
     s   = tinfo->socks[which_sock];
-    n   = recv(s, packet_buffer, packet_size, 0);
-    now = get_time();
-    if (n < 0) {
-        *saved_errnop = errno;
-        return false;
+    if (tinfo->config->tcp) {
+        tcp_state_t *state = &tinfo->tcp_state[which_sock];
+        /* Do we already have a message? */
+        unsigned char *start = state->packet + state->skip;
+        uint16_t available = state->num_read - state->skip;
+        uint16_t length;
+        if (have_tcp_packet(start, available, &length)) {
+            packet_header = start + 2;
+            state->skip += (2 + length);
+        } else {
+            if (state->skip > 0) {
+                if (available > 0) {
+                    memmove(state->packet, start, available);
+                }
+                state->num_read -= state->skip;
+                state->skip = 0;
+            }
+
+            n = recv(s, state->packet + state->num_read,
+                sizeof(state->packet) - state->num_read, 0);
+            if (n < 0) {
+                *saved_errnop = errno;
+                return false;
+            } else if (n == 0) {
+                *saved_errnop = ECONNRESET;
+                return false;
+            }
+            state->num_read += n;
+            if (have_tcp_packet(state->packet, state->num_read, &length)) {
+                packet_header = state->packet + 2;
+                state->skip += (2 + length);
+            } else {
+                *saved_errnop = EAGAIN;
+                return false;
+            }
+        }
+    } else {
+        n   = recv(s, packet_buffer, packet_size, 0);
+        if (n < 0) {
+            *saved_errnop = errno;
+            return false;
+        }
+        packet_header = packet_buffer;
     }
     recvd->sock           = s;
-    recvd->qid            = ntohs(packet_header[0]);
-    recvd->rcode          = ntohs(packet_header[1]) & 0xF;
+    recvd->qid            = get_uint16(packet_header);
+    recvd->rcode          = get_uint16(packet_header + 2) & 0xF;
     recvd->size           = n;
-    recvd->when           = now;
+    recvd->when           = get_time();
     recvd->sent           = 0;
     recvd->unexpected     = false;
     recvd->short_response = (n < 4);
@@ -1039,14 +1156,36 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
     tinfo->socks = isc_mem_get(mctx, tinfo->nsocks * sizeof(int));
     if (tinfo->socks == NULL)
         perf_log_fatal("out of memory");
+    if (tinfo->config->tcp) {
+        tinfo->tcp_state = isc_mem_get(mctx, tinfo->nsocks * sizeof(tcp_state_t));
+    } else {
+        tinfo->tcp_state = NULL;
+    }
     socket_offset = 0;
     for (i = 0; i < offset; i++)
         socket_offset += threads[i].nsocks;
-    for (i              = 0; i < tinfo->nsocks; i++)
+    int sock_type = SOCK_DGRAM;
+    if (tinfo->config->tcp)
+        sock_type = SOCK_STREAM;
+    for (i              = 0; i < tinfo->nsocks; i++) {
         tinfo->socks[i] = perf_net_opensocket(&config->server_addr,
             &config->local_addr,
+            sock_type,
             socket_offset++,
             config->bufsize);
+        if (tinfo->config->tcp) {
+            memset(&tinfo->tcp_state[i], 0, sizeof(tinfo->tcp_state[i]));
+            int n = connect(tinfo->socks[i], &config->server_addr.type.sa,
+                config->server_addr.length);
+            if (n < 0) {
+                if (errno == EINPROGRESS || errno == EWOULDBLOCK) {
+                    tinfo->tcp_state[i].connecting = true;
+                } else {
+                    perf_log_fatal("connecting socket: %s", strerror(errno));
+                }
+            }
+        }
+    }
     tinfo->current_sock = 0;
 
     THREAD(&tinfo->receiver, do_recv, tinfo);
@@ -1071,6 +1210,8 @@ threadinfo_cleanup(threadinfo_t* tinfo, times_t* times)
     for (i = 0; i < tinfo->nsocks; i++)
         close(tinfo->socks[i]);
     isc_mem_put(mctx, tinfo->socks, tinfo->nsocks * sizeof(int));
+    if (tinfo->tcp_state != NULL)
+        isc_mem_put(mctx, tinfo->tcp_state, tinfo->nsocks * sizeof(tcp_state_t));
     perf_dns_destroyctx(&tinfo->dnsctx);
     if (tinfo->last_recv > times->end_time)
         times->end_time = tinfo->last_recv;

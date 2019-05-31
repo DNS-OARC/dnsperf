@@ -99,7 +99,7 @@ void perf_net_parselocal(int family, const char* name, unsigned int port,
 }
 
 int perf_net_opensocket(const isc_sockaddr_t* server, const isc_sockaddr_t* local,
-    unsigned int offset, int bufsize)
+    int sock_type, unsigned int offset, int bufsize)
 {
     int            family;
     int            sock;
@@ -114,7 +114,7 @@ int perf_net_opensocket(const isc_sockaddr_t* server, const isc_sockaddr_t* loca
         perf_log_fatal("server and local addresses have "
                        "different families");
 
-    sock = socket(family, SOCK_DGRAM, 0);
+    sock = socket(family, sock_type, 0);
     if (sock == -1)
         perf_log_fatal("socket: %s", strerror(errno));
 
@@ -130,7 +130,10 @@ int perf_net_opensocket(const isc_sockaddr_t* server, const isc_sockaddr_t* loca
 
     tmp  = *local;
     port = isc_sockaddr_getport(&tmp);
-    if (port != 0 && offset != 0) {
+    if (sock_type == SOCK_STREAM) {
+        port = 0;
+        isc_sockaddr_setport(&tmp, port);
+    } else if (port != 0 && offset != 0) {
         port += offset;
         if (port >= 0xFFFF)
             perf_log_fatal("port %d out of range", port);

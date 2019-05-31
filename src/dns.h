@@ -24,6 +24,7 @@
 
 #define MAX_UDP_PACKET 512
 #define MAX_EDNS_PACKET 4096
+#define MAX_TCP_PACKET 65535
 
 typedef struct perf_dnstsigkey    perf_dnstsigkey_t;
 typedef struct perf_dnsednsoption perf_dnsednsoption_t;

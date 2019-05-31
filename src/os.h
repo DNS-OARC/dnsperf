@@ -34,4 +34,7 @@ isc_result_t
 perf_os_waituntilanyreadable(int* fds, unsigned int nfds, int pipe_fd,
     int64_t timeout);
 
+isc_result_t
+perf_os_iswritable(int fd);
+
 #endif

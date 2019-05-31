@@ -323,7 +323,8 @@ setup(int argc, char** argv)
     if (socks == NULL)
         perf_log_fatal("out of memory");
     for (i       = 0; i < nsocks; i++)
-        socks[i] = perf_net_opensocket(&server_addr, &local_addr, i, bufsize);
+        socks[i] = perf_net_opensocket(&server_addr, &local_addr, SOCK_DGRAM,
+            i, bufsize);
 }
 
 static void

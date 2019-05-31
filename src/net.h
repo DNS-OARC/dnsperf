@@ -29,6 +29,6 @@ void perf_net_parselocal(int family, const char* name, unsigned int port,
     isc_sockaddr_t* addr);
 
 int perf_net_opensocket(const isc_sockaddr_t* server, const isc_sockaddr_t* local,
-    unsigned int offset, int bufsize);
+    int sock_type, unsigned int offset, int bufsize);
 
 #endif

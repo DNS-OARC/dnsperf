@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <inttypes.h>
+#include <poll.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -102,5 +103,25 @@ perf_os_waituntilanyreadable(int* fds, unsigned int nfds, int pipe_fd,
         return (ISC_R_CANCELED);
     } else {
         return (ISC_R_SUCCESS);
+    }
+}
+
+isc_result_t
+perf_os_iswritable(int fd)
+{
+    struct pollfd pfd;
+    pfd.fd = fd;
+    pfd.events = POLLOUT;
+
+    int n = poll(&pfd, 1, 0);
+    if (n < 0) {
+        if (errno != EINTR)
+            perf_log_fatal("poll(): %s", strerror(errno));
+        return (ISC_R_CANCELED);
+    }
+    if (n == 1) {
+        return (ISC_R_SUCCESS);
+    } else {
+        return (ISC_R_TIMEDOUT);
     }
 }
