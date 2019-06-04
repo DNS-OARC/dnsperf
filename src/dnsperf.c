@@ -587,7 +587,7 @@ do_send(void* arg)
     isc_region_t    used;
     query_info*     q;
     int             qid;
-    unsigned char   packet_buffer[MAX_EDNS_PACKET];
+    unsigned char   packet_buffer[MAX_EDNS_PACKET + 2];
     unsigned char*  base;
     unsigned int    length;
     int             n;
@@ -692,6 +692,9 @@ do_send(void* arg)
         qid = q - tinfo->queries;
         isc_buffer_usedregion(&lines, &used);
         isc_buffer_clear(&msg);
+        if (config->tcp) {
+            isc_buffer_add(&msg, 2);
+        }
         result = perf_dns_buildrequest(tinfo->dnsctx,
             (isc_textregion_t*)&used,
             qid, config->edns,
@@ -719,16 +722,10 @@ do_send(void* arg)
         stats->num_sent++;
 
         if (config->tcp) {
-            struct iovec iov[2];
-            unsigned char lenbuf[2];
-            lenbuf[0] = length / 256;
-            lenbuf[1] = length % 256;
-            iov[0].iov_base = lenbuf;
-            iov[0].iov_len = sizeof(lenbuf);
-            iov[1].iov_base = base;
-            iov[1].iov_len = length;
-            length += 2;
-            n = writev(q->sock, iov, 2);
+            unsigned char *p = isc_buffer_base(&msg);
+            base[0] = (length - 2) / 256;
+            base[1] = (length - 2) % 256;
+            n = write(q->sock, base, length);
         } else {
             n = sendto(q->sock, base, length, 0, &config->server_addr.type.sa,
                 config->server_addr.length);
