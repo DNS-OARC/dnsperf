@@ -598,6 +598,9 @@ do_send(void* arg)
     times           = tinfo->times;
     stats           = &tinfo->stats;
     max_packet_size = config->edns ? MAX_EDNS_PACKET : MAX_UDP_PACKET;
+    if (config->tcp) {
+        max_packet_size += 2;
+    }
     isc_buffer_init(&msg, packet_buffer, max_packet_size);
     isc_buffer_init(&lines, input_data, sizeof(input_data));
 
