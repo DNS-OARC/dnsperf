@@ -22,6 +22,7 @@ resperf \- test the resolution performance of a caching DNS server
 .ad l
 \fBresperf\-report\fR\ [\fB\-a\ \fIlocal_addr\fB\fR]
 [\fB\-d\ \fIdatafile\fB\fR]
+[\fB\-M\ \fImode\fB\fR]
 [\fB\-s\ \fIserver_addr\fB\fR]
 [\fB\-p\ \fIport\fB\fR]
 [\fB\-x\ \fIlocal_port\fB\fR]
@@ -46,6 +47,7 @@ resperf \- test the resolution performance of a caching DNS server
 
 \fBresperf\fR\ [\fB\-a\ \fIlocal_addr\fB\fR]
 [\fB\-d\ \fIdatafile\fB\fR]
+[\fB\-M\ \fImode\fB\fR]
 [\fB\-s\ \fIserver_addr\fB\fR]
 [\fB\-p\ \fIport\fB\fR]
 [\fB\-x\ \fIlocal_port\fB\fR]
@@ -384,6 +386,12 @@ not itself take a \fB\-P\fR option.
 .RS
 Specifies the input data file. If not specified, \fBresperf\fR will read
 from standard input.
+.RE
+
+\fB-M \fImode\fB\fR
+.br
+.RS
+Specifies the transport mode to use, "udp" or "tcp". Default is "udp".
 .RE
 
 \fB-s \fIserver_addr\fB\fR

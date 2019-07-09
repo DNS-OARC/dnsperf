@@ -64,6 +64,8 @@
 
 #define MAX_INPUT_DATA (4 * 1024)
 
+#define TIMEOUT_CHECK_TIME 5000000
+
 struct query_info;
 
 typedef ISC_LIST(struct query_info) query_list;
@@ -89,10 +91,13 @@ static query_info* queries;
 
 static isc_mem_t* mctx;
 
-static isc_sockaddr_t server_addr;
-static isc_sockaddr_t local_addr;
-static unsigned int   nsocks;
-static int*           socks;
+static isc_sockaddr_t          server_addr;
+static isc_sockaddr_t          local_addr;
+static unsigned int            nsocks;
+static struct perf_net_socket* socks;
+static enum perf_net_mode      mode;
+
+static int dummypipe[2];
 
 static uint64_t query_timeout;
 static bool     edns;
@@ -221,20 +226,23 @@ setup(int argc, char** argv)
 
     dns_result_register();
 
-    sock_family     = AF_UNSPEC;
-    server_port     = DEFAULT_SERVER_PORT;
-    local_port      = DEFAULT_LOCAL_PORT;
-    bufsize         = DEFAULT_SOCKET_BUFFER;
-    query_timeout   = DEFAULT_TIMEOUT * MILLION;
-    ramp_time       = DEFAULT_RAMP_TIME * MILLION;
-    sustain_time    = DEFAULT_SUSTAIN_TIME * MILLION;
-    bucket_interval = DEFAULT_BUCKET_INTERVAL * MILLION;
-    max_outstanding = DEFAULT_MAX_OUTSTANDING;
-    nsocks          = 1;
+    sock_family       = AF_UNSPEC;
+    server_port       = DEFAULT_SERVER_PORT;
+    local_port        = DEFAULT_LOCAL_PORT;
+    bufsize           = DEFAULT_SOCKET_BUFFER;
+    query_timeout     = DEFAULT_TIMEOUT * MILLION;
+    ramp_time         = DEFAULT_RAMP_TIME * MILLION;
+    sustain_time      = DEFAULT_SUSTAIN_TIME * MILLION;
+    bucket_interval   = DEFAULT_BUCKET_INTERVAL * MILLION;
+    max_outstanding   = DEFAULT_MAX_OUTSTANDING;
+    nsocks            = 1;
+    mode              = sock_udp;
+    const char* _mode = 0;
 
     perf_opt_add('f', perf_opt_string, "family",
         "address family of DNS transport, inet or inet6", "any",
         &family);
+    perf_opt_add('M', perf_opt_string, "mode", "set transport mode: udp or tcp", "udp", &_mode);
     perf_opt_add('s', perf_opt_string, "server_addr",
         "the server to query", DEFAULT_SERVER_NAME, &server_name);
     perf_opt_add('p', perf_opt_port, "port",
@@ -285,6 +293,9 @@ setup(int argc, char** argv)
 
     perf_opt_parse(argc, argv);
 
+    if (_mode != 0)
+        mode = perf_net_parsemode(_mode);
+
     if (max_outstanding > nsocks * DEFAULT_MAX_OUTSTANDING)
         perf_log_fatal("number of outstanding packets (%u) must not "
                        "be more than 64K per client",
@@ -319,11 +330,11 @@ setup(int argc, char** argv)
     if (tsigkey_str != NULL)
         tsigkey = perf_dns_parsetsigkey(tsigkey_str, mctx);
 
-    socks = isc_mem_get(mctx, nsocks * sizeof(int));
+    socks = isc_mem_get(mctx, nsocks * sizeof(*socks));
     if (socks == NULL)
         perf_log_fatal("out of memory");
     for (i       = 0; i < nsocks; i++)
-        socks[i] = perf_net_opensocket(&server_addr, &local_addr, i, bufsize);
+        socks[i] = perf_net_opensocket(mode, &server_addr, &local_addr, i, bufsize);
 }
 
 static void
@@ -333,10 +344,13 @@ cleanup(void)
 
     perf_datafile_close(&input);
     for (i = 0; i < nsocks; i++)
-        (void)close(socks[i]);
-    isc_mem_put(mctx, socks, nsocks * sizeof(int));
+        (void)perf_net_close(&socks[i]);
+    isc_mem_put(mctx, socks, nsocks * sizeof(*socks));
     isc_mem_put(mctx, queries, max_outstanding * sizeof(query_info));
     isc_mem_put(mctx, buckets, n_buckets * sizeof(ramp_bucket));
+    isc_mem_destroy(&mctx);
+    close(dummypipe[0]);
+    close(dummypipe[1]);
 }
 
 /* Find the ramp_bucket for queries sent at time "when" */
@@ -466,9 +480,20 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
 
     q->sent_timestamp = time_now;
 
+    switch (perf_net_sockready(&socks[sock], dummypipe[0], TIMEOUT_CHECK_TIME)) {
+    case 0:
+        perf_log_warning("failed to send packet: socket %d not ready", sock);
+        return (ISC_R_FAILURE);
+    case -1:
+        perf_log_warning("failed to send packet: socket %d readiness check timed out", sock);
+        return (ISC_R_FAILURE);
+    default:
+        break;
+    }
+
     base   = isc_buffer_base(msg);
     length = isc_buffer_usedlength(msg);
-    if (sendto(socks[sock], base, length, 0,
+    if (perf_net_sendto(&socks[sock], base, length, 0,
             &server_addr.type.sa, server_addr.length)
         < 1) {
         perf_log_warning("failed to send packet: %s", strerror(errno));
@@ -521,8 +546,7 @@ try_process_response(unsigned int sockindex)
     int           n;
 
     packet_header = (uint16_t*)packet_buffer;
-    n             = recvfrom(socks[sockindex], packet_buffer, sizeof(packet_buffer),
-        0, NULL, NULL);
+    n             = perf_net_recv(&socks[sockindex], packet_buffer, sizeof(packet_buffer), 0);
     if (n < 0) {
         if (errno == EAGAIN || errno == EINTR) {
             return;
@@ -603,6 +627,9 @@ int main(int argc, char** argv)
            "Version " PACKAGE_VERSION "\n\n");
 
     setup(argc, argv);
+
+    if (pipe(dummypipe) < 0)
+        perf_log_fatal("creating pipe");
 
     isc_buffer_init(&lines, input_data, sizeof(input_data));
 
