@@ -583,7 +583,7 @@ do_send(void* arg)
     unsigned char   packet_buffer[MAX_EDNS_PACKET];
     unsigned char*  base;
     unsigned int    length;
-    int             n;
+    int             n, i, any_inprogress = 0;
     isc_result_t    result;
 
     tinfo           = (threadinfo_t*)arg;
@@ -630,15 +630,23 @@ do_send(void* arg)
         q = ISC_LIST_HEAD(tinfo->unused_queries);
         query_move(tinfo, q, prepend_outstanding);
         q->timestamp = ISC_UINT64_MAX;
-        while (1) {
+
+        i = tinfo->nsocks * 2;
+        while (i--) {
             q->sock = &tinfo->socks[tinfo->current_sock++ % tinfo->nsocks];
             switch (perf_net_sockready(q->sock, threadpipe[0], TIMEOUT_CHECK_TIME)) {
             case 0:
                 if (config->verbose) {
                     perf_log_warning("socket %p not ready", q->sock);
                 }
+                q->sock = 0;
                 continue;
             case -1:
+                if (errno == EINPROGRESS) {
+                    any_inprogress = 1;
+                    q->sock        = 0;
+                    continue;
+                }
                 if (config->verbose) {
                     perf_log_warning("socket %p readiness check timed out", q->sock);
                 }
@@ -648,6 +656,12 @@ do_send(void* arg)
             break;
         };
 
+        if (!q->sock) {
+            query_move(tinfo, q, prepend_unused);
+            UNLOCK(&tinfo->lock);
+            now = get_time();
+            continue;
+        }
         UNLOCK(&tinfo->lock);
 
         isc_buffer_clear(&lines);
@@ -685,22 +699,40 @@ do_send(void* arg)
         }
         q->timestamp = now;
 
-        stats->num_sent++;
-
         n = perf_net_sendto(q->sock, base, length, 0, &config->server_addr.type.sa,
             config->server_addr.length);
-        if (n < 0 || (unsigned int)n != length) {
-            perf_log_warning("failed to send packet[%d]: %s", n,
-                strerror(errno));
+        if (n < 0) {
+            if (errno == EINPROGRESS) {
+                perf_log_warning("network congested, packet sending in progress");
+                any_inprogress = 1;
+            } else {
+                perf_log_warning("failed to send packet: %s", strerror(errno));
+                LOCK(&tinfo->lock);
+                query_move(tinfo, q, prepend_unused);
+                UNLOCK(&tinfo->lock);
+                continue;
+            }
+        } else if ((unsigned int)n != length) {
+            perf_log_warning("failed to send full packet: only sent %d of %u", n, length);
             LOCK(&tinfo->lock);
             query_move(tinfo, q, prepend_unused);
             UNLOCK(&tinfo->lock);
-            stats->num_sent--;
             continue;
         }
+        stats->num_sent++;
 
         stats->total_request_size += length;
     }
+
+    while (any_inprogress) {
+        any_inprogress = 0;
+        for (i = 0; i < tinfo->nsocks; i++) {
+            if (perf_net_sockready(&tinfo->socks[i], threadpipe[0], TIMEOUT_CHECK_TIME) == -1 && errno == EINPROGRESS) {
+                any_inprogress = 1;
+            }
+        }
+    }
+
     tinfo->done_send_time = get_time();
     tinfo->done_sending   = true;
     if (write(mainpipe[1], "", 1)) {

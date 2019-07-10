@@ -472,6 +472,30 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
     qid  = (q - queries) / nsocks;
     sock = (q - queries) % nsocks;
 
+    if (socks[sock].sending) {
+        if (perf_net_sockready(&socks[sock], dummypipe[0], TIMEOUT_CHECK_TIME) == -1) {
+            if (errno == EINPROGRESS) {
+                perf_log_warning("network congested, packet sending in progress");
+            } else {
+                perf_log_warning("failed to send packet: %s", strerror(errno));
+            }
+            return (ISC_R_FAILURE);
+        }
+
+        ISC_LIST_UNLINK(instanding_list, q, link);
+        ISC_LIST_PREPEND(outstanding_list, q, link);
+        q->list = &outstanding_list;
+
+        num_queries_sent++;
+        num_queries_outstanding++;
+
+        q = ISC_LIST_HEAD(instanding_list);
+        if (!q)
+            return (ISC_R_NOMORE);
+        qid  = (q - queries) / nsocks;
+        sock = (q - queries) % nsocks;
+    }
+
     isc_buffer_clear(msg);
     result = perf_dns_buildrequest(NULL, (isc_textregion_t*)&used,
         qid, edns, dnssec, tsigkey, NULL, msg);
@@ -496,7 +520,11 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
     if (perf_net_sendto(&socks[sock], base, length, 0,
             &server_addr.type.sa, server_addr.length)
         < 1) {
-        perf_log_warning("failed to send packet: %s", strerror(errno));
+        if (errno == EINPROGRESS) {
+            perf_log_warning("network congested, packet sending in progress");
+        } else {
+            perf_log_warning("failed to send packet: %s", strerror(errno));
+        }
         return (ISC_R_FAILURE);
     }
 
