@@ -268,8 +268,18 @@ ssize_t perf_net_sendto(struct perf_net_socket* sock, const void* buf, size_t le
         memcpy(sock->sendbuf, &dnslen, 2);
         memcpy(sock->sendbuf + 2, buf, send);
         n = sendto(sock->fd, sock->sendbuf, send + 2, flags, dest_addr, addrlen);
-        // TODO: If we end up sending bytes but less then 3 it will put the sock in an invalid state
-        return n > 2 ? n - 2 : n;
+
+        if (n > 0 && n < send + 2) {
+            sock->sending = n;
+            sock->flags   = flags;
+            memcpy(&sock->dest_addr, dest_addr, addrlen);
+            sock->addrlen  = addrlen;
+            sock->is_ready = 0;
+            errno          = EINPROGRESS;
+            return -1;
+        }
+
+        return n > 0 ? n - 2 : n;
     }
     default:
         break;
@@ -308,6 +318,26 @@ int perf_net_sockready(struct perf_net_socket* sock, int pipe_fd, int64_t timeou
 
     switch (sock->mode) {
     case sock_tcp:
+        if (sock->sending) {
+            uint16_t dnslen;
+            ssize_t  n;
+
+            memcpy(&dnslen, sock->sendbuf, 2);
+            dnslen = ntohs(dnslen);
+            n      = sendto(sock->fd, sock->sendbuf + sock->sending, dnslen + 2 - sock->sending, sock->flags, (struct sockaddr*)&sock->dest_addr, sock->addrlen);
+            if (n < 1) {
+                return -1;
+            }
+            sock->sending += n;
+            if (sock->sending < dnslen + 2) {
+                errno = EINPROGRESS;
+                return -1;
+            }
+            sock->sending  = 0;
+            sock->is_ready = 1;
+            return 1;
+        }
+
         switch (perf_os_waituntilanywritable(sock, 1, pipe_fd, timeout)) {
         case ISC_R_TIMEDOUT:
             return -1;

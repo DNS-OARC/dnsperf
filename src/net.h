@@ -32,11 +32,13 @@ enum perf_net_mode {
 };
 
 struct perf_net_socket {
-    enum perf_net_mode mode;
-    int                fd, have_more, is_ready;
-    char*              recvbuf;
-    size_t             at;
-    char*              sendbuf;
+    enum perf_net_mode      mode;
+    int                     fd, have_more, is_ready, flags;
+    char*                   recvbuf;
+    size_t                  at, sending;
+    char*                   sendbuf;
+    struct sockaddr_storage dest_addr;
+    socklen_t               addrlen;
 };
 
 ssize_t perf_net_recv(struct perf_net_socket* sock, void* buf, size_t len, int flags);
