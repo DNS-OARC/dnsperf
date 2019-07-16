@@ -73,7 +73,7 @@ def main(argv):
     while True:
         try:
             packet = pcap.next()
-        except:
+        except: # lgtm [py/catch-base-exception]
             break
 
         if packet[0] is None:
@@ -101,7 +101,7 @@ def main(argv):
 
         try:
             msg = dns.message.from_wire(packet)
-        except:
+        except: # lgtm [py/catch-base-exception]
             continue
         if not opts.recurse and not dns.flags.RD:
             continue

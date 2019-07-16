@@ -498,7 +498,11 @@ int perf_net_sockready(struct perf_net_socket* sock, int pipe_fd, int64_t timeou
 
                 getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, (void*)&error, &len);
                 if (error != 0) {
-                    if (error == EINPROGRESS || error == EWOULDBLOCK || error == EAGAIN) {
+                    if (error == EINPROGRESS
+#if EWOULDBLOCK != EAGAIN
+                        || error == EWOULDBLOCK
+#endif
+                        || error == EAGAIN) {
                         return 0;
                     }
                     return -1;
@@ -566,7 +570,11 @@ int perf_net_sockready(struct perf_net_socket* sock, int pipe_fd, int64_t timeou
 
             getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, (void*)&error, &len);
             if (error != 0) {
-                if (error == EINPROGRESS || error == EWOULDBLOCK || error == EAGAIN) {
+                if (error == EINPROGRESS
+#if EWOULDBLOCK != EAGAIN
+                    || error == EWOULDBLOCK
+#endif
+                    || error == EAGAIN) {
                     return 0;
                 }
                 return -1;
