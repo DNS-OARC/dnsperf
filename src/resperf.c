@@ -29,8 +29,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
 #include <sys/time.h>
+#include <openssl/ssl.h>
+#include <openssl/conf.h>
+#include <openssl/err.h>
 
 #include <isc/buffer.h>
 #include <isc/file.h>
@@ -57,6 +59,8 @@
 
 #define DEFAULT_SERVER_NAME "127.0.0.1"
 #define DEFAULT_SERVER_PORT 53
+#define DEFAULT_SERVER_TLS_PORT 853
+#define DEFAULT_SERVER_PORTS "udp/tcp 53 or tls 853"
 #define DEFAULT_LOCAL_PORT 0
 #define DEFAULT_SOCKET_BUFFER 32
 #define DEFAULT_TIMEOUT 45
@@ -195,6 +199,8 @@ static uint64_t sustain_phase_began, wait_phase_began;
 
 static perf_dnstsigkey_t* tsigkey;
 
+static bool verbose;
+
 static char*
 stringify(double value, int precision)
 {
@@ -209,7 +215,7 @@ setup(int argc, char** argv)
 {
     const char*  family      = NULL;
     const char*  server_name = DEFAULT_SERVER_NAME;
-    in_port_t    server_port = DEFAULT_SERVER_PORT;
+    in_port_t    server_port = 0;
     const char*  local_name  = NULL;
     in_port_t    local_port  = DEFAULT_LOCAL_PORT;
     const char*  filename    = NULL;
@@ -218,6 +224,7 @@ setup(int argc, char** argv)
     unsigned int bufsize;
     unsigned int i;
     isc_result_t result;
+    const char*  _mode = 0;
 
     result = isc_mem_create(0, 0, &mctx);
     if (result != ISC_R_SUCCESS)
@@ -226,28 +233,28 @@ setup(int argc, char** argv)
 
     dns_result_register();
 
-    sock_family       = AF_UNSPEC;
-    server_port       = DEFAULT_SERVER_PORT;
-    local_port        = DEFAULT_LOCAL_PORT;
-    bufsize           = DEFAULT_SOCKET_BUFFER;
-    query_timeout     = DEFAULT_TIMEOUT * MILLION;
-    ramp_time         = DEFAULT_RAMP_TIME * MILLION;
-    sustain_time      = DEFAULT_SUSTAIN_TIME * MILLION;
-    bucket_interval   = DEFAULT_BUCKET_INTERVAL * MILLION;
-    max_outstanding   = DEFAULT_MAX_OUTSTANDING;
-    nsocks            = 1;
-    mode              = sock_udp;
-    const char* _mode = 0;
+    sock_family     = AF_UNSPEC;
+    server_port     = 0;
+    local_port      = DEFAULT_LOCAL_PORT;
+    bufsize         = DEFAULT_SOCKET_BUFFER;
+    query_timeout   = DEFAULT_TIMEOUT * MILLION;
+    ramp_time       = DEFAULT_RAMP_TIME * MILLION;
+    sustain_time    = DEFAULT_SUSTAIN_TIME * MILLION;
+    bucket_interval = DEFAULT_BUCKET_INTERVAL * MILLION;
+    max_outstanding = DEFAULT_MAX_OUTSTANDING;
+    nsocks          = 1;
+    mode            = sock_udp;
+    verbose         = false;
 
     perf_opt_add('f', perf_opt_string, "family",
         "address family of DNS transport, inet or inet6", "any",
         &family);
-    perf_opt_add('M', perf_opt_string, "mode", "set transport mode: udp or tcp", "udp", &_mode);
+    perf_opt_add('M', perf_opt_string, "mode", "set transport mode: udp, tcp or tls", "udp", &_mode);
     perf_opt_add('s', perf_opt_string, "server_addr",
         "the server to query", DEFAULT_SERVER_NAME, &server_name);
     perf_opt_add('p', perf_opt_port, "port",
         "the port on which to query the server",
-        stringify(DEFAULT_SERVER_PORT, 0), &server_port);
+        DEFAULT_SERVER_PORTS, &server_port);
     perf_opt_add('a', perf_opt_string, "local_addr",
         "the local address from which to send queries", NULL,
         &local_name);
@@ -290,11 +297,18 @@ setup(int argc, char** argv)
     perf_opt_add('q', perf_opt_uint, "num_outstanding",
         "the maximum number of queries outstanding",
         stringify(DEFAULT_MAX_OUTSTANDING, 0), &max_outstanding);
+    perf_opt_add('v', perf_opt_boolean, NULL,
+        "verbose: report additional information to stdout",
+        NULL, &verbose);
 
     perf_opt_parse(argc, argv);
 
     if (_mode != 0)
         mode = perf_net_parsemode(_mode);
+
+    if (!server_port) {
+        server_port = mode == sock_tls ? DEFAULT_SERVER_TLS_PORT : DEFAULT_SERVER_PORT;
+    }
 
     if (max_outstanding > nsocks * DEFAULT_MAX_OUTSTANDING)
         perf_log_fatal("number of outstanding packets (%u) must not "
@@ -475,7 +489,9 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
     if (socks[sock].sending) {
         if (perf_net_sockready(&socks[sock], dummypipe[0], TIMEOUT_CHECK_TIME) == -1) {
             if (errno == EINPROGRESS) {
-                perf_log_warning("network congested, packet sending in progress");
+                if (verbose) {
+                    perf_log_warning("network congested, packet sending in progress");
+                }
             } else {
                 perf_log_warning("failed to send packet: %s", strerror(errno));
             }
@@ -506,7 +522,9 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
 
     switch (perf_net_sockready(&socks[sock], dummypipe[0], TIMEOUT_CHECK_TIME)) {
     case 0:
-        perf_log_warning("failed to send packet: socket %d not ready", sock);
+        if (verbose) {
+            perf_log_warning("failed to send packet: socket %d not ready", sock);
+        }
         return (ISC_R_FAILURE);
     case -1:
         perf_log_warning("failed to send packet: socket %d readiness check timed out", sock);
@@ -521,7 +539,9 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
             &server_addr.type.sa, server_addr.length)
         < 1) {
         if (errno == EINPROGRESS) {
-            perf_log_warning("network congested, packet sending in progress");
+            if (verbose) {
+                perf_log_warning("network congested, packet sending in progress");
+            }
         } else {
             perf_log_warning("failed to send packet: %s", strerror(errno));
         }
@@ -654,6 +674,12 @@ int main(int argc, char** argv)
     printf("DNS Resolution Performance Testing Tool\n"
            "Version " PACKAGE_VERSION "\n\n");
 
+    (void)SSL_library_init();
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    SSL_load_error_strings();
+    OPENSSL_config(0);
+#endif
+
     setup(argc, argv);
 
     if (pipe(dummypipe) < 0)
@@ -764,6 +790,9 @@ end_loop:
     fclose(plotf);
     print_statistics();
     cleanup();
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    ERR_free_strings();
+#endif
 
     return 0;
 }

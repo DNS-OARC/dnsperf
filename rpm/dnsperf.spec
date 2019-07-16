@@ -24,6 +24,7 @@ BuildRequires:  libjson-c-devel
 BuildRequires:  json-c-devel
 %endif
 BuildRequires:  GeoIP-devel
+BuildRequires:  pkgconfig
 
 %description
 dnsperf and resperf are free tools developed by Nominum/Akamai (2006-2018)

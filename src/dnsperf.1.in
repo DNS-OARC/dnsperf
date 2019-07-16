@@ -247,7 +247,7 @@ the file may be read fewer times.
 .br
 .RS
 Sets the port on which the DNS packets are sent. If not specified, the
-standard DNS port (53) is used.
+standard DNS port (udp/tcp 53, tls 853) is used.
 .RE
 
 \fB-q \fInum_queries\fB\fR
@@ -267,7 +267,7 @@ Limits the number of requests per second. There is no default limit.
 \fB-m \fImode\fB\fR
 .br
 .RS
-Specifies the transport mode to use, "udp" or "tcp". Default is "udp".
+Specifies the transport mode to use, "udp", "tcp" or "tls". Default is "udp".
 .RE
 
 \fB-s \fIserver_addr\fB\fR
@@ -315,7 +315,8 @@ Enables verbose mode. The DNS RCODE of each response will be reported to
 standard output when the response is received, as will the latency. If a
 query times out, it will be reported with the special string "T" instead of
 a normal DNS RCODE. If a query is interrupted, it will be reported with the
-special string "I".
+special string "I". Additional information regarding network readiness and
+congestion will also be reported.
 .RE
 
 \fB-x \fIlocal_port\fB\fR

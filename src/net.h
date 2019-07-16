@@ -22,23 +22,28 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <openssl/ssl.h>
+#include <pthread.h>
 
 enum perf_net_mode {
     sock_none,
     sock_file,
     sock_pipe,
     sock_udp,
-    sock_tcp
+    sock_tcp,
+    sock_tls
 };
 
 struct perf_net_socket {
     enum perf_net_mode      mode;
-    int                     fd, have_more, is_ready, flags;
+    int                     fd, have_more, is_ready, flags, is_ssl_ready;
     char*                   recvbuf;
     size_t                  at, sending;
     char*                   sendbuf;
     struct sockaddr_storage dest_addr;
     socklen_t               addrlen;
+    SSL*                    ssl;
+    pthread_mutex_t         lock;
 };
 
 ssize_t perf_net_recv(struct perf_net_socket* sock, void* buf, size_t len, int flags);

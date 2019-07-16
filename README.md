@@ -32,7 +32,7 @@ those queries to DNS servers to measure performance.
 ## Dependencies
 
 `dnsperf` requires a couple of libraries beside a normal C compiling
-environment with autoconf, automake, libtool.
+environment with autoconf, automake, libtool and pkgconfig.
 
 `dnsperf` has a non-optional dependency on the BIND library and development
 files along with all dependencies it requires.
@@ -45,7 +45,7 @@ apt-get install -y libbind-dev libkrb5-dev libssl-dev libcap-dev libxml2-dev lib
 Depending on how BIND is compiled on Debian and Ubuntu you might need these
 dependencies also:
 ```
-apt-get install -y libprotobuf-c-dev libfstrm-dev liblmdb-dev
+apt-get install -y libprotobuf-c-dev libfstrm-dev liblmdb-dev libssl-dev
 ```
 
 To install the dependencies under CentOS (with EPEL enabled):

@@ -34,8 +34,10 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-
 #include <sys/time.h>
+#include <openssl/ssl.h>
+#include <openssl/conf.h>
+#include <openssl/err.h>
 
 #define ISC_BUFFER_USEINLINE
 
@@ -68,6 +70,8 @@
 
 #define DEFAULT_SERVER_NAME "127.0.0.1"
 #define DEFAULT_SERVER_PORT 53
+#define DEFAULT_SERVER_TLS_PORT 853
+#define DEFAULT_SERVER_PORTS "udp/tcp 53 or tls 853"
 #define DEFAULT_LOCAL_PORT 0
 #define DEFAULT_MAX_OUTSTANDING 100
 #define DEFAULT_TIMEOUT 5
@@ -376,7 +380,7 @@ setup(int argc, char** argv, config_t* config)
 {
     const char*  family      = NULL;
     const char*  server_name = DEFAULT_SERVER_NAME;
-    in_port_t    server_port = DEFAULT_SERVER_PORT;
+    in_port_t    server_port = 0;
     const char*  local_name  = NULL;
     in_port_t    local_port  = DEFAULT_LOCAL_PORT;
     const char*  filename    = NULL;
@@ -406,12 +410,12 @@ setup(int argc, char** argv, config_t* config)
     perf_opt_add('f', perf_opt_string, "family",
         "address family of DNS transport, inet or inet6", "any",
         &family);
-    perf_opt_add('m', perf_opt_string, "mode", "set transport mode: udp or tcp", "udp", &mode);
+    perf_opt_add('m', perf_opt_string, "mode", "set transport mode: udp, tcp or tls", "udp", &mode);
     perf_opt_add('s', perf_opt_string, "server_addr",
         "the server to query", DEFAULT_SERVER_NAME, &server_name);
     perf_opt_add('p', perf_opt_port, "port",
         "the port on which to query the server",
-        stringify(DEFAULT_SERVER_PORT), &server_port);
+        DEFAULT_SERVER_PORTS, &server_port);
     perf_opt_add('a', perf_opt_string, "local_addr",
         "the local address from which to send queries", NULL,
         &local_name);
@@ -462,10 +466,17 @@ setup(int argc, char** argv, config_t* config)
         "send dynamic updates instead of queries",
         NULL, &config->updates);
     perf_opt_add('v', perf_opt_boolean, NULL,
-        "verbose: report each query to stdout",
+        "verbose: report each query and additional information to stdout",
         NULL, &config->verbose);
 
     perf_opt_parse(argc, argv);
+
+    if (mode != 0)
+        config->mode = perf_net_parsemode(mode);
+
+    if (!server_port) {
+        server_port = config->mode == sock_tls ? DEFAULT_SERVER_TLS_PORT : DEFAULT_SERVER_PORT;
+    }
 
     if (family != NULL)
         config->family = perf_net_parsefamily(family);
@@ -488,9 +499,6 @@ setup(int argc, char** argv, config_t* config)
 
     if (edns_option != NULL)
         config->edns_option = perf_dns_parseednsoption(edns_option, mctx);
-
-    if (mode != 0)
-        config->mode = perf_net_parsemode(mode);
 
     /*
      * If we run more threads than max-qps, some threads will have
@@ -703,7 +711,9 @@ do_send(void* arg)
             config->server_addr.length);
         if (n < 0) {
             if (errno == EINPROGRESS) {
-                perf_log_warning("network congested, packet sending in progress");
+                if (config->verbose) {
+                    perf_log_warning("network congested, packet sending in progress");
+                }
                 any_inprogress = 1;
             } else {
                 perf_log_warning("failed to send packet: %s", strerror(errno));
@@ -1143,6 +1153,12 @@ int main(int argc, char** argv)
     printf("DNS Performance Testing Tool\n"
            "Version " PACKAGE_VERSION "\n\n");
 
+    (void)SSL_library_init();
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    SSL_load_error_strings();
+    OPENSSL_config(0);
+#endif
+
     setup(argc, argv, &config);
 
     if (pipe(threadpipe) < 0 || pipe(mainpipe) < 0 || pipe(intrpipe) < 0)
@@ -1205,6 +1221,9 @@ int main(int argc, char** argv)
 
     isc_mem_put(mctx, threads, config.threads * sizeof(threadinfo_t));
     cleanup(&config);
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    ERR_free_strings();
+#endif
 
     return (0);
 }
