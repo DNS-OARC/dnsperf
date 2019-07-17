@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.2.1
+Version:        2.3.0
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -24,6 +24,7 @@ BuildRequires:  libjson-c-devel
 BuildRequires:  json-c-devel
 %endif
 BuildRequires:  GeoIP-devel
+BuildRequires:  pkgconfig
 
 %description
 dnsperf and resperf are free tools developed by Nominum/Akamai (2006-2018)
@@ -101,6 +102,27 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed Jul 17 2019 Jerry Lundström <lundstrom.jerry@gmail.com> 2.3.0-1
+- Release 2.3.0
+  * This release adds support for DNS over TCP and TLS which can be selected
+    by using the mode option for `dnsperf` and `resperf`. The default server
+    port used is now determined by the transport mode, udp/tcp port 53 and
+    tls port 853.
+  * Note that the mode option is different between the program because it was
+    already taken for `resperf`.
+  * `dnsperf` changes:
+    - Add `-m` for setting transport mode, `udp` (default), `tcp` or `tls`
+    - Add verbose messages about network readiness and congestion
+  * `resperf` changes:
+    - Add `-M` for setting transport mode, `udp` (default), `tcp` or `tls`
+    - Add `-v` for verbose mode to report about network readiness and
+      congestion
+  * Commits:
+    ffa49cf LGTM, SonarCloud
+    4cd5441 TLS
+    35624d1 TCP send, socket ready loop
+    fbf76aa TCP support
+    5988b06 Funding
 * Mon Jan 28 2019 Jerry Lundström <lundstrom.jerry@gmail.com> 2.2.1-1
 - Release 2.2.1
   * The commit pulled from a fork that used `inttypes.h`, instead of ISC

@@ -22,6 +22,7 @@ resperf \- test the resolution performance of a caching DNS server
 .ad l
 \fBresperf\-report\fR\ [\fB\-a\ \fIlocal_addr\fB\fR]
 [\fB\-d\ \fIdatafile\fB\fR]
+[\fB\-M\ \fImode\fB\fR]
 [\fB\-s\ \fIserver_addr\fB\fR]
 [\fB\-p\ \fIport\fB\fR]
 [\fB\-x\ \fIlocal_port\fB\fR]
@@ -39,6 +40,7 @@ resperf \- test the resolution performance of a caching DNS server
 [\fB\-L\ \fImax_loss\fB\fR]
 [\fB\-C\ \fIclients\fB\fR]
 [\fB\-q\ \fImax_outstanding\fB\fR]
+[\fB\-v\fR]
 .ad
 .hy
 .hy 0
@@ -46,6 +48,7 @@ resperf \- test the resolution performance of a caching DNS server
 
 \fBresperf\fR\ [\fB\-a\ \fIlocal_addr\fB\fR]
 [\fB\-d\ \fIdatafile\fB\fR]
+[\fB\-M\ \fImode\fB\fR]
 [\fB\-s\ \fIserver_addr\fB\fR]
 [\fB\-p\ \fIport\fB\fR]
 [\fB\-x\ \fIlocal_port\fB\fR]
@@ -64,6 +67,7 @@ resperf \- test the resolution performance of a caching DNS server
 [\fB\-L\ \fImax_loss\fB\fR]
 [\fB\-C\ \fIclients\fB\fR]
 [\fB\-q\ \fImax_outstanding\fB\fR]
+[\fB\-v\fR]
 .ad
 .hy
 .SH DESCRIPTION
@@ -386,6 +390,12 @@ Specifies the input data file. If not specified, \fBresperf\fR will read
 from standard input.
 .RE
 
+\fB-M \fImode\fB\fR
+.br
+.RS
+Specifies the transport mode to use, "udp", "tcp" or "tls". Default is "udp".
+.RE
+
 \fB-s \fIserver_addr\fB\fR
 .br
 .RS
@@ -397,7 +407,7 @@ The default is the loopback address, 127.0.0.1.
 .br
 .RS
 Sets the port on which the DNS packets are sent. If not specified, the
-standard DNS port (53) is used.
+standard DNS port (udp/tcp 53, tls 853) is used.
 .RE
 
 \fB-a \fIlocal_addr\fB\fR
@@ -547,6 +557,12 @@ default is to act as 1 client.
 Sets the maximum number of outstanding requests. \fBresperf\fR will stop
 ramping up traffic when this many queries are outstanding. The default is
 64k, and the limit is 64k per client.
+.RE
+
+\fB-v\fR
+.br
+.RS
+Enables verbose mode to report about network readiness and congestion.
 .RE
 .SH "THE PLOT DATA FILE"
 The plot data file is written by the \fBresperf\fR program and contains the

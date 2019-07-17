@@ -146,13 +146,14 @@ reopen_file(perf_datafile_t* dfile)
 static isc_result_t
 read_more(perf_datafile_t* dfile)
 {
-    unsigned char* data;
-    size_t         size;
-    ssize_t        n;
-    isc_result_t   result;
+    unsigned char*         data;
+    size_t                 size;
+    ssize_t                n;
+    isc_result_t           result;
+    struct perf_net_socket sock = {.mode = sock_file, .fd = dfile->fd };
 
     if (!dfile->is_file && dfile->pipe_fd >= 0) {
-        result = perf_os_waituntilreadable(dfile->fd, dfile->pipe_fd, -1);
+        result = perf_os_waituntilreadable(&sock, dfile->pipe_fd, -1);
         if (result != ISC_R_SUCCESS)
             return (result);
     }

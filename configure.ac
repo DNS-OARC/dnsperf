@@ -16,7 +16,7 @@
 # limitations under the License.
 
 AC_PREREQ(2.64)
-AC_INIT([dnsperf], [2.2.1], [admin@dns-oarc.net], [dnsperf], [https://github.com/DNS-OARC/dnsperf/issues])
+AC_INIT([dnsperf], [2.3.0], [admin@dns-oarc.net], [dnsperf], [https://github.com/DNS-OARC/dnsperf/issues])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 AC_CONFIG_SRCDIR([src/dnsperf.c])
 AC_CONFIG_HEADER([src/config.h])
@@ -80,6 +80,13 @@ AS_VAR_APPEND(CFLAGS, [" `$ac_cv_isc_config --cflags dns bind9`"])
 AS_VAR_APPEND(LDFLAGS, [" `$ac_cv_isc_config --libs dns bind9`"])
 
 AC_CHECK_HEADERS([isc/hmacmd5.h isc/hmacsha.h])
+
+# Check for OpenSSL
+PKG_CHECK_MODULES([libssl], [libssl])
+AC_CHECK_LIB([ssl], [SSL_has_pending],
+	[AC_DEFINE([HAVE_SSL_HAS_PENDING], [1], [Define to 1 if you have the `SSL_has_pending' function])])
+AC_CHECK_LIB([ssl], [TLS_client_method],
+	[AC_DEFINE([HAVE_TLS_CLIENT_METHOD], [1], [Define to 1 if you have the `TLS_client_method' function])])
 
 # Checks for sizes
 AX_TYPE_SOCKLEN_T

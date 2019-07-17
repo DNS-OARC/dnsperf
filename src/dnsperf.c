@@ -34,8 +34,10 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-
 #include <sys/time.h>
+#include <openssl/ssl.h>
+#include <openssl/conf.h>
+#include <openssl/err.h>
 
 #define ISC_BUFFER_USEINLINE
 
@@ -68,6 +70,8 @@
 
 #define DEFAULT_SERVER_NAME "127.0.0.1"
 #define DEFAULT_SERVER_PORT 53
+#define DEFAULT_SERVER_TLS_PORT 853
+#define DEFAULT_SERVER_PORTS "udp/tcp 53 or tls 853"
 #define DEFAULT_LOCAL_PORT 0
 #define DEFAULT_MAX_OUTSTANDING 100
 #define DEFAULT_TIMEOUT 5
@@ -101,6 +105,7 @@ typedef struct {
     uint64_t              stats_interval;
     bool                  updates;
     bool                  verbose;
+    enum perf_net_mode    mode;
 } config_t;
 
 typedef struct {
@@ -130,10 +135,10 @@ typedef struct {
 typedef ISC_LIST(struct query_info) query_list;
 
 typedef struct query_info {
-    uint64_t    timestamp;
-    query_list* list;
-    char*       desc;
-    int         sock;
+    uint64_t                timestamp;
+    query_list*             list;
+    char*                   desc;
+    struct perf_net_socket* sock;
     /*
      * This link links the query into the list of outstanding
      * queries or the list of available query IDs.
@@ -155,9 +160,9 @@ typedef struct {
     pthread_mutex_t lock;
     pthread_cond_t  cond;
 
-    unsigned int nsocks;
-    int          current_sock;
-    int*         socks;
+    unsigned int            nsocks;
+    int                     current_sock;
+    struct perf_net_socket* socks;
 
     perf_dnsctx_t* dnsctx;
 
@@ -194,7 +199,7 @@ static void
 handle_sigint(int sig)
 {
     (void)sig;
-    if (write(intrpipe[1], "", 1)) {
+    if (write(intrpipe[1], "", 1)) { // lgtm [cpp/empty-block]
     }
 }
 
@@ -375,13 +380,14 @@ setup(int argc, char** argv, config_t* config)
 {
     const char*  family      = NULL;
     const char*  server_name = DEFAULT_SERVER_NAME;
-    in_port_t    server_port = DEFAULT_SERVER_PORT;
+    in_port_t    server_port = 0;
     const char*  local_name  = NULL;
     in_port_t    local_port  = DEFAULT_LOCAL_PORT;
     const char*  filename    = NULL;
     const char*  edns_option = NULL;
     const char*  tsigkey     = NULL;
     isc_result_t result;
+    const char*  mode = 0;
 
     result = isc_mem_create(0, 0, &mctx);
     if (result != ISC_R_SUCCESS)
@@ -399,15 +405,17 @@ setup(int argc, char** argv, config_t* config)
     config->threads         = 1;
     config->timeout         = DEFAULT_TIMEOUT * MILLION;
     config->max_outstanding = DEFAULT_MAX_OUTSTANDING;
+    config->mode            = sock_udp;
 
     perf_opt_add('f', perf_opt_string, "family",
         "address family of DNS transport, inet or inet6", "any",
         &family);
+    perf_opt_add('m', perf_opt_string, "mode", "set transport mode: udp, tcp or tls", "udp", &mode);
     perf_opt_add('s', perf_opt_string, "server_addr",
         "the server to query", DEFAULT_SERVER_NAME, &server_name);
     perf_opt_add('p', perf_opt_port, "port",
         "the port on which to query the server",
-        stringify(DEFAULT_SERVER_PORT), &server_port);
+        DEFAULT_SERVER_PORTS, &server_port);
     perf_opt_add('a', perf_opt_string, "local_addr",
         "the local address from which to send queries", NULL,
         &local_name);
@@ -458,10 +466,17 @@ setup(int argc, char** argv, config_t* config)
         "send dynamic updates instead of queries",
         NULL, &config->updates);
     perf_opt_add('v', perf_opt_boolean, NULL,
-        "verbose: report each query to stdout",
+        "verbose: report each query and additional information to stdout",
         NULL, &config->verbose);
 
     perf_opt_parse(argc, argv);
+
+    if (mode != 0)
+        config->mode = perf_net_parsemode(mode);
+
+    if (!server_port) {
+        server_port = config->mode == sock_tls ? DEFAULT_SERVER_TLS_PORT : DEFAULT_SERVER_PORT;
+    }
 
     if (family != NULL)
         config->family = perf_net_parsefamily(family);
@@ -576,7 +591,7 @@ do_send(void* arg)
     unsigned char   packet_buffer[MAX_EDNS_PACKET];
     unsigned char*  base;
     unsigned int    length;
-    int             n;
+    int             n, i, any_inprogress = 0;
     isc_result_t    result;
 
     tinfo           = (threadinfo_t*)arg;
@@ -623,8 +638,38 @@ do_send(void* arg)
         q = ISC_LIST_HEAD(tinfo->unused_queries);
         query_move(tinfo, q, prepend_outstanding);
         q->timestamp = ISC_UINT64_MAX;
-        q->sock      = tinfo->socks[tinfo->current_sock++ % tinfo->nsocks];
 
+        i = tinfo->nsocks * 2;
+        while (i--) {
+            q->sock = &tinfo->socks[tinfo->current_sock++ % tinfo->nsocks];
+            switch (perf_net_sockready(q->sock, threadpipe[0], TIMEOUT_CHECK_TIME)) {
+            case 0:
+                if (config->verbose) {
+                    perf_log_warning("socket %p not ready", q->sock);
+                }
+                q->sock = 0;
+                continue;
+            case -1:
+                if (errno == EINPROGRESS) {
+                    any_inprogress = 1;
+                    q->sock        = 0;
+                    continue;
+                }
+                if (config->verbose) {
+                    perf_log_warning("socket %p readiness check timed out", q->sock);
+                }
+            default:
+                break;
+            }
+            break;
+        };
+
+        if (!q->sock) {
+            query_move(tinfo, q, prepend_unused);
+            UNLOCK(&tinfo->lock);
+            now = get_time();
+            continue;
+        }
         UNLOCK(&tinfo->lock);
 
         isc_buffer_clear(&lines);
@@ -662,25 +707,45 @@ do_send(void* arg)
         }
         q->timestamp = now;
 
-        stats->num_sent++;
-
-        n = sendto(q->sock, base, length, 0, &config->server_addr.type.sa,
+        n = perf_net_sendto(q->sock, base, length, 0, &config->server_addr.type.sa,
             config->server_addr.length);
-        if (n < 0 || (unsigned int)n != length) {
-            perf_log_warning("failed to send packet: %s",
-                strerror(errno));
+        if (n < 0) {
+            if (errno == EINPROGRESS) {
+                if (config->verbose) {
+                    perf_log_warning("network congested, packet sending in progress");
+                }
+                any_inprogress = 1;
+            } else {
+                perf_log_warning("failed to send packet: %s", strerror(errno));
+                LOCK(&tinfo->lock);
+                query_move(tinfo, q, prepend_unused);
+                UNLOCK(&tinfo->lock);
+                continue;
+            }
+        } else if ((unsigned int)n != length) {
+            perf_log_warning("failed to send full packet: only sent %d of %u", n, length);
             LOCK(&tinfo->lock);
             query_move(tinfo, q, prepend_unused);
             UNLOCK(&tinfo->lock);
-            stats->num_sent--;
             continue;
         }
+        stats->num_sent++;
 
         stats->total_request_size += length;
     }
+
+    while (any_inprogress) {
+        any_inprogress = 0;
+        for (i = 0; i < tinfo->nsocks; i++) {
+            if (perf_net_sockready(&tinfo->socks[i], threadpipe[0], TIMEOUT_CHECK_TIME) == -1 && errno == EINPROGRESS) {
+                any_inprogress = 1;
+            }
+        }
+    }
+
     tinfo->done_send_time = get_time();
     tinfo->done_sending   = true;
-    if (write(mainpipe[1], "", 1)) {
+    if (write(mainpipe[1], "", 1)) { // lgtm [cpp/empty-block]
     }
     return NULL;
 }
@@ -719,15 +784,15 @@ process_timeouts(threadinfo_t* tinfo, uint64_t now)
 }
 
 typedef struct {
-    int          sock;
-    uint16_t     qid;
-    uint16_t     rcode;
-    unsigned int size;
-    uint64_t     when;
-    uint64_t     sent;
-    bool         unexpected;
-    bool         short_response;
-    char*        desc;
+    struct perf_net_socket* sock;
+    uint16_t                qid;
+    uint16_t                rcode;
+    unsigned int            size;
+    uint64_t                when;
+    uint64_t                sent;
+    bool                    unexpected;
+    bool                    short_response;
+    char*                   desc;
 } received_query_t;
 
 static bool
@@ -736,20 +801,18 @@ recv_one(threadinfo_t* tinfo, int which_sock,
     received_query_t* recvd, int* saved_errnop)
 {
     uint16_t* packet_header;
-    int       s;
     uint64_t  now;
     int       n;
 
     packet_header = (uint16_t*)packet_buffer;
 
-    s   = tinfo->socks[which_sock];
-    n   = recv(s, packet_buffer, packet_size, 0);
+    n   = perf_net_recv(&tinfo->socks[which_sock], packet_buffer, packet_size, 0);
     now = get_time();
     if (n < 0) {
         *saved_errnop = errno;
         return false;
     }
-    recvd->sock           = s;
+    recvd->sock           = &tinfo->socks[which_sock];
     recvd->qid            = ntohs(packet_header[0]);
     recvd->rcode          = ntohs(packet_header[1]) & 0xF;
     recvd->size           = n;
@@ -847,7 +910,7 @@ do_recv(void* arg)
                 continue;
 
             q = &tinfo->queries[recvd[i].qid];
-            if (q->list != &tinfo->outstanding_queries || q->timestamp == ISC_UINT64_MAX || q->sock != recvd[i].sock) {
+            if (q->list != &tinfo->outstanding_queries || q->timestamp == ISC_UINT64_MAX || !perf_net_sockeq(q->sock, recvd[i].sock)) {
                 recvd[i].unexpected = true;
                 continue;
             }
@@ -922,21 +985,22 @@ do_recv(void* arg)
 static void*
 do_interval_stats(void* arg)
 {
-    threadinfo_t* tinfo;
-    stats_t       total;
-    uint64_t      now;
-    uint64_t      last_interval_time;
-    uint64_t      last_completed;
-    uint64_t      interval_time;
-    uint64_t      num_completed;
-    double        qps;
+    threadinfo_t*          tinfo;
+    stats_t                total;
+    uint64_t               now;
+    uint64_t               last_interval_time;
+    uint64_t               last_completed;
+    uint64_t               interval_time;
+    uint64_t               num_completed;
+    double                 qps;
+    struct perf_net_socket sock = {.mode = sock_pipe, .fd = threadpipe[0] };
 
     tinfo              = arg;
     last_interval_time = tinfo->times->start_time;
     last_completed     = 0;
 
     wait_for_start();
-    while (perf_os_waituntilreadable(threadpipe[0], threadpipe[0],
+    while (perf_os_waituntilreadable(&sock, threadpipe[0],
                tinfo->config->stats_interval)
            == ISC_R_TIMEDOUT) {
         now = get_time();
@@ -1036,14 +1100,14 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
     if (tinfo->nsocks > MAX_SOCKETS)
         tinfo->nsocks = MAX_SOCKETS;
 
-    tinfo->socks = isc_mem_get(mctx, tinfo->nsocks * sizeof(int));
+    tinfo->socks = isc_mem_get(mctx, tinfo->nsocks * sizeof(*tinfo->socks));
     if (tinfo->socks == NULL)
         perf_log_fatal("out of memory");
     socket_offset = 0;
     for (i = 0; i < offset; i++)
         socket_offset += threads[i].nsocks;
     for (i              = 0; i < tinfo->nsocks; i++)
-        tinfo->socks[i] = perf_net_opensocket(&config->server_addr,
+        tinfo->socks[i] = perf_net_opensocket(config->mode, &config->server_addr,
             &config->local_addr,
             socket_offset++,
             config->bufsize);
@@ -1069,8 +1133,8 @@ threadinfo_cleanup(threadinfo_t* tinfo, times_t* times)
     if (interrupted)
         cancel_queries(tinfo);
     for (i = 0; i < tinfo->nsocks; i++)
-        close(tinfo->socks[i]);
-    isc_mem_put(mctx, tinfo->socks, tinfo->nsocks * sizeof(int));
+        perf_net_close(&tinfo->socks[i]);
+    isc_mem_put(mctx, tinfo->socks, tinfo->nsocks * sizeof(*tinfo->socks));
     perf_dns_destroyctx(&tinfo->dnsctx);
     if (tinfo->last_recv > times->end_time)
         times->end_time = tinfo->last_recv;
@@ -1078,15 +1142,22 @@ threadinfo_cleanup(threadinfo_t* tinfo, times_t* times)
 
 int main(int argc, char** argv)
 {
-    config_t     config;
-    times_t      times;
-    stats_t      total_stats;
-    threadinfo_t stats_thread;
-    unsigned int i;
-    isc_result_t result;
+    config_t               config;
+    times_t                times;
+    stats_t                total_stats;
+    threadinfo_t           stats_thread;
+    unsigned int           i;
+    isc_result_t           result;
+    struct perf_net_socket sock = {.mode = sock_pipe };
 
     printf("DNS Performance Testing Tool\n"
            "Version " PACKAGE_VERSION "\n\n");
+
+    (void)SSL_library_init();
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    SSL_load_error_strings();
+    OPENSSL_config(0);
+#endif
 
     setup(argc, argv, &config);
 
@@ -1125,14 +1196,15 @@ int main(int argc, char** argv)
 
     perf_os_handlesignal(SIGINT, handle_sigint);
     perf_os_blocksignal(SIGINT, false);
-    result = perf_os_waituntilreadable(mainpipe[0], intrpipe[0],
+    sock.fd = mainpipe[0];
+    result  = perf_os_waituntilreadable(&sock, intrpipe[0],
         times.stop_time - times.start_time);
     if (result == ISC_R_CANCELED)
         interrupted = true;
 
     times.end_time = get_time();
 
-    if (write(threadpipe[1], "", 1)) {
+    if (write(threadpipe[1], "", 1)) { // lgtm [cpp/empty-block]
     }
     for (i = 0; i < config.threads; i++)
         threadinfo_stop(&threads[i]);
@@ -1149,6 +1221,9 @@ int main(int argc, char** argv)
 
     isc_mem_put(mctx, threads, config.threads * sizeof(threadinfo_t));
     cleanup(&config);
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    ERR_free_strings();
+#endif
 
     return (0);
 }
