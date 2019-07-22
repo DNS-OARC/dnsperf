@@ -295,7 +295,7 @@ ssize_t perf_net_recv(struct perf_net_socket* sock, void* buf, size_t len, int f
         if (sock->at > 2) {
             memcpy(&dnslen2, sock->recvbuf, 2);
             dnslen2 = ntohs(dnslen2);
-            if (sock->at >= dnslen + 2) {
+            if (sock->at >= dnslen2 + 2) {
                 sock->have_more = 1;
                 return dnslen;
             }
@@ -340,7 +340,7 @@ ssize_t perf_net_recv(struct perf_net_socket* sock, void* buf, size_t len, int f
         if (sock->at > 2) {
             memcpy(&dnslen2, sock->recvbuf, 2);
             dnslen2 = ntohs(dnslen2);
-            if (sock->at >= dnslen + 2) {
+            if (sock->at >= dnslen2 + 2) {
                 sock->have_more = 1;
                 return dnslen;
             }
