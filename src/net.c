@@ -235,8 +235,6 @@ ssize_t perf_net_recv(struct perf_net_socket* sock, void* buf, size_t len, int f
         uint16_t dnslen, dnslen2;
 
         if (!sock->have_more) {
-            struct pollfd p = { sock->fd, POLLIN, 0 };
-
             if (pthread_mutex_lock(&sock->lock)) {
                 perf_log_fatal("pthread_mutex_lock() failed");
             }
@@ -246,16 +244,6 @@ ssize_t perf_net_recv(struct perf_net_socket* sock, void* buf, size_t len, int f
                 }
                 errno = EAGAIN;
                 return -1;
-            }
-#ifdef HAVE_SSL_HAS_PENDING
-            if (!SSL_has_pending(sock->ssl)) {
-#else
-            if (!SSL_pending(sock->ssl)) {
-#endif
-                if (poll(&p, 1, 10) == 1 && !(p.revents & POLLIN)) {
-                    errno = EAGAIN;
-                    return -1;
-                }
             }
 
             n = SSL_read(sock->ssl, sock->recvbuf + sock->at, TCP_RECV_BUF_SIZE - sock->at);
@@ -295,7 +283,7 @@ ssize_t perf_net_recv(struct perf_net_socket* sock, void* buf, size_t len, int f
         if (sock->at > 2) {
             memcpy(&dnslen2, sock->recvbuf, 2);
             dnslen2 = ntohs(dnslen2);
-            if (sock->at >= dnslen + 2) {
+            if (sock->at >= dnslen2 + 2) {
                 sock->have_more = 1;
                 return dnslen;
             }
@@ -309,13 +297,6 @@ ssize_t perf_net_recv(struct perf_net_socket* sock, void* buf, size_t len, int f
         uint16_t dnslen, dnslen2;
 
         if (!sock->have_more) {
-            // Poll TCP sock to not choke it with recv(), increased throughput by ~50%
-            struct pollfd p = { sock->fd, POLLIN, 0 };
-            if (poll(&p, 1, 10) == 1 && !(p.revents & POLLIN)) {
-                errno = EAGAIN;
-                return -1;
-            }
-
             n = recv(sock->fd, sock->recvbuf + sock->at, TCP_RECV_BUF_SIZE - sock->at, flags);
             if (n < 0) {
                 return n;
@@ -340,7 +321,7 @@ ssize_t perf_net_recv(struct perf_net_socket* sock, void* buf, size_t len, int f
         if (sock->at > 2) {
             memcpy(&dnslen2, sock->recvbuf, 2);
             dnslen2 = ntohs(dnslen2);
-            if (sock->at >= dnslen + 2) {
+            if (sock->at >= dnslen2 + 2) {
                 sock->have_more = 1;
                 return dnslen;
             }
