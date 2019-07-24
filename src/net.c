@@ -28,6 +28,7 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
+#include <isc/assertions.h>
 #include <isc/result.h>
 #include <isc/sockaddr.h>
 
@@ -229,38 +230,45 @@ struct perf_net_socket perf_net_opensocket(enum perf_net_mode mode, const isc_so
 
 ssize_t perf_net_recv(struct perf_net_socket* sock, void* buf, size_t len, int flags)
 {
-    switch (sock->mode) {
-    case sock_tls: {
-        ssize_t  n;
+    if (sock->mode == sock_tls || sock->mode == sock_tcp) {
+        ssize_t n;
         uint16_t dnslen, dnslen2;
 
         if (!sock->have_more) {
-            if (pthread_mutex_lock(&sock->lock)) {
-                perf_log_fatal("pthread_mutex_lock() failed");
-            }
-            if (!sock->is_ready) {
-                if (pthread_mutex_unlock(&sock->lock)) {
-                    perf_log_fatal("pthread_mutex_unlock() failed");
+            if (sock->mode == sock_tls) {
+                if (pthread_mutex_lock(&sock->lock)) {
+                    perf_log_fatal("pthread_mutex_lock() failed");
                 }
-                errno = EAGAIN;
-                return -1;
-            }
-
-            n = SSL_read(sock->ssl, sock->recvbuf + sock->at, TCP_RECV_BUF_SIZE - sock->at);
-            if (n < 0) {
-                int err = SSL_get_error(sock->ssl, n);
-                if (pthread_mutex_unlock(&sock->lock)) {
-                    perf_log_fatal("pthread_mutex_unlock() failed");
-                }
-                if (err == SSL_ERROR_WANT_READ) {
+                if (!sock->is_ready) {
+                    if (pthread_mutex_unlock(&sock->lock)) {
+                        perf_log_fatal("pthread_mutex_unlock() failed");
+                    }
                     errno = EAGAIN;
-                } else {
-                    errno = EBADF;
+                    return -1;
                 }
-                return -1;
-            }
-            if (pthread_mutex_unlock(&sock->lock)) {
-                perf_log_fatal("pthread_mutex_unlock() failed");
+
+                n = SSL_read(sock->ssl, sock->recvbuf + sock->at, TCP_RECV_BUF_SIZE - sock->at);
+                if (n < 0) {
+                    int err = SSL_get_error(sock->ssl, n);
+                    if (pthread_mutex_unlock(&sock->lock)) {
+                        perf_log_fatal("pthread_mutex_unlock() failed");
+                    }
+                    if (err == SSL_ERROR_WANT_READ) {
+                        errno = EAGAIN;
+                    } else {
+                        errno = EBADF;
+                    }
+                    return -1;
+                }
+                if (pthread_mutex_unlock(&sock->lock)) {
+                    perf_log_fatal("pthread_mutex_unlock() failed");
+                }
+            } else {
+                ISC_INSIST(sock->mode == sock_tcp);
+                n = recv(sock->fd, sock->recvbuf + sock->at, TCP_RECV_BUF_SIZE - sock->at, flags);
+                if (n < 0) {
+                    return n;
+                }
             }
 
             sock->at += n;
@@ -268,80 +276,39 @@ ssize_t perf_net_recv(struct perf_net_socket* sock, void* buf, size_t len, int f
                 errno = EAGAIN;
                 return -1;
             }
-        }
 
-        memcpy(&dnslen, sock->recvbuf, 2);
-        dnslen = ntohs(dnslen);
-        if (sock->at < dnslen + 2) {
-            errno = EAGAIN;
-            return -1;
-        }
-        memcpy(buf, sock->recvbuf + 2, len < dnslen ? len : dnslen);
-        memmove(sock->recvbuf, sock->recvbuf + 2 + dnslen, sock->at - 2 - dnslen);
-        sock->at -= 2 + dnslen;
-
-        if (sock->at > 2) {
-            memcpy(&dnslen2, sock->recvbuf, 2);
-            dnslen2 = ntohs(dnslen2);
-            if (sock->at >= dnslen2 + 2) {
-                sock->have_more = 1;
-                return dnslen;
-            }
-        }
-
-        sock->have_more = 0;
-        return dnslen;
-    }
-    case sock_tcp: {
-        ssize_t  n;
-        uint16_t dnslen, dnslen2;
-
-        if (!sock->have_more) {
-            n = recv(sock->fd, sock->recvbuf + sock->at, TCP_RECV_BUF_SIZE - sock->at, flags);
-            if (n < 0) {
-                return n;
-            }
-            sock->at += n;
-            if (sock->at < 3) {
+            memcpy(&dnslen, sock->recvbuf, 2);
+            dnslen = ntohs(dnslen);
+            if (sock->at < dnslen + 2) {
                 errno = EAGAIN;
                 return -1;
             }
-        }
+            memcpy(buf, sock->recvbuf + 2, len < dnslen ? len : dnslen);
+            memmove(sock->recvbuf, sock->recvbuf + 2 + dnslen, sock->at - 2 - dnslen);
+            sock->at -= 2 + dnslen;
 
-        memcpy(&dnslen, sock->recvbuf, 2);
-        dnslen = ntohs(dnslen);
-        if (sock->at < dnslen + 2) {
-            errno = EAGAIN;
-            return -1;
-        }
-        memcpy(buf, sock->recvbuf + 2, len < dnslen ? len : dnslen);
-        memmove(sock->recvbuf, sock->recvbuf + 2 + dnslen, sock->at - 2 - dnslen);
-        sock->at -= 2 + dnslen;
-
-        if (sock->at > 2) {
-            memcpy(&dnslen2, sock->recvbuf, 2);
-            dnslen2 = ntohs(dnslen2);
-            if (sock->at >= dnslen2 + 2) {
-                sock->have_more = 1;
-                return dnslen;
+            if (sock->at > 2) {
+                memcpy(&dnslen2, sock->recvbuf, 2);
+                dnslen2 = ntohs(dnslen2);
+                if (sock->at >= dnslen2 + 2) {
+                    sock->have_more = 1;
+                    return dnslen;
+                }
             }
+
+            sock->have_more = 0;
+            return dnslen;
         }
-
-        sock->have_more = 0;
-        return dnslen;
+    } else {
+        ISC_INSIST(sock->mode == sock_udp);
+        return recv(sock->fd, buf, len, flags);
     }
-    default:
-        break;
-    }
-
-    return recv(sock->fd, buf, len, flags);
 }
 
 ssize_t perf_net_sendto(struct perf_net_socket* sock, const void* buf, size_t len, int flags,
     const struct sockaddr* dest_addr, socklen_t addrlen)
 {
-    switch (sock->mode) {
-    case sock_tls: {
+    if (sock->mode == sock_tls || sock->mode == sock_tcp) {
         size_t send = len < TCP_SEND_BUF_SIZE - 2 ? len : (TCP_SEND_BUF_SIZE - 2);
         // TODO: We only send what we can send, because we can't continue sending
         uint16_t dnslen = htons(send);
@@ -349,16 +316,21 @@ ssize_t perf_net_sendto(struct perf_net_socket* sock, const void* buf, size_t le
 
         memcpy(sock->sendbuf, &dnslen, 2);
         memcpy(sock->sendbuf + 2, buf, send);
-        if (pthread_mutex_lock(&sock->lock)) {
-            perf_log_fatal("pthread_mutex_lock() failed");
-        }
-        n = SSL_write(sock->ssl, sock->sendbuf, send + 2);
-        if (n < 0) {
-            perf_log_warning("SSL_write(): %s", ERR_error_string(SSL_get_error(sock->ssl, n), 0));
-            errno = EBADF;
-        }
-        if (pthread_mutex_unlock(&sock->lock)) {
-            perf_log_fatal("pthread_mutex_unlock() failed");
+        if (sock->mode == sock_tls) {
+            if (pthread_mutex_lock(&sock->lock)) {
+                perf_log_fatal("pthread_mutex_lock() failed");
+            }
+            n = SSL_write(sock->ssl, sock->sendbuf, send + 2);
+            if (n < 0) {
+                perf_log_warning("SSL_write(): %s", ERR_error_string(SSL_get_error(sock->ssl, n), 0));
+                errno = EBADF;
+            }
+            if (pthread_mutex_unlock(&sock->lock)) {
+                perf_log_fatal("pthread_mutex_unlock() failed");
+            }
+        } else {
+            ISC_INSIST(sock->mode = sock_tcp);
+            n = sendto(sock->fd, sock->sendbuf, send + 2, flags, dest_addr, addrlen);
         }
 
         if (n > 0 && n < send + 2) {
@@ -372,33 +344,10 @@ ssize_t perf_net_sendto(struct perf_net_socket* sock, const void* buf, size_t le
         }
 
         return n > 0 ? n - 2 : n;
+    } else {
+        ISC_INSIST(sock->mode == sock_udp);
+        return sendto(sock->fd, buf, len, flags, dest_addr, addrlen);
     }
-    case sock_tcp: {
-        size_t send = len < TCP_SEND_BUF_SIZE - 2 ? len : (TCP_SEND_BUF_SIZE - 2);
-        // TODO: We only send what we can send, because we can't continue sending
-        uint16_t dnslen = htons(send);
-        ssize_t  n;
-
-        memcpy(sock->sendbuf, &dnslen, 2);
-        memcpy(sock->sendbuf + 2, buf, send);
-        n = sendto(sock->fd, sock->sendbuf, send + 2, flags, dest_addr, addrlen);
-
-        if (n > 0 && n < send + 2) {
-            sock->sending = n;
-            sock->flags   = flags;
-            memcpy(&sock->dest_addr, dest_addr, addrlen);
-            sock->addrlen  = addrlen;
-            sock->is_ready = 0;
-            errno          = EINPROGRESS;
-            return -1;
-        }
-
-        return n > 0 ? n - 2 : n;
-    }
-    default:
-        break;
-    }
-    return sendto(sock->fd, buf, len, flags, dest_addr, addrlen);
 }
 
 int perf_net_close(struct perf_net_socket* sock)
