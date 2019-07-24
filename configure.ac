@@ -83,8 +83,6 @@ AC_CHECK_HEADERS([isc/hmacmd5.h isc/hmacsha.h])
 
 # Check for OpenSSL
 PKG_CHECK_MODULES([libssl], [libssl])
-AC_CHECK_LIB([ssl], [SSL_has_pending],
-	[AC_DEFINE([HAVE_SSL_HAS_PENDING], [1], [Define to 1 if you have the `SSL_has_pending' function])])
 AC_CHECK_LIB([ssl], [TLS_client_method],
 	[AC_DEFINE([HAVE_TLS_CLIENT_METHOD], [1], [Define to 1 if you have the `TLS_client_method' function])])
 
