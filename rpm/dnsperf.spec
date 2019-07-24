@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.3.0
+Version:        2.3.1
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -102,6 +102,21 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed Jul 24 2019 Jerry Lundström <lundstrom.jerry@gmail.com> 2.3.1-1
+- Release 2.3.1
+  * After a report and additional confirming results the use of `poll()` in
+    the network receive code for TCP and TLS has been removed. This `poll()`
+    initially gave better results while testing in a docker container on
+    it's loopback interface but when on physical networks it reduced
+    performance to 1/12th, so it had to go.
+  * Thanks to Brian Wellington (Akamai/Nominum) for the initial report and
+    testing, and to Jan Hák (CZ.NIC) for testing and confirming the results.
+  * Bugfix:
+    - Fix check for having more DNS messages in the receive buffer for TCP
+      and TLS
+  * Commits:
+    670db9c TCP/TLS receive
+    b8925b2 recvbuf have more
 * Wed Jul 17 2019 Jerry Lundström <lundstrom.jerry@gmail.com> 2.3.0-1
 - Release 2.3.0
   * This release adds support for DNS over TCP and TLS which can be selected
