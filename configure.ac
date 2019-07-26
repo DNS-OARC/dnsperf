@@ -46,8 +46,9 @@ AC_ARG_WITH([extra-ldflags], [AS_HELP_STRING([--with-extra-ldflags=CFLAGS], [Add
 
 # Checks for support.
 AX_PTHREAD
-AC_CHECK_LIB(socket, socket)
-AC_CHECK_LIB(nsl, inet_ntoa)
+AC_CHECK_LIB([socket], [socket])
+AC_CHECK_LIB([nsl], [inet_ntoa])
+AC_CHECK_LIB([m], [sqrt])
 
 # Check for bind
 AC_ARG_WITH([bind], [AS_HELP_STRING([--with-bind=PATH], [Specify ISC BIND 9 prefix path])], [
