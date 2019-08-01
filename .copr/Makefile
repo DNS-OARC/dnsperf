@@ -1,5 +1,5 @@
 srpm:
-	dnf -y install git rpm-build
+	rpm -q git rpm-build >/dev/null || dnf -y install git rpm-build
 	git checkout -b autobuild
 	git clone https://github.com/jelu/dist-tools.git ../dist-tools
 	nosign=yes ../dist-tools/create-source-packages rpm
