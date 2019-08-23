@@ -58,9 +58,7 @@
 #include "log.h"
 #include "opt.h"
 
-#ifndef ISC_SHA256_DIGESTLENGTH
-#define ISC_SHA256_DIGESTLENGTH 32U
-#endif
+#define _STATIC_DIGEST_BUFSIZE 128
 
 #define WHITESPACE " \t\n"
 
@@ -293,6 +291,10 @@ perf_dns_parsetsigkey(const char* arg, isc_mem_t* mctx)
         perf_log_warning("invalid TSIG algorithm %.*s", alglen, alg);
         perf_opt_usage();
         exit(1);
+    }
+
+    if (tsigkey->digestlen > _STATIC_DIGEST_BUFSIZE) {
+        perf_log_fatal("unable to setup TSIG algorithm %.*s, digest buffer too small, please report to %s", alglen, alg, PACKAGE_BUGREPORT);
     }
 
 /* Name */
@@ -623,7 +625,7 @@ add_tsig(isc_buffer_t* packet, perf_dnstsigkey_t* tsigkey)
     unsigned char  tmpdata[512];
     isc_buffer_t   tmp;
     uint32_t       now;
-    unsigned char  digest[ISC_SHA256_DIGESTLENGTH];
+    unsigned char  digest[_STATIC_DIGEST_BUFSIZE];
 
     hmac_init(tsigkey, &hmac);
     now = time(NULL);
