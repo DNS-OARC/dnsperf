@@ -1,3 +1,15 @@
+2019-08-23 Jerry Lundström
+
+    Release 2.3.2
+
+    This release fixes a buffer overflow when using TSIG and algorithms
+    with digests larger then SHA256, reported by Mukund Sivaraman. Also
+    fix build dependencies for `sqrt()`.
+
+    e54aa58 Digest
+    bca5d8d sqrt
+    d9eaa5b Package
+
 2019-07-24 Jerry Lundström
 
     Release 2.3.1
