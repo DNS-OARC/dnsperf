@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.3.1
+Version:        2.3.2
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -102,6 +102,15 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Aug 23 2019 Jerry Lundström <lundstrom.jerry@gmail.com> 2.3.2-1
+- Release 2.3.2
+  * This release fixes a buffer overflow when using TSIG and algorithms
+    with digests larger then SHA256, reported by Mukund Sivaraman. Also
+    fix build dependencies for `sqrt()`.
+  * Commits:
+    e54aa58 Digest
+    bca5d8d sqrt
+    d9eaa5b Package
 * Wed Jul 24 2019 Jerry Lundström <lundstrom.jerry@gmail.com> 2.3.1-1
 - Release 2.3.1
   * After a report and additional confirming results the use of `poll()` in
