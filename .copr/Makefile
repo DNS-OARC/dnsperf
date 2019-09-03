@@ -12,7 +12,6 @@ $(top)/rpmbuild:
 	mkdir -p $(top)/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
 srpm: prereq $(top)/dist-tools $(top)/rpmbuild
-	git checkout -b autobuild
 	nosign=yes $(top)/dist-tools/create-source-packages rpm
 	cp ../*.orig.tar.gz $(top)/rpmbuild/SOURCES/
 	rpmbuild -bs --define "%_topdir $(top)/rpmbuild" --undefine=dist "$(spec)"
