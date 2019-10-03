@@ -65,7 +65,8 @@ pkg_add isc-bind-9.11.4pl2 GeoIP
 
 ## Building from source tarball
 
-The source tarball from DNS-OARC comes prepared with `configure`:
+The [source tarball from DNS-OARC](https://www.dns-oarc.net/tools/dnsperf)
+comes prepared with `configure`:
 
 ```
 tar zxvf dnsperf-version.tar.gz
