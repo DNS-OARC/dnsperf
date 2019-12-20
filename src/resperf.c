@@ -602,6 +602,9 @@ try_process_response(unsigned int sockindex)
             perf_log_fatal("failed to receive packet: %s",
                 strerror(errno));
         }
+    } else if (!n) {
+        // Treat connection closed like try again until reconnection features are in
+        return;
     } else if (n < 4) {
         perf_log_warning("received short response");
         return;
