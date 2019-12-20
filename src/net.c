@@ -299,6 +299,10 @@ ssize_t perf_net_recv(struct perf_net_socket* sock, void* buf, size_t len, int f
         if (!sock->have_more) {
             n = recv(sock->fd, sock->recvbuf + sock->at, TCP_RECV_BUF_SIZE - sock->at, flags);
             if (n < 0) {
+                if (errno == ECONNRESET) {
+                    // Treat connection reset like try again until reconnection features are in
+                    errno = EAGAIN;
+                }
                 return n;
             }
             sock->at += n;

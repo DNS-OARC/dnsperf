@@ -812,6 +812,11 @@ recv_one(threadinfo_t* tinfo, int which_sock,
         *saved_errnop = errno;
         return false;
     }
+    if (!n) {
+        // Treat connection closed like try again until reconnection features are in
+        *saved_errnop = EAGAIN;
+        return false;
+    }
     recvd->sock           = &tinfo->socks[which_sock];
     recvd->qid            = ntohs(packet_header[0]);
     recvd->rcode          = ntohs(packet_header[1]) & 0xF;
