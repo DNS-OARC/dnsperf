@@ -716,7 +716,9 @@ do_send(void* arg)
                 }
                 any_inprogress = 1;
             } else {
-                perf_log_warning("failed to send packet: %s", strerror(errno));
+                if (config->verbose) {
+                    perf_log_warning("failed to send packet: %s", strerror(errno));
+                }
                 LOCK(&tinfo->lock);
                 query_move(tinfo, q, prepend_unused);
                 UNLOCK(&tinfo->lock);
@@ -1172,6 +1174,15 @@ int main(int argc, char** argv)
     perf_datafile_setpipefd(input, threadpipe[0]);
 
     perf_os_blocksignal(SIGINT, true);
+    switch (config.mode) {
+    case sock_tcp:
+    case sock_tls:
+        // block SIGPIPE for TCP/TLS mode, if connection is closed it will generate a signal
+        perf_os_blocksignal(SIGPIPE, true);
+        break;
+    default:
+        break;
+    }
 
     print_initial_status(&config);
 
