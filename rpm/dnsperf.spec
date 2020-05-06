@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.3.2
+Version:        2.3.3
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -102,6 +102,26 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed May 06 2020 Jerry Lundström <lundstrom.jerry@gmail.com> 2.3.3-1
+- Release 2.3.3
+  * This release changes the behavior of `dnsperf` and `resperf` when it
+    comes to TCP and TLS connections, and updates package building using
+    COPR (thanks to patch from Petr Menšík (Red Hat)).
+  * Connection reset or close are now treated as "try again" so that the
+    run is finished and not aborted. As SIGPIPE might be received on usage
+    of closed connections it's now blocked in `dnsperf` and handled as
+    a fatal action in `resperf`.
+  * Commits:
+    62885ad SIGPIPE
+    106c50e connection
+    3ef0899 README
+    61a3b1c COPR
+    35efa27 COPR
+    46b37a1 COPR
+    5c126ae COPR
+    1c51b76 Provide full URL in spec
+    2a4dd0e Allow recreation of source archive
+    931d6cc Do not require root for archive creation
 * Fri Aug 23 2019 Jerry Lundström <lundstrom.jerry@gmail.com> 2.3.2-1
 - Release 2.3.2
   * This release fixes a buffer overflow when using TSIG and algorithms
