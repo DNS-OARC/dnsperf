@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 OARC, Inc.
+ * Copyright 2019-2020 OARC, Inc.
  * Copyright 2017-2018 Akamai Technologies
  * Copyright 2006-2016 Nominum, Inc.
  * All rights reserved.
@@ -716,7 +716,9 @@ do_send(void* arg)
                 }
                 any_inprogress = 1;
             } else {
-                perf_log_warning("failed to send packet: %s", strerror(errno));
+                if (config->verbose) {
+                    perf_log_warning("failed to send packet: %s", strerror(errno));
+                }
                 LOCK(&tinfo->lock);
                 query_move(tinfo, q, prepend_unused);
                 UNLOCK(&tinfo->lock);
@@ -810,6 +812,11 @@ recv_one(threadinfo_t* tinfo, int which_sock,
     now = get_time();
     if (n < 0) {
         *saved_errnop = errno;
+        return false;
+    }
+    if (!n) {
+        // Treat connection closed like try again until reconnection features are in
+        *saved_errnop = EAGAIN;
         return false;
     }
     recvd->sock           = &tinfo->socks[which_sock];
@@ -1167,6 +1174,15 @@ int main(int argc, char** argv)
     perf_datafile_setpipefd(input, threadpipe[0]);
 
     perf_os_blocksignal(SIGINT, true);
+    switch (config.mode) {
+    case sock_tcp:
+    case sock_tls:
+        // block SIGPIPE for TCP/TLS mode, if connection is closed it will generate a signal
+        perf_os_blocksignal(SIGPIPE, true);
+        break;
+    default:
+        break;
+    }
 
     print_initial_status(&config);
 

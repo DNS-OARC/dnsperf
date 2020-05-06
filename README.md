@@ -65,7 +65,8 @@ pkg_add isc-bind-9.11.4pl2 GeoIP
 
 ## Building from source tarball
 
-The source tarball from DNS-OARC comes prepared with `configure`:
+The [source tarball from DNS-OARC](https://www.dns-oarc.net/tools/dnsperf)
+comes prepared with `configure`:
 
 ```
 tar zxvf dnsperf-version.tar.gz
@@ -94,7 +95,7 @@ The contrib directory contains additional software related to `dnsperf` and
 ## License
 
 ```
-Copyright 2019 OARC, Inc.
+Copyright 2019-2020 OARC, Inc.
 Copyright 2017-2018 Akamai Technologies
 Copyright 2006-2016 Nominum, Inc.
 All rights reserved.

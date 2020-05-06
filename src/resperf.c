@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 OARC, Inc.
+ * Copyright 2019-2020 OARC, Inc.
  * Copyright 2017-2018 Akamai Technologies
  * Copyright 2006-2016 Nominum, Inc.
  * All rights reserved.
@@ -33,6 +33,7 @@
 #include <openssl/ssl.h>
 #include <openssl/conf.h>
 #include <openssl/err.h>
+#include <signal.h>
 
 #include <isc/buffer.h>
 #include <isc/file.h>
@@ -52,6 +53,7 @@
 #include "net.h"
 #include "opt.h"
 #include "util.h"
+#include "os.h"
 
 /*
  * Global stuff
@@ -493,7 +495,9 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
                     perf_log_warning("network congested, packet sending in progress");
                 }
             } else {
-                perf_log_warning("failed to send packet: %s", strerror(errno));
+                if (verbose) {
+                    perf_log_warning("failed to send packet: %s", strerror(errno));
+                }
             }
             return (ISC_R_FAILURE);
         }
@@ -543,7 +547,9 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
                 perf_log_warning("network congested, packet sending in progress");
             }
         } else {
-            perf_log_warning("failed to send packet: %s", strerror(errno));
+            if (verbose) {
+                perf_log_warning("failed to send packet: %s", strerror(errno));
+            }
         }
         return (ISC_R_FAILURE);
     }
@@ -602,6 +608,9 @@ try_process_response(unsigned int sockindex)
             perf_log_fatal("failed to receive packet: %s",
                 strerror(errno));
         }
+    } else if (!n) {
+        // Treat connection closed like try again until reconnection features are in
+        return;
     } else if (n < 4) {
         perf_log_warning("received short response");
         return;
@@ -660,6 +669,21 @@ num_scheduled(uint64_t time_since_start)
     }
 }
 
+static void
+handle_sigpipe(int sig)
+{
+    (void)sig;
+    switch (mode) {
+    case sock_tcp:
+    case sock_tls:
+        // if connection is closed it will generate a signal
+        perf_log_fatal("SIGPIPE received, connection(s) likely closed, can't continue");
+        break;
+    default:
+        break;
+    }
+}
+
 int main(int argc, char** argv)
 {
     int           i;
@@ -684,6 +708,8 @@ int main(int argc, char** argv)
 
     if (pipe(dummypipe) < 0)
         perf_log_fatal("creating pipe");
+
+    perf_os_handlesignal(SIGPIPE, handle_sigpipe);
 
     isc_buffer_init(&lines, input_data, sizeof(input_data));
 
