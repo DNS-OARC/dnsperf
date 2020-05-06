@@ -3,7 +3,7 @@ Upstream-Name: dnsperf
 Source: https://github.com/DNS-OARC/dnsperf
 
 Files: *
-Copyright: 2019 OARC, Inc.
+Copyright: 2019-2020 OARC, Inc.
            2017-2018 Akamai Technologies
            2006-2016 Nominum, Inc.
 License: Apache-2.0
