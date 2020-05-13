@@ -67,8 +67,35 @@ else
 fi
 AC_PATH_PROG(ac_cv_isc_config, [isc-config.sh], [no], [$bindpath])
 if test "$ac_cv_isc_config" = "no"; then
-  AC_MSG_ERROR([BIND 9 libraries must be installed])
+  AC_CHECK_LIB([isc], [isc_mem_create], [],
+    AC_MSG_ERROR([Install BIND9 development files]))
+  AC_CHECK_LIB([dns], [dns_name_init], [],
+    AC_MSG_ERROR([Install BIND9 development files]))
+else
+  AS_VAR_APPEND(CFLAGS, [" `$ac_cv_isc_config --cflags dns bind9`"])
+  AS_VAR_APPEND(LDFLAGS, [" `$ac_cv_isc_config --libs dns bind9`"])
 fi
+
+AC_MSG_CHECKING([return type of isc_mem_create])
+returns=undefined
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <isc/mem.h>]],
+      [[ isc_result_t result = isc_mem_create(0, 0, NULL) ]])],
+  [returns=isc_result_t
+   AC_DEFINE([HAVE_ISC_MEM_CREATE_RESULT], [1], [Define to 1 if 'isc_mem_create' returns result])],
+  [returns=void]
+)
+AC_MSG_RESULT([$returns])
+
+AC_MSG_CHECKING([return type of isc_buffer_allocate])
+returns=undefined
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <isc/buffer.h>]],
+      [[ isc_result_t result = isc_buffer_allocate(NULL, NULL, 0) ]])],
+  [returns=isc_result_t
+   AC_DEFINE([HAVE_ISC_BUFFER_ALLOCATE_RESULT], [1], [Define to 1 if 'isc_buffer_allocate' returns result])],
+  [returns=void]
+)
+AC_MSG_RESULT([$returns])
+
 
 case "$host_os" in
   freebsd*)
@@ -77,15 +104,12 @@ case "$host_os" in
     ;;
 esac
 
-AS_VAR_APPEND(CFLAGS, [" `$ac_cv_isc_config --cflags dns bind9`"])
-AS_VAR_APPEND(LDFLAGS, [" `$ac_cv_isc_config --libs dns bind9`"])
-
 AC_CHECK_HEADERS([isc/hmacmd5.h isc/hmacsha.h])
 
 # Check for OpenSSL
 PKG_CHECK_MODULES([libssl], [libssl])
 AC_CHECK_LIB([ssl], [TLS_client_method],
-	[AC_DEFINE([HAVE_TLS_CLIENT_METHOD], [1], [Define to 1 if you have the `TLS_client_method' function])])
+	[AC_DEFINE([HAVE_TLS_CLIENT_METHOD], [1], [Define to 1 if you have the 'TLS_client_method' function])])
 
 # Checks for sizes
 AX_TYPE_SOCKLEN_T
