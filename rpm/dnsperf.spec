@@ -23,7 +23,9 @@ BuildRequires:  libjson-c-devel
 %else
 BuildRequires:  json-c-devel
 %endif
+%if 0%{?suse_version} <= 1500
 BuildRequires:  GeoIP-devel
+%endif
 BuildRequires:  pkgconfig
 
 %description

@@ -225,11 +225,10 @@ setup(int argc, char** argv)
     int          sock_family;
     unsigned int bufsize;
     unsigned int i;
-    isc_result_t result;
     const char*  _mode = 0;
 
 #ifdef HAVE_ISC_MEM_CREATE_RESULT
-    result = isc_mem_create(0, 0, &mctx);
+    isc_result_t result = isc_mem_create(0, 0, &mctx);
     if (result != ISC_R_SUCCESS)
         perf_log_fatal("creating memory context: %s",
             isc_result_totext(result));

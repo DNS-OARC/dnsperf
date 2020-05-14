@@ -50,6 +50,12 @@ AC_CHECK_LIB([socket], [socket])
 AC_CHECK_LIB([nsl], [inet_ntoa])
 AC_CHECK_LIB([m], [sqrt])
 
+# Check for OpenSSL
+PKG_CHECK_MODULES([libssl], [libssl])
+PKG_CHECK_MODULES([libcrypto], [libcrypto]) # also check libcrypto which might be needed for libssl
+AC_CHECK_LIB([ssl], [TLS_client_method],
+	[AC_DEFINE([HAVE_TLS_CLIENT_METHOD], [1], [Define to 1 if you have the 'TLS_client_method' function])])
+
 # Check for bind
 AC_ARG_WITH([bind], [AS_HELP_STRING([--with-bind=PATH], [Specify ISC BIND 9 prefix path])], [
   use_bind="$withval"
@@ -68,16 +74,23 @@ fi
 AC_PATH_PROG(ac_cv_isc_config, [isc-config.sh], [no], [$bindpath])
 if test "$ac_cv_isc_config" = "no"; then
 # BIND 9.16+
-  AC_CHECK_LIB([isc], [isc_mem_create], [],
-    AC_MSG_ERROR([Install BIND9 development files]))
-  AC_CHECK_LIB([dns], [dns_name_init], [],
-    AC_MSG_ERROR([Install BIND9 development files]))
-  AC_CHECK_LIB([bind9], [bind9_getaddresses], [],
-    AC_MSG_ERROR([Install BIND9 development files]))
-  AC_CHECK_HEADER([isc/result.h], [],
-    AC_MSG_ERROR([Install BIND9 header files]))
-  AC_CHECK_HEADER([bind9/getaddresses.h], [],
-    AC_MSG_ERROR([Install BIND9 header files]))
+  AC_MSG_NOTICE([Trying BIND 9.16+ workaround...])
+
+  AS_VAR_COPY(old_CFLAGS, CFLAGS)
+  AS_VAR_COPY(old_LDFLAGS, LDFLAGS)
+  AS_VAR_APPEND(CFLAGS, ["$libssl_CFLAGS $libcrypto_CFLAGS"])
+  AS_VAR_APPEND(LDFLAGS, ["$libssl_LIBS $libcrypto_LIBS"])
+  AC_CHECK_LIB([xml2], [xmlNewTextWriter])
+  AC_CHECK_LIB([json-c], [json_object_new_array])
+
+  AC_CHECK_LIB([isc], [isc_mem_create], [], [AC_MSG_ERROR([Please install BIND9 development files])])
+  AC_CHECK_LIB([dns], [dns_name_init], [], [AC_MSG_ERROR([Please install BIND9 development files])])
+  AC_CHECK_LIB([bind9], [bind9_getaddresses], [], [AC_MSG_ERROR([Please install BIND9 development files])])
+  AC_CHECK_HEADER([isc/result.h], [], [AC_MSG_ERROR([Please install BIND9 header files])])
+  AC_CHECK_HEADER([bind9/getaddresses.h], [], [AC_MSG_ERROR([Please install BIND9 header files])])
+
+  AS_VAR_COPY(CFLAGS, old_CFLAGS)
+  AS_VAR_COPY(LDFLAGS, old_LDFLAGS)
 else
 # BIND <= 9.14
   AS_VAR_APPEND(CFLAGS, [" `$ac_cv_isc_config --cflags dns bind9`"])
@@ -105,12 +118,6 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <isc/buffer.h>]],
 AC_MSG_RESULT([$returns])
 
 AC_CHECK_HEADERS([isc/hmacmd5.h isc/hmacsha.h])
-
-# Check for OpenSSL
-PKG_CHECK_MODULES([libssl], [libssl])
-PKG_CHECK_MODULES([libcrypto], [libcrypto]) # also check libcrypto which might be needed for libssl
-AC_CHECK_LIB([ssl], [TLS_client_method],
-	[AC_DEFINE([HAVE_TLS_CLIENT_METHOD], [1], [Define to 1 if you have the 'TLS_client_method' function])])
 
 # Checks for sizes
 AX_TYPE_SOCKLEN_T
