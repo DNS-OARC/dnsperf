@@ -72,7 +72,7 @@ rate to simulate caching DNS services.
 
 %build
 sh autogen.sh
-%configure
+%configure "--with-extra-cflags=-I /usr/include/bind"
 make %{?_smp_mflags}
 
 
