@@ -389,10 +389,14 @@ setup(int argc, char** argv, config_t* config)
     isc_result_t result;
     const char*  mode = 0;
 
+#ifdef HAVE_ISC_MEM_CREATE_RESULT
     result = isc_mem_create(0, 0, &mctx);
     if (result != ISC_R_SUCCESS)
         perf_log_fatal("creating memory context: %s",
             isc_result_totext(result));
+#else
+    isc_mem_create(&mctx);
+#endif
 
     dns_result_register();
 
@@ -1000,7 +1004,7 @@ do_interval_stats(void* arg)
     uint64_t               interval_time;
     uint64_t               num_completed;
     double                 qps;
-    struct perf_net_socket sock = {.mode = sock_pipe, .fd = threadpipe[0] };
+    struct perf_net_socket sock = { .mode = sock_pipe, .fd = threadpipe[0] };
 
     tinfo              = arg;
     last_interval_time = tinfo->times->start_time;
@@ -1095,8 +1099,8 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
      */
     tinfo->max_outstanding = per_thread(config->max_outstanding,
         config->threads, offset);
-    tinfo->max_qps = per_thread(config->max_qps, config->threads, offset);
-    tinfo->nsocks  = per_thread(config->clients, config->threads, offset);
+    tinfo->max_qps         = per_thread(config->max_qps, config->threads, offset);
+    tinfo->nsocks          = per_thread(config->clients, config->threads, offset);
 
     /*
      * We can't have more than 64k outstanding queries per thread.
@@ -1113,7 +1117,7 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
     socket_offset = 0;
     for (i = 0; i < offset; i++)
         socket_offset += threads[i].nsocks;
-    for (i              = 0; i < tinfo->nsocks; i++)
+    for (i = 0; i < tinfo->nsocks; i++)
         tinfo->socks[i] = perf_net_opensocket(config->mode, &config->server_addr,
             &config->local_addr,
             socket_offset++,
@@ -1155,7 +1159,7 @@ int main(int argc, char** argv)
     threadinfo_t           stats_thread;
     unsigned int           i;
     isc_result_t           result;
-    struct perf_net_socket sock = {.mode = sock_pipe };
+    struct perf_net_socket sock = { .mode = sock_pipe };
 
     printf("DNS Performance Testing Tool\n"
            "Version " PACKAGE_VERSION "\n\n");
@@ -1201,7 +1205,7 @@ int main(int argc, char** argv)
     if (config.timelimit > 0)
         times.stop_time = times.start_time + config.timelimit;
     else
-        times.stop_time        = ISC_UINT64_MAX;
+        times.stop_time = ISC_UINT64_MAX;
     times.stop_time_ns.tv_sec  = times.stop_time / MILLION;
     times.stop_time_ns.tv_nsec = (times.stop_time % MILLION) * 1000;
 

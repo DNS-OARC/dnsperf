@@ -49,6 +49,7 @@ struct perf_net_socket {
 ssize_t perf_net_recv(struct perf_net_socket* sock, void* buf, size_t len, int flags);
 ssize_t perf_net_sendto(struct perf_net_socket* sock, const void* buf, size_t len, int flags,
     const struct sockaddr* dest_addr, socklen_t addrlen);
+
 int perf_net_close(struct perf_net_socket* sock);
 int perf_net_sockeq(struct perf_net_socket* sock_a, struct perf_net_socket* sock_b);
 

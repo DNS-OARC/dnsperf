@@ -136,11 +136,15 @@ perf_dns_createctx(bool updates)
     if (!updates)
         return NULL;
 
-    mctx   = NULL;
+    mctx = NULL;
+#ifdef HAVE_ISC_MEM_CREATE_RESULT
     result = isc_mem_create(0, 0, &mctx);
     if (result != ISC_R_SUCCESS)
         perf_log_fatal("creating memory context: %s",
             isc_result_totext(result));
+#else
+    isc_mem_create(&mctx);
+#endif
 
     ctx = isc_mem_get(mctx, sizeof(*ctx));
     if (ctx == NULL) {
@@ -297,7 +301,7 @@ perf_dns_parsetsigkey(const char* arg, isc_mem_t* mctx)
         perf_log_fatal("unable to setup TSIG algorithm %.*s, digest buffer too small, please report to %s", alglen, alg, PACKAGE_BUGREPORT);
     }
 
-/* Name */
+    /* Name */
 
 #ifdef dns_fixedname_init
     dns_fixedname_init(&tsigkey->fname);
@@ -373,9 +377,13 @@ perf_dns_parseednsoption(const char* arg, isc_mem_t* mctx)
 
     option->mctx   = mctx;
     option->buffer = NULL;
-    result         = isc_buffer_allocate(mctx, &option->buffer, strlen(value) / 2 + 4);
+#ifdef HAVE_ISC_BUFFER_ALLOCATE_RESULT
+    result = isc_buffer_allocate(mctx, &option->buffer, strlen(value) / 2 + 4);
     if (result != ISC_R_SUCCESS)
         perf_log_fatal("out of memory");
+#else
+    isc_buffer_allocate(mctx, &option->buffer, strlen(value) / 2 + 4);
+#endif
 
     result = isc_parse_uint16(&code, copy, 0);
     if (result != ISC_R_SUCCESS) {
@@ -909,7 +917,7 @@ build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
         if (token_equals(&token, "send")) {
             break;
         } else if (token_equals(&token, "add")) {
-            result = read_update_line(ctx, &input, str, zname,
+            result    = read_update_line(ctx, &input, str, zname,
                 true, true, true,
                 true, oname, &ttl, &rdtype,
                 &rdata, &rdatabuf);
@@ -924,7 +932,7 @@ build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
                 rdclass = dns_rdataclass_none;
             else
                 rdclass = dns_rdataclass_any;
-            is_update   = true;
+            is_update = true;
         } else if (token_equals(&token, "require")) {
             result = read_update_line(ctx, &input, str, zname,
                 false, false, true,
@@ -934,9 +942,9 @@ build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
                 rdclass = dns_rdataclass_in;
             else
                 rdclass = dns_rdataclass_any;
-            is_update   = false;
+            is_update = false;
         } else if (token_equals(&token, "prohibit")) {
-            result = read_update_line(ctx, &input, str, zname,
+            result    = read_update_line(ctx, &input, str, zname,
                 false, false, false,
                 false, oname, &ttl,
                 &rdtype, &rdata, &rdatabuf);
