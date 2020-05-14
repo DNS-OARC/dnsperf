@@ -1,6 +1,6 @@
 #!/bin/sh
 
-clang-format-4.0 \
+clang-format \
     -style=file \
     -i \
     src/*.c \

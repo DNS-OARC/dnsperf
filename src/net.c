@@ -119,7 +119,7 @@ struct perf_net_socket perf_net_opensocket(enum perf_net_mode mode, const isc_so
     int                    port;
     int                    ret;
     int                    flags;
-    struct perf_net_socket sock = {.mode = mode, .is_ready = 1 };
+    struct perf_net_socket sock = { .mode = mode, .is_ready = 1 };
 
     family = isc_sockaddr_pf(server);
 

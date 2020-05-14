@@ -353,7 +353,7 @@ setup(int argc, char** argv)
     socks = isc_mem_get(mctx, nsocks * sizeof(*socks));
     if (socks == NULL)
         perf_log_fatal("out of memory");
-    for (i       = 0; i < nsocks; i++)
+    for (i = 0; i < nsocks; i++)
         socks[i] = perf_net_opensocket(mode, &server_addr, &local_addr, i, bufsize);
 }
 

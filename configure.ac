@@ -67,6 +67,7 @@ else
 fi
 AC_PATH_PROG(ac_cv_isc_config, [isc-config.sh], [no], [$bindpath])
 if test "$ac_cv_isc_config" = "no"; then
+# BIND 9.16+
   AC_CHECK_LIB([isc], [isc_mem_create], [],
     AC_MSG_ERROR([Install BIND9 development files]))
   AC_CHECK_LIB([dns], [dns_name_init], [],
@@ -78,6 +79,7 @@ if test "$ac_cv_isc_config" = "no"; then
   AC_CHECK_HEADER([bind9/getaddresses.h], [],
     AC_MSG_ERROR([Install BIND9 header files]))
 else
+# BIND <= 9.14
   AS_VAR_APPEND(CFLAGS, [" `$ac_cv_isc_config --cflags dns bind9`"])
   AS_VAR_APPEND(LDFLAGS, [" `$ac_cv_isc_config --libs dns bind9`"])
 fi
@@ -102,23 +104,13 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <isc/buffer.h>]],
 )
 AC_MSG_RESULT([$returns])
 
-
-case "$host_os" in
-  freebsd*)
-    AC_MSG_NOTICE([Add workaround for FreeBSD by using static libcrypto])
-    AS_VAR_APPEND(LDFLAGS, [" /usr/lib/libcrypto.a"])
-    ;;
-esac
-
 AC_CHECK_HEADERS([isc/hmacmd5.h isc/hmacsha.h])
 
 # Check for OpenSSL
 PKG_CHECK_MODULES([libssl], [libssl])
+PKG_CHECK_MODULES([libcrypto], [libcrypto]) # also check libcrypto which might be needed for libssl
 AC_CHECK_LIB([ssl], [TLS_client_method],
 	[AC_DEFINE([HAVE_TLS_CLIENT_METHOD], [1], [Define to 1 if you have the 'TLS_client_method' function])])
-PKG_CHECK_MODULES([libcrypto], [libcrypto])
-AC_CHECK_LIB([crypto], [ERR_get_error],
-	[AC_DEFINE([HAVE_ERR_GET_ERROR], [1], [Define to 1 if you have the 'ERR_get_error' function])])
 
 # Checks for sizes
 AX_TYPE_SOCKLEN_T
