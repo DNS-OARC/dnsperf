@@ -116,6 +116,9 @@ AC_CHECK_HEADERS([isc/hmacmd5.h isc/hmacsha.h])
 PKG_CHECK_MODULES([libssl], [libssl])
 AC_CHECK_LIB([ssl], [TLS_client_method],
 	[AC_DEFINE([HAVE_TLS_CLIENT_METHOD], [1], [Define to 1 if you have the 'TLS_client_method' function])])
+PKG_CHECK_MODULES([libcrypto], [libcrypto])
+AC_CHECK_LIB([crypto], [ERR_get_error],
+	[AC_DEFINE([HAVE_ERR_GET_ERROR], [1], [Define to 1 if you have the 'ERR_get_error' function])])
 
 # Checks for sizes
 AX_TYPE_SOCKLEN_T
