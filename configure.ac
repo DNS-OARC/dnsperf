@@ -71,6 +71,12 @@ if test "$ac_cv_isc_config" = "no"; then
     AC_MSG_ERROR([Install BIND9 development files]))
   AC_CHECK_LIB([dns], [dns_name_init], [],
     AC_MSG_ERROR([Install BIND9 development files]))
+  AC_CHECK_LIB([bind9], [bind9_getaddresses], [],
+    AC_MSG_ERROR([Install BIND9 development files]))
+  AC_CHECK_HEADER([isc/result.h], [],
+    AC_MSG_ERROR([Install BIND9 header files]))
+  AC_CHECK_HEADER([bind9/getaddresses.h], [],
+    AC_MSG_ERROR([Install BIND9 header files]))
 else
   AS_VAR_APPEND(CFLAGS, [" `$ac_cv_isc_config --cflags dns bind9`"])
   AS_VAR_APPEND(LDFLAGS, [" `$ac_cv_isc_config --libs dns bind9`"])

@@ -137,10 +137,14 @@ perf_dns_createctx(bool updates)
         return NULL;
 
     mctx   = NULL;
+#ifdef HAVE_ISC_MEM_CREATE_RESULT
     result = isc_mem_create(0, 0, &mctx);
     if (result != ISC_R_SUCCESS)
         perf_log_fatal("creating memory context: %s",
             isc_result_totext(result));
+#else
+    isc_mem_create(&mctx);
+#endif
 
     ctx = isc_mem_get(mctx, sizeof(*ctx));
     if (ctx == NULL) {
@@ -373,9 +377,13 @@ perf_dns_parseednsoption(const char* arg, isc_mem_t* mctx)
 
     option->mctx   = mctx;
     option->buffer = NULL;
+#ifdef HAVE_ISC_BUFFER_ALLOCATE_RESULT
     result         = isc_buffer_allocate(mctx, &option->buffer, strlen(value) / 2 + 4);
     if (result != ISC_R_SUCCESS)
         perf_log_fatal("out of memory");
+#else
+    isc_buffer_allocate(mctx, &option->buffer, strlen(value) / 2 + 4);
+#endif
 
     result = isc_parse_uint16(&code, copy, 0);
     if (result != ISC_R_SUCCESS) {
