@@ -78,8 +78,8 @@ if test "$ac_cv_isc_config" = "no"; then
 
   AS_VAR_COPY(old_CFLAGS, CFLAGS)
   AS_VAR_COPY(old_LDFLAGS, LDFLAGS)
-  AS_VAR_APPEND(CFLAGS, ["$libssl_CFLAGS $libcrypto_CFLAGS"])
-  AS_VAR_APPEND(LDFLAGS, ["$libssl_LIBS $libcrypto_LIBS"])
+  AS_VAR_APPEND(CFLAGS, [" $libssl_CFLAGS $libcrypto_CFLAGS"])
+  AS_VAR_APPEND(LDFLAGS, [" $libssl_LIBS $libcrypto_LIBS"])
   AC_CHECK_LIB([xml2], [xmlNewTextWriter])
   AC_CHECK_LIB([json-c], [json_object_new_array])
 
