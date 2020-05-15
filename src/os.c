@@ -41,7 +41,8 @@ void perf_os_blocksignal(int sig, bool block)
     op = block ? SIG_BLOCK : SIG_UNBLOCK;
 
     if (sigemptyset(&sset) < 0 || sigaddset(&sset, sig) < 0 || pthread_sigmask(op, &sset, NULL) < 0) {
-        perf_log_fatal("pthread_sigmask: %s", strerror(errno));
+        char __s[256];
+        perf_log_fatal("pthread_sigmask: %s", perf_strerror_r(errno, __s, sizeof(__s)));
     }
 }
 
@@ -53,7 +54,8 @@ void perf_os_handlesignal(int sig, void (*handler)(int))
     sa.sa_handler = handler;
 
     if (sigfillset(&sa.sa_mask) < 0 || sigaction(sig, &sa, NULL) < 0) {
-        perf_log_fatal("sigaction: %s", strerror(errno));
+        char __s[256];
+        perf_log_fatal("sigaction: %s", perf_strerror_r(errno, __s, sizeof(__s)));
     }
 }
 
@@ -95,8 +97,10 @@ perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, i
     }
     n = select(maxfd + 1, &read_fds, NULL, NULL, tvp);
     if (n < 0) {
-        if (errno != EINTR)
-            perf_log_fatal("select(): %s", strerror(errno));
+        if (errno != EINTR) {
+            char __s[256];
+            perf_log_fatal("select(): %s", perf_strerror_r(errno, __s, sizeof(__s)));
+        }
         return (ISC_R_CANCELED);
     } else if (n == 0) {
         return (ISC_R_TIMEDOUT);
@@ -138,8 +142,10 @@ perf_os_waituntilanywritable(struct perf_net_socket* socks, unsigned int nfds, i
     }
     n = select(maxfd + 1, &read_fds, &write_fds, NULL, tvp);
     if (n < 0) {
-        if (errno != EINTR)
-            perf_log_fatal("select(): %s", strerror(errno));
+        if (errno != EINTR) {
+            char __s[256];
+            perf_log_fatal("select(): %s", perf_strerror_r(errno, __s, sizeof(__s)));
+        }
         return (ISC_R_CANCELED);
     } else if (n == 0) {
         return (ISC_R_TIMEDOUT);

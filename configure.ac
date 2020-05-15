@@ -16,7 +16,7 @@
 # limitations under the License.
 
 AC_PREREQ(2.64)
-AC_INIT([dnsperf], [2.3.3], [admin@dns-oarc.net], [dnsperf], [https://github.com/DNS-OARC/dnsperf/issues])
+AC_INIT([dnsperf], [2.3.4], [admin@dns-oarc.net], [dnsperf], [https://github.com/DNS-OARC/dnsperf/issues])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 AC_CONFIG_SRCDIR([src/dnsperf.c])
 AC_CONFIG_HEADER([src/config.h])
@@ -50,6 +50,12 @@ AC_CHECK_LIB([socket], [socket])
 AC_CHECK_LIB([nsl], [inet_ntoa])
 AC_CHECK_LIB([m], [sqrt])
 
+# Check for OpenSSL
+PKG_CHECK_MODULES([libssl], [libssl])
+PKG_CHECK_MODULES([libcrypto], [libcrypto]) # also check libcrypto which might be needed for libssl
+AC_CHECK_LIB([ssl], [TLS_client_method],
+	[AC_DEFINE([HAVE_TLS_CLIENT_METHOD], [1], [Define to 1 if you have the 'TLS_client_method' function])])
+
 # Check for bind
 AC_ARG_WITH([bind], [AS_HELP_STRING([--with-bind=PATH], [Specify ISC BIND 9 prefix path])], [
   use_bind="$withval"
@@ -67,25 +73,51 @@ else
 fi
 AC_PATH_PROG(ac_cv_isc_config, [isc-config.sh], [no], [$bindpath])
 if test "$ac_cv_isc_config" = "no"; then
-  AC_MSG_ERROR([BIND 9 libraries must be installed])
+# BIND 9.16+
+  AC_MSG_NOTICE([Trying BIND 9.16+ workaround...])
+
+  AS_VAR_COPY(old_CFLAGS, CFLAGS)
+  AS_VAR_COPY(old_LDFLAGS, LDFLAGS)
+  AS_VAR_APPEND(CFLAGS, [" $libssl_CFLAGS $libcrypto_CFLAGS"])
+  AS_VAR_APPEND(LDFLAGS, [" $libssl_LIBS $libcrypto_LIBS"])
+  AC_CHECK_LIB([xml2], [xmlNewTextWriter])
+  AC_CHECK_LIB([json-c], [json_object_new_array])
+
+  AC_CHECK_LIB([isc], [isc_mem_create], [], [AC_MSG_ERROR([Please install BIND9 development files])])
+  AC_CHECK_LIB([dns], [dns_name_init], [], [AC_MSG_ERROR([Please install BIND9 development files])])
+  AC_CHECK_LIB([bind9], [bind9_getaddresses], [], [AC_MSG_ERROR([Please install BIND9 development files])])
+  AC_CHECK_HEADER([isc/result.h], [], [AC_MSG_ERROR([Please install BIND9 header files])])
+  AC_CHECK_HEADER([bind9/getaddresses.h], [], [AC_MSG_ERROR([Please install BIND9 header files])])
+
+  AS_VAR_COPY(CFLAGS, old_CFLAGS)
+  AS_VAR_COPY(LDFLAGS, old_LDFLAGS)
+else
+# BIND <= 9.14
+  AS_VAR_APPEND(CFLAGS, [" `$ac_cv_isc_config --cflags dns bind9`"])
+  AS_VAR_APPEND(LDFLAGS, [" `$ac_cv_isc_config --libs dns bind9`"])
 fi
 
-case "$host_os" in
-  freebsd*)
-    AC_MSG_NOTICE([Add workaround for FreeBSD by using static libcrypto])
-    AS_VAR_APPEND(LDFLAGS, [" /usr/lib/libcrypto.a"])
-    ;;
-esac
+AC_MSG_CHECKING([return type of isc_mem_create])
+returns=undefined
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <isc/mem.h>]],
+      [[ isc_result_t result = isc_mem_create(0, 0, NULL) ]])],
+  [returns=isc_result_t
+   AC_DEFINE([HAVE_ISC_MEM_CREATE_RESULT], [1], [Define to 1 if 'isc_mem_create' returns result])],
+  [returns=void]
+)
+AC_MSG_RESULT([$returns])
 
-AS_VAR_APPEND(CFLAGS, [" `$ac_cv_isc_config --cflags dns bind9`"])
-AS_VAR_APPEND(LDFLAGS, [" `$ac_cv_isc_config --libs dns bind9`"])
+AC_MSG_CHECKING([return type of isc_buffer_allocate])
+returns=undefined
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <isc/buffer.h>]],
+      [[ isc_result_t result = isc_buffer_allocate(NULL, NULL, 0) ]])],
+  [returns=isc_result_t
+   AC_DEFINE([HAVE_ISC_BUFFER_ALLOCATE_RESULT], [1], [Define to 1 if 'isc_buffer_allocate' returns result])],
+  [returns=void]
+)
+AC_MSG_RESULT([$returns])
 
 AC_CHECK_HEADERS([isc/hmacmd5.h isc/hmacsha.h])
-
-# Check for OpenSSL
-PKG_CHECK_MODULES([libssl], [libssl])
-AC_CHECK_LIB([ssl], [TLS_client_method],
-	[AC_DEFINE([HAVE_TLS_CLIENT_METHOD], [1], [Define to 1 if you have the `TLS_client_method' function])])
 
 # Checks for sizes
 AX_TYPE_SOCKLEN_T

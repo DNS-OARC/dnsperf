@@ -225,13 +225,16 @@ setup(int argc, char** argv)
     int          sock_family;
     unsigned int bufsize;
     unsigned int i;
-    isc_result_t result;
     const char*  _mode = 0;
 
-    result = isc_mem_create(0, 0, &mctx);
+#ifdef HAVE_ISC_MEM_CREATE_RESULT
+    isc_result_t result = isc_mem_create(0, 0, &mctx);
     if (result != ISC_R_SUCCESS)
         perf_log_fatal("creating memory context: %s",
             isc_result_totext(result));
+#else
+    isc_mem_create(&mctx);
+#endif
 
     dns_result_register();
 
@@ -349,7 +352,7 @@ setup(int argc, char** argv)
     socks = isc_mem_get(mctx, nsocks * sizeof(*socks));
     if (socks == NULL)
         perf_log_fatal("out of memory");
-    for (i       = 0; i < nsocks; i++)
+    for (i = 0; i < nsocks; i++)
         socks[i] = perf_net_opensocket(mode, &server_addr, &local_addr, i, bufsize);
 }
 
@@ -496,7 +499,8 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
                 }
             } else {
                 if (verbose) {
-                    perf_log_warning("failed to send packet: %s", strerror(errno));
+                    char __s[256];
+                    perf_log_warning("failed to send packet: %s", perf_strerror_r(errno, __s, sizeof(__s)));
                 }
             }
             return (ISC_R_FAILURE);
@@ -548,7 +552,8 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
             }
         } else {
             if (verbose) {
-                perf_log_warning("failed to send packet: %s", strerror(errno));
+                char __s[256];
+                perf_log_warning("failed to send packet: %s", perf_strerror_r(errno, __s, sizeof(__s)));
             }
         }
         return (ISC_R_FAILURE);
@@ -605,8 +610,8 @@ try_process_response(unsigned int sockindex)
         if (errno == EAGAIN || errno == EINTR) {
             return;
         } else {
-            perf_log_fatal("failed to receive packet: %s",
-                strerror(errno));
+            char __s[256];
+            perf_log_fatal("failed to receive packet: %s", perf_strerror_r(errno, __s, sizeof(__s)));
         }
     } else if (!n) {
         // Treat connection closed like try again until reconnection features are in
@@ -783,8 +788,8 @@ end_loop:
 
     plotf = fopen(plotfile, "w");
     if (!plotf) {
-        perf_log_fatal("could not open %s: %s", plotfile,
-            strerror(errno));
+        char __s[256];
+        perf_log_fatal("could not open %s: %s", plotfile, perf_strerror_r(errno, __s, sizeof(__s)));
     }
 
     /* Print column headers */

@@ -22,23 +22,23 @@ SUBDIRS =
 
 AM_CFLAGS = -I$(srcdir) \
   -I$(top_srcdir) \
-  $(PTHREAD_CFLAGS) $(libssl_CFLAGS)
+  $(PTHREAD_CFLAGS) $(libssl_CFLAGS) $(libcrypto_CFLAGS)
 
 EXTRA_DIST = dnsperf.1.in resperf-report resperf.1.in
 
 bin_PROGRAMS = dnsperf resperf
 dist_bin_SCRIPTS = resperf-report
 
-_libperf_sources = datafile.c dns.c log.c net.c opt.c os.c
-_libperf_headers = datafile.h dns.h log.h net.h opt.h os.h util.h
+_libperf_sources = datafile.c dns.c log.c net.c opt.c os.c strerror.c
+_libperf_headers = datafile.h dns.h log.h net.h opt.h os.h util.h strerror.h
 
 dnsperf_SOURCES = $(_libperf_sources) dnsperf.c
 dist_dnsperf_SOURCES = $(_libperf_headers)
-dnsperf_LDADD = $(PTHREAD_LIBS) $(libssl_LIBS)
+dnsperf_LDADD = $(PTHREAD_LIBS) $(libssl_LIBS) $(libcrypto_LIBS)
 
 resperf_SOURCES = $(_libperf_sources) resperf.c
 dist_resperf_SOURCES = $(_libperf_headers)
-resperf_LDADD = $(PTHREAD_LIBS) $(libssl_LIBS)
+resperf_LDADD = $(PTHREAD_LIBS) $(libssl_LIBS) $(libcrypto_LIBS)
 
 man1_MANS = dnsperf.1 resperf.1
 

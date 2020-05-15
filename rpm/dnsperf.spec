@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.3.3
+Version:        2.3.4
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -23,7 +23,9 @@ BuildRequires:  libjson-c-devel
 %else
 BuildRequires:  json-c-devel
 %endif
+%if 0%{?suse_version} <= 1500
 BuildRequires:  GeoIP-devel
+%endif
 BuildRequires:  pkgconfig
 
 %description
@@ -70,7 +72,7 @@ rate to simulate caching DNS services.
 
 %build
 sh autogen.sh
-%configure
+%configure "--with-extra-cflags=-I /usr/include/bind"
 make %{?_smp_mflags}
 
 
@@ -102,6 +104,20 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri May 15 2020 Jerry Lundström <lundstrom.jerry@gmail.com> 2.3.4-1
+- Release 2.3.4
+  * This release adds a workaround, thanks to patch from Petr Menšík, for
+    building on systems with BIND 9.16. Also improves error handling by
+    using thread-safe `strerror_r()` instead of `strerror()`.
+  * Commits:
+    88c3ef4 strerror
+    1917f67 openSUSE Tumbleweed
+    fd39641 AS_VAR_APPEND
+    aeeef74 bind 9.16
+    07732cd BIND, libcrypto, clang format
+    08146e3 Add crypto library to checks
+    e4307c2 Add checks to pass with BIND 9.16
+    3f9aed3 Prepare check for bind 9.11/9.16 return types
 * Wed May 06 2020 Jerry Lundström <lundstrom.jerry@gmail.com> 2.3.3-1
 - Release 2.3.3
   * This release changes the behavior of `dnsperf` and `resperf` when it

@@ -27,102 +27,114 @@
 #include <isc/types.h>
 
 #include "log.h"
+#include "strerror.h"
 
 #ifndef PERF_UTIL_H
 #define PERF_UTIL_H 1
 
 #define MILLION ((uint64_t)1000000)
 
-#define THREAD(thread, start, arg)                                      \
-    do {                                                                \
-        int __n = pthread_create((thread), NULL, (start), (arg));       \
-        if (__n != 0) {                                                 \
-            perf_log_fatal("pthread_create failed: %s", strerror(__n)); \
-        }                                                               \
+#define THREAD(thread, start, arg)                                                               \
+    do {                                                                                         \
+        int __n = pthread_create((thread), NULL, (start), (arg));                                \
+        if (__n != 0) {                                                                          \
+            char __s[256];                                                                       \
+            perf_log_fatal("pthread_create failed: %s", perf_strerror_r(__n, __s, sizeof(__s))); \
+        }                                                                                        \
     } while (0)
 
-#define JOIN(thread, valuep)                                          \
-    do {                                                              \
-        int __n = pthread_join((thread), (valuep));                   \
-        if (__n != 0) {                                               \
-            perf_log_fatal("pthread_join failed: %s", strerror(__n)); \
-        }                                                             \
+#define JOIN(thread, valuep)                                                                   \
+    do {                                                                                       \
+        int __n = pthread_join((thread), (valuep));                                            \
+        if (__n != 0) {                                                                        \
+            char __s[256];                                                                     \
+            perf_log_fatal("pthread_join failed: %s", perf_strerror_r(__n, __s, sizeof(__s))); \
+        }                                                                                      \
     } while (0)
 
-#define MUTEX_INIT(mutex)                                                   \
-    do {                                                                    \
-        int __n = pthread_mutex_init((mutex), NULL);                        \
-        if (__n != 0) {                                                     \
-            perf_log_fatal("pthread_mutex_init failed: %s", strerror(__n)); \
-        }                                                                   \
+#define MUTEX_INIT(mutex)                                                                            \
+    do {                                                                                             \
+        int __n = pthread_mutex_init((mutex), NULL);                                                 \
+        if (__n != 0) {                                                                              \
+            char __s[256];                                                                           \
+            perf_log_fatal("pthread_mutex_init failed: %s", perf_strerror_r(__n, __s, sizeof(__s))); \
+        }                                                                                            \
     } while (0)
 
-#define MUTEX_DESTROY(mutex)                                                   \
-    do {                                                                       \
-        int __n = pthread_mutex_destroy((mutex));                              \
-        if (__n != 0) {                                                        \
-            perf_log_fatal("pthread_mutex_destroy failed: %s", strerror(__n)); \
-        }                                                                      \
+#define MUTEX_DESTROY(mutex)                                                                            \
+    do {                                                                                                \
+        int __n = pthread_mutex_destroy((mutex));                                                       \
+        if (__n != 0) {                                                                                 \
+            char __s[256];                                                                              \
+            perf_log_fatal("pthread_mutex_destroy failed: %s", perf_strerror_r(__n, __s, sizeof(__s))); \
+        }                                                                                               \
     } while (0)
 
-#define LOCK(mutex)                                                         \
-    do {                                                                    \
-        int __n = pthread_mutex_lock((mutex));                              \
-        if (__n != 0) {                                                     \
-            perf_log_fatal("pthread_mutex_lock failed: %s", strerror(__n)); \
-        }                                                                   \
+#define LOCK(mutex)                                                                                  \
+    do {                                                                                             \
+        int __n = pthread_mutex_lock((mutex));                                                       \
+        if (__n != 0) {                                                                              \
+            char __s[256];                                                                           \
+            perf_log_fatal("pthread_mutex_lock failed: %s", perf_strerror_r(__n, __s, sizeof(__s))); \
+        }                                                                                            \
     } while (0)
 
-#define UNLOCK(mutex)                                                         \
-    do {                                                                      \
-        int __n = pthread_mutex_unlock((mutex));                              \
-        if (__n != 0) {                                                       \
-            perf_log_fatal("pthread_mutex_unlock failed: %s", strerror(__n)); \
-        }                                                                     \
+#define UNLOCK(mutex)                                                                                  \
+    do {                                                                                               \
+        int __n = pthread_mutex_unlock((mutex));                                                       \
+        if (__n != 0) {                                                                                \
+            char __s[256];                                                                             \
+            perf_log_fatal("pthread_mutex_unlock failed: %s", perf_strerror_r(__n, __s, sizeof(__s))); \
+        }                                                                                              \
     } while (0)
 
-#define COND_INIT(cond)                                                    \
-    do {                                                                   \
-        int __n = pthread_cond_init((cond), NULL);                         \
-        if (__n != 0) {                                                    \
-            perf_log_fatal("pthread_cond_init failed: %s", strerror(__n)); \
-        }                                                                  \
+#define COND_INIT(cond)                                                                             \
+    do {                                                                                            \
+        int __n = pthread_cond_init((cond), NULL);                                                  \
+        if (__n != 0) {                                                                             \
+            char __s[256];                                                                          \
+            perf_log_fatal("pthread_cond_init failed: %s", perf_strerror_r(__n, __s, sizeof(__s))); \
+        }                                                                                           \
     } while (0)
 
-#define SIGNAL(cond)                                                         \
-    do {                                                                     \
-        int __n = pthread_cond_signal((cond));                               \
-        if (__n != 0) {                                                      \
-            perf_log_fatal("pthread_cond_signal failed: %s", strerror(__n)); \
-        }                                                                    \
+#define SIGNAL(cond)                                                                                  \
+    do {                                                                                              \
+        int __n = pthread_cond_signal((cond));                                                        \
+        if (__n != 0) {                                                                               \
+            char __s[256];                                                                            \
+            perf_log_fatal("pthread_cond_signal failed: %s", perf_strerror_r(__n, __s, sizeof(__s))); \
+        }                                                                                             \
     } while (0)
 
-#define BROADCAST(cond)                                                         \
-    do {                                                                        \
-        int __n = pthread_cond_broadcast((cond));                               \
-        if (__n != 0) {                                                         \
-            perf_log_fatal("pthread_cond_broadcast failed: %s", strerror(__n)); \
-        }                                                                       \
+#define BROADCAST(cond)                                                                                  \
+    do {                                                                                                 \
+        int __n = pthread_cond_broadcast((cond));                                                        \
+        if (__n != 0) {                                                                                  \
+            char __s[256];                                                                               \
+            perf_log_fatal("pthread_cond_broadcast failed: %s", perf_strerror_r(__n, __s, sizeof(__s))); \
+        }                                                                                                \
     } while (0)
 
-#define WAIT(cond, mutex)                                                  \
-    do {                                                                   \
-        int __n = pthread_cond_wait((cond), (mutex));                      \
-        if (__n != 0) {                                                    \
-            perf_log_fatal("pthread_cond_wait failed: %s", strerror(__n)); \
-        }                                                                  \
+#define WAIT(cond, mutex)                                                                           \
+    do {                                                                                            \
+        int __n = pthread_cond_wait((cond), (mutex));                                               \
+        if (__n != 0) {                                                                             \
+            char __s[256];                                                                          \
+            perf_log_fatal("pthread_cond_wait failed: %s", perf_strerror_r(__n, __s, sizeof(__s))); \
+        }                                                                                           \
     } while (0)
 
-#define TIMEDWAIT(cond, mutex, when, timedout)                                  \
-    do {                                                                        \
-        int   __n = pthread_cond_timedwait((cond), (mutex), (when));            \
-        bool* res = (timedout);                                                 \
-        if (__n != 0 && __n != ETIMEDOUT) {                                     \
-            perf_log_fatal("pthread_cond_timedwait failed: %s", strerror(__n)); \
-        }                                                                       \
-        if (res != NULL) {                                                      \
-            *res = (__n != 0);                                                  \
-        }                                                                       \
+#define TIMEDWAIT(cond, mutex, when, timedout)                                                           \
+    do {                                                                                                 \
+        int   __n = pthread_cond_timedwait((cond), (mutex), (when));                                     \
+        bool* res = (timedout);                                                                          \
+        if (__n != 0 && __n != ETIMEDOUT) {                                                              \
+            char __s[256];                                                                               \
+            perf_log_fatal("pthread_cond_timedwait failed: %s", perf_strerror_r(__n, __s, sizeof(__s))); \
+        }                                                                                                \
+        if (res != NULL) {                                                                               \
+            *res = (__n != 0);                                                                           \
+        }                                                                                                \
     } while (0)
 
 static __inline__ uint64_t

@@ -1,3 +1,22 @@
+dnsperf (2.3.4-1~unstable+1) unstable; urgency=low
+
+  * Release 2.3.4
+
+    This release adds a workaround, thanks to patch from Petr Menšík, for
+    building on systems with BIND 9.16. Also improves error handling by
+    using thread-safe `strerror_r()` instead of `strerror()`.
+
+    88c3ef4 strerror
+    1917f67 openSUSE Tumbleweed
+    fd39641 AS_VAR_APPEND
+    aeeef74 bind 9.16
+    07732cd BIND, libcrypto, clang format
+    08146e3 Add crypto library to checks
+    e4307c2 Add checks to pass with BIND 9.16
+    3f9aed3 Prepare check for bind 9.11/9.16 return types
+
+ -- Jerry Lundström <lundstrom.jerry@gmail.com>  Fri, 15 May 2020 10:38:07 +0200
+
 dnsperf (2.3.3-1~unstable+1) unstable; urgency=low
 
   * Release 2.3.3
