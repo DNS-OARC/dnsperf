@@ -378,15 +378,15 @@ stringify(unsigned int value)
 static void
 setup(int argc, char** argv, config_t* config)
 {
-    const char*  family      = NULL;
-    const char*  server_name = DEFAULT_SERVER_NAME;
-    in_port_t    server_port = 0;
-    const char*  local_name  = NULL;
-    in_port_t    local_port  = DEFAULT_LOCAL_PORT;
-    const char*  filename    = NULL;
-    const char*  edns_option = NULL;
-    const char*  tsigkey     = NULL;
-    const char*  mode = 0;
+    const char* family      = NULL;
+    const char* server_name = DEFAULT_SERVER_NAME;
+    in_port_t   server_port = 0;
+    const char* local_name  = NULL;
+    in_port_t   local_port  = DEFAULT_LOCAL_PORT;
+    const char* filename    = NULL;
+    const char* edns_option = NULL;
+    const char* tsigkey     = NULL;
+    const char* mode        = 0;
 
 #ifdef HAVE_ISC_MEM_CREATE_RESULT
     isc_result_t result = isc_mem_create(0, 0, &mctx);
@@ -720,7 +720,8 @@ do_send(void* arg)
                 any_inprogress = 1;
             } else {
                 if (config->verbose) {
-                    perf_log_warning("failed to send packet: %s", strerror(errno));
+                    char __s[256];
+                    perf_log_warning("failed to send packet: %s", perf_strerror_r(errno, __s, sizeof(__s)));
                 }
                 LOCK(&tinfo->lock);
                 query_move(tinfo, q, prepend_unused);
@@ -983,8 +984,8 @@ do_recv(void* arg)
                 now = get_time();
                 continue;
             } else {
-                perf_log_fatal("failed to receive packet: %s",
-                    strerror(saved_errno));
+                char __s[256];
+                perf_log_fatal("failed to receive packet: %s", perf_strerror_r(saved_errno, __s, sizeof(__s)));
             }
         }
     }

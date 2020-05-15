@@ -499,7 +499,8 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
                 }
             } else {
                 if (verbose) {
-                    perf_log_warning("failed to send packet: %s", strerror(errno));
+                    char __s[256];
+                    perf_log_warning("failed to send packet: %s", perf_strerror_r(errno, __s, sizeof(__s)));
                 }
             }
             return (ISC_R_FAILURE);
@@ -551,7 +552,8 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
             }
         } else {
             if (verbose) {
-                perf_log_warning("failed to send packet: %s", strerror(errno));
+                char __s[256];
+                perf_log_warning("failed to send packet: %s", perf_strerror_r(errno, __s, sizeof(__s)));
             }
         }
         return (ISC_R_FAILURE);
@@ -608,8 +610,8 @@ try_process_response(unsigned int sockindex)
         if (errno == EAGAIN || errno == EINTR) {
             return;
         } else {
-            perf_log_fatal("failed to receive packet: %s",
-                strerror(errno));
+            char __s[256];
+            perf_log_fatal("failed to receive packet: %s", perf_strerror_r(errno, __s, sizeof(__s)));
         }
     } else if (!n) {
         // Treat connection closed like try again until reconnection features are in
@@ -786,8 +788,8 @@ end_loop:
 
     plotf = fopen(plotfile, "w");
     if (!plotf) {
-        perf_log_fatal("could not open %s: %s", plotfile,
-            strerror(errno));
+        char __s[256];
+        perf_log_fatal("could not open %s: %s", plotfile, perf_strerror_r(errno, __s, sizeof(__s)));
     }
 
     /* Print column headers */
