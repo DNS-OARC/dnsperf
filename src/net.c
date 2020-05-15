@@ -39,6 +39,7 @@
 #include "net.h"
 #include "opt.h"
 #include "os.h"
+#include "strerror.h"
 
 #define TCP_RECV_BUF_SIZE (16 * 1024)
 #define TCP_SEND_BUF_SIZE (4 * 1024)
@@ -136,7 +137,8 @@ struct perf_net_socket perf_net_opensocket(enum perf_net_mode mode, const isc_so
             perf_log_fatal("pthread_mutex_init() failed");
         }
         if ((sock.fd = socket(family, SOCK_STREAM, 0)) < 0) {
-            perf_log_fatal("socket: %s", strerror(errno));
+            char __s[256];
+            perf_log_fatal("socket: %s", perf_strerror_r(errno, __s, sizeof(__s)));
         }
         if (!ssl_ctx) {
 #ifdef HAVE_TLS_CLIENT_METHOD
@@ -161,8 +163,10 @@ struct perf_net_socket perf_net_opensocket(enum perf_net_mode mode, const isc_so
         perf_log_fatal("perf_net_opensocket(): invalid mode");
     }
 
-    if (sock.fd == -1)
-        perf_log_fatal("socket: %s", strerror(errno));
+    if (sock.fd == -1) {
+        char __s[256];
+        perf_log_fatal("socket: %s", perf_strerror_r(errno, __s, sizeof(__s)));
+    }
 
 #if defined(AF_INET6) && defined(IPV6_V6ONLY)
     if (family == AF_INET6) {
@@ -183,8 +187,10 @@ struct perf_net_socket perf_net_opensocket(enum perf_net_mode mode, const isc_so
         isc_sockaddr_setport(&tmp, port);
     }
 
-    if (bind(sock.fd, &tmp.type.sa, tmp.length) == -1)
-        perf_log_fatal("bind: %s", strerror(errno));
+    if (bind(sock.fd, &tmp.type.sa, tmp.length) == -1) {
+        char __s[256];
+        perf_log_fatal("bind: %s", perf_strerror_r(errno, __s, sizeof(__s)));
+    }
 
     if (bufsize > 0) {
         bufsize *= 1024;
@@ -212,7 +218,8 @@ struct perf_net_socket perf_net_opensocket(enum perf_net_mode mode, const isc_so
             if (errno == EINPROGRESS) {
                 sock.is_ready = 0;
             } else {
-                perf_log_fatal("connect() failed: %s", strerror(errno));
+                char __s[256];
+                perf_log_fatal("connect() failed: %s", perf_strerror_r(errno, __s, sizeof(__s)));
             }
         }
         sock.recvbuf   = malloc(TCP_RECV_BUF_SIZE);
