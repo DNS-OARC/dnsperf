@@ -208,7 +208,7 @@ print_initial_status(const config_t* config)
 {
     time_t        now;
     isc_netaddr_t addr;
-    char          buf[ISC_NETADDR_FORMATSIZE];
+    char          buf[ISC_NETADDR_FORMATSIZE], ct[32];
     int           i;
 
     printf("[Status] Command line: %s", isc_file_basename(config->argv[0]));
@@ -222,7 +222,7 @@ print_initial_status(const config_t* config)
         config->updates ? "updates" : "queries", buf);
 
     now = time(NULL);
-    printf("[Status] Started at: %s", ctime(&now));
+    printf("[Status] Started at: %s", ctime_r(&now, ct));
 
     printf("[Status] Stopping after ");
     if (config->timelimit)
