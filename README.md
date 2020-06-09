@@ -1,6 +1,6 @@
 # dnsperf
 
-[https://github.com/DNS-OARC/dnsperf](https://github.com/DNS-OARC/dnsperf)
+[![Build Status](https://travis-ci.com/DNS-OARC/dnsperf.svg?branch=develop)](https://travis-ci.com/DNS-OARC/dnsperf) [![Total alerts](https://img.shields.io/lgtm/alerts/g/DNS-OARC/dnsperf.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/DNS-OARC/dnsperf/alerts/) [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=dns-oarc%3Adnsperf&metric=bugs)](https://sonarcloud.io/dashboard?id=dns-oarc%3Adnsperf) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=dns-oarc%3Adnsperf&metric=security_rating)](https://sonarcloud.io/dashboard?id=dns-oarc%3Adnsperf)
 
 `dnsperf` and `resperf` are free tools developed by Nominum/Akamai (2006-2018)
 and DNS-OARC (since 2019) that make it simple to gather accurate latency and
