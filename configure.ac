@@ -39,7 +39,7 @@ AC_ARG_WITH([extra-cflags], [AS_HELP_STRING([--with-extra-cflags=CFLAGS], [Add e
 ])
 
 # Check --with-extra-ldflags
-AC_ARG_WITH([extra-ldflags], [AS_HELP_STRING([--with-extra-ldflags=CFLAGS], [Add extra LDFLAGS])], [
+AC_ARG_WITH([extra-ldflags], [AS_HELP_STRING([--with-extra-ldflags=LDFLAGS], [Add extra LDFLAGS])], [
   AC_MSG_NOTICE([appending extra LDFLAGS... $withval])
   AS_VAR_APPEND(LDFLAGS, [" $withval"])
 ])
