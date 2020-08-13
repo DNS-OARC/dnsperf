@@ -16,9 +16,9 @@
 # limitations under the License.
 
 MAINTAINERCLEANFILES = $(srcdir)/Makefile.in $(srcdir)/config.h.in
-CLEANFILES = dnsperf.1 resperf.1
+CLEANFILES = dnsperf.1 resperf.1 *.gcda *.gcno *.gcov
 
-SUBDIRS =
+SUBDIRS = test
 
 AM_CFLAGS = -I$(srcdir) \
   -I$(top_srcdir) \
@@ -53,3 +53,10 @@ resperf.1: resperf.1.in Makefile
 -e 's,[@]PACKAGE_URL[@],$(PACKAGE_URL),g' \
 -e 's,[@]PACKAGE_BUGREPORT[@],$(PACKAGE_BUGREPORT),g' \
 < $(srcdir)/resperf.1.in > resperf.1
+
+if ENABLE_GCOV
+gcov-local:
+	for src in $(_libperf_sources) dnsperf.c resperf.c; do \
+	  gcov -l -r -s "$(srcdir)" "$$src"; \
+	done
+endif
