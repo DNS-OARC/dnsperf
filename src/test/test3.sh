@@ -13,6 +13,21 @@
 ! ../dnsperf -n 43f8huishfs
 ! ../dnsperf -p 12345 unexpected argument
 
+! echo "" | ../dnsperf -y test:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8=
+! echo "" | ../dnsperf -y hmac-md5:test:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8=
+! echo "" | ../dnsperf -y hmac-sha1:test:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8=
+! echo "" | ../dnsperf -y hmac-sha224:test:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8=
+! echo "" | ../dnsperf -y hmac-sha256:test:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8=
+! echo "" | ../dnsperf -y hmac-sha384:test:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8=
+! echo "" | ../dnsperf -y hmac-sha512:test:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8=
+! echo "" | ../dnsperf -y invalid:test:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8=
+! echo "" | ../dnsperf -y test:invalid
+! echo "" | ../dnsperf -y test
+
+! ../dnsperf -e -E invalid
+! ../dnsperf -e -E 9999999:invalid
+! ../dnsperf -e -E 123:invalid
+
 ! ../resperf -d does_not_exist
 ! ../resperf -r 0 -c 0
 ! ../resperf -f invalid
