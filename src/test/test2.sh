@@ -2,9 +2,12 @@
 
 test "$TEST_DNSPERF_WITH_NETWORK" = "1" || exit 0
 
-../dnsperf -vvv -s 1.1.1.1 -d "$srcdir/datafile" -n 1 -m udp >test2.out
+echo "google.com A" | ../dnsperf -vvv -s 1.1.1.1 -m udp >test2.out
 cat test2.out
-grep -q "Queries sent: *2" test2.out
+grep -q "Queries sent: *1" test2.out
+../dnsperf -vvv -s 1.1.1.1 -d "$srcdir/datafile" -n 2 -m udp >test2.out
+cat test2.out
+grep -q "Queries sent: *4" test2.out
 ../dnsperf -s 1.1.1.1 -d "$srcdir/datafile" -n 1 -m tcp >test2.out
 cat test2.out
 grep -q "Queries sent: *2" test2.out
@@ -29,6 +32,15 @@ grep -q "Queries sent: *2" test2.out
 ../resperf -s 1.1.1.1 -m 1 -d "$srcdir/datafile2" -r 2 -c 2 -M tcp >test2.out
 cat test2.out
 grep -q "Queries sent: *2" test2.out
+
+../resperf -s 1.1.1.1 -m 1 -d "$srcdir/datafile2" -r 2 -c 2 -M udp -D >test2.out
+cat test2.out
+grep -q "Queries sent: *2" test2.out
+# Disabled until https://github.com/DNS-OARC/dnsperf/issues/92 is fixed
+#../resperf -s 1.1.1.1 -m 1 -d "$srcdir/datafile2" -r 2 -c 2 -M udp -y hmac-sha256:test:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8= >test2.out
+#cat test2.out
+#grep -q "Queries sent: *2" test2.out
+
 # Ignore failure until https://github.com/DNS-OARC/dnsperf/issues/88 is fixed
 # May work on slower systems
 ../resperf -s 1.1.1.1 -m 1 -d "$srcdir/datafile2" -r 2 -c 2 -M tls || true
