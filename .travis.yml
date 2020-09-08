@@ -25,3 +25,4 @@ script:
   - ../configure --enable-warn-all
   - make
   - make test
+  - cat src/test/test*.sh.log
