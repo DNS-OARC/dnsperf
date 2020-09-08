@@ -1,0 +1,11 @@
+example.com
+require a
+require a A
+require a A 1.2.3.4
+prohibit x
+prohibit x A
+add x 3600 A 10.1.2.3
+delete y A 10.1.2.3
+delete z A
+delete w
+send
