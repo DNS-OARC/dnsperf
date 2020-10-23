@@ -22,7 +22,16 @@ of the data.
 `resperf` systematically increases the query rate and monitors the response
 rate to simulate caching DNS services.
 
-For more information, see the `dnsperf(1)` and `resperf(1)` man pages.
+See also the `dnsperf(1)` and `resperf(1)` man pages.
+
+More information may be found here:
+- https://www.dns-oarc.net/tools/dnsperf
+
+Issues should be reported here:
+- https://github.com/DNS-OARC/dnsperf/issues
+
+General support and discussion:
+- Mattermost: https://chat.dns-oarc.net/community/channels/oarc-software
 
 ## Usage
 
