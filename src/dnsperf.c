@@ -43,7 +43,6 @@
 
 #include <isc/buffer.h>
 #include <isc/file.h>
-#include <isc/list.h>
 #include <isc/mem.h>
 #include <isc/netaddr.h>
 #include <isc/print.h>
@@ -62,6 +61,7 @@
 #include "opt.h"
 #include "os.h"
 #include "util.h"
+#include "list.h"
 
 #ifndef ISC_UINT64_MAX
 #include <stdint.h>
@@ -132,7 +132,7 @@ typedef struct {
     uint64_t latency_max;
 } stats_t;
 
-typedef ISC_LIST(struct query_info) query_list;
+typedef perf_list(struct query_info) query_list;
 
 typedef struct query_info {
     uint64_t                timestamp;
@@ -143,8 +143,7 @@ typedef struct query_info {
      * This link links the query into the list of outstanding
      * queries or the list of available query IDs.
      */
-    ISC_LINK(struct query_info)
-    link;
+    perf_link(struct query_info);
 } query_info;
 
 #define NQIDS 65536
@@ -544,19 +543,19 @@ typedef enum {
 static inline void
 query_move(threadinfo_t* tinfo, query_info* q, query_move_op op)
 {
-    ISC_LIST_UNLINK(*q->list, q, link);
+    perf_list_unlink(*q->list, q);
     switch (op) {
     case prepend_unused:
         q->list = &tinfo->unused_queries;
-        ISC_LIST_PREPEND(tinfo->unused_queries, q, link);
+        perf_list_prepend(tinfo->unused_queries, q);
         break;
     case append_unused:
         q->list = &tinfo->unused_queries;
-        ISC_LIST_APPEND(tinfo->unused_queries, q, link);
+        perf_list_append(tinfo->unused_queries, q);
         break;
     case prepend_outstanding:
         q->list = &tinfo->outstanding_queries;
-        ISC_LIST_PREPEND(tinfo->outstanding_queries, q, link);
+        perf_list_prepend(tinfo->outstanding_queries, q);
         break;
     }
 }
@@ -638,7 +637,7 @@ do_send(void* arg)
             continue;
         }
 
-        q = ISC_LIST_HEAD(tinfo->unused_queries);
+        q = perf_list_head(tinfo->unused_queries);
         query_move(tinfo, q, prepend_outstanding);
         q->timestamp = ISC_UINT64_MAX;
 
@@ -765,7 +764,7 @@ process_timeouts(threadinfo_t* tinfo, uint64_t now)
     config = tinfo->config;
 
     /* Avoid locking unless we need to. */
-    q = ISC_LIST_TAIL(tinfo->outstanding_queries);
+    q = perf_list_tail(tinfo->outstanding_queries);
     if (q == NULL || q->timestamp > now || now - q->timestamp < config->timeout)
         return;
 
@@ -783,7 +782,7 @@ process_timeouts(threadinfo_t* tinfo, uint64_t now)
                 config->updates ? "Update" : "Query",
                 (unsigned int)(q - tinfo->queries));
         }
-        q = ISC_LIST_TAIL(tinfo->outstanding_queries);
+        q = perf_list_tail(tinfo->outstanding_queries);
     } while (q != NULL && q->timestamp < now && now - q->timestamp >= config->timeout);
 
     UNLOCK(&tinfo->lock);
@@ -1035,7 +1034,7 @@ cancel_queries(threadinfo_t* tinfo)
     struct query_info* q;
 
     while (true) {
-        q = ISC_LIST_TAIL(tinfo->outstanding_queries);
+        q = perf_list_tail(tinfo->outstanding_queries);
         if (q == NULL)
             break;
         query_move(tinfo, q, append_unused);
@@ -1079,11 +1078,11 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
     MUTEX_INIT(&tinfo->lock);
     COND_INIT(&tinfo->cond);
 
-    ISC_LIST_INIT(tinfo->outstanding_queries);
-    ISC_LIST_INIT(tinfo->unused_queries);
+    perf_list_init(tinfo->outstanding_queries);
+    perf_list_init(tinfo->unused_queries);
     for (i = 0; i < NQIDS; i++) {
-        ISC_LINK_INIT(&tinfo->queries[i], link);
-        ISC_LIST_APPEND(tinfo->unused_queries, &tinfo->queries[i], link);
+        perf_link_init(&tinfo->queries[i]);
+        perf_list_append(tinfo->unused_queries, &tinfo->queries[i]);
         tinfo->queries[i].list = &tinfo->unused_queries;
     }
 
