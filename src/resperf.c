@@ -37,7 +37,6 @@
 
 #include <isc/buffer.h>
 #include <isc/file.h>
-#include <isc/list.h>
 #include <isc/mem.h>
 #include <isc/print.h>
 #include <isc/region.h>
@@ -54,6 +53,7 @@
 #include "opt.h"
 #include "util.h"
 #include "os.h"
+#include "list.h"
 
 /*
  * Global stuff
@@ -74,7 +74,7 @@
 
 struct query_info;
 
-typedef ISC_LIST(struct query_info) query_list;
+typedef perf_list(struct query_info) query_list;
 
 typedef struct query_info {
     uint64_t sent_timestamp;
@@ -82,8 +82,7 @@ typedef struct query_info {
      * This link links the query into the list of outstanding
      * queries or the list of available query IDs.
      */
-    ISC_LINK(struct query_info)
-    link;
+    perf_link(struct query_info);
     /*
      * The list this query is on.
      */
@@ -324,14 +323,14 @@ setup(int argc, char** argv)
         perf_log_fatal("rampup_time and constant_traffic_time must not "
                        "both be 0");
 
-    ISC_LIST_INIT(outstanding_list);
-    ISC_LIST_INIT(instanding_list);
+    perf_list_init(outstanding_list);
+    perf_list_init(instanding_list);
     queries = isc_mem_get(mctx, max_outstanding * sizeof(query_info));
     if (queries == NULL)
         perf_log_fatal("out of memory");
     for (i = 0; i < max_outstanding; i++) {
-        ISC_LINK_INIT(&queries[i], link);
-        ISC_LIST_APPEND(instanding_list, &queries[i], link);
+        perf_link_init(&queries[i]);
+        perf_list_append(instanding_list, &queries[i]);
         queries[i].list = &instanding_list;
     }
 
@@ -485,7 +484,7 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
         perf_log_fatal("ran out of query data");
     isc_buffer_usedregion(lines, &used);
 
-    q = ISC_LIST_HEAD(instanding_list);
+    q = perf_list_head(instanding_list);
     if (!q)
         return (ISC_R_NOMORE);
     qid  = (q - queries) / nsocks;
@@ -506,14 +505,14 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
             return (ISC_R_FAILURE);
         }
 
-        ISC_LIST_UNLINK(instanding_list, q, link);
-        ISC_LIST_PREPEND(outstanding_list, q, link);
+        perf_list_unlink(instanding_list, q);
+        perf_list_prepend(outstanding_list, q);
         q->list = &outstanding_list;
 
         num_queries_sent++;
         num_queries_outstanding++;
 
-        q = ISC_LIST_HEAD(instanding_list);
+        q = perf_list_head(instanding_list);
         if (!q)
             return (ISC_R_NOMORE);
         qid  = (q - queries) / nsocks;
@@ -559,8 +558,8 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
         return (ISC_R_FAILURE);
     }
 
-    ISC_LIST_UNLINK(instanding_list, q, link);
-    ISC_LIST_PREPEND(outstanding_list, q, link);
+    perf_list_unlink(instanding_list, q);
+    perf_list_prepend(outstanding_list, q);
     q->list = &outstanding_list;
 
     num_queries_sent++;
@@ -630,8 +629,8 @@ try_process_response(unsigned int sockindex)
         return;
     }
 
-    ISC_LIST_UNLINK(outstanding_list, q, link);
-    ISC_LIST_APPEND(instanding_list, q, link);
+    perf_list_unlink(outstanding_list, q);
+    perf_list_append(instanding_list, q);
     q->list = &instanding_list;
 
     num_queries_outstanding--;
@@ -652,11 +651,11 @@ retire_old_queries(void)
     query_info* q;
 
     while (true) {
-        q = ISC_LIST_TAIL(outstanding_list);
+        q = perf_list_tail(outstanding_list);
         if (q == NULL || (time_now - q->sent_timestamp) < query_timeout)
             break;
-        ISC_LIST_UNLINK(outstanding_list, q, link);
-        ISC_LIST_APPEND(instanding_list, q, link);
+        perf_list_unlink(outstanding_list, q);
+        perf_list_append(instanding_list, q);
         q->list = &instanding_list;
 
         num_queries_outstanding--;
