@@ -23,11 +23,10 @@
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
+#include <errno.h>
 
 #include <netinet/in.h>
-
-#include <isc/file.h>
-#include <isc/parseint.h>
 
 #include "log.h"
 #include "opt.h"
@@ -58,7 +57,7 @@ typedef struct {
 static opt_t        opts[MAX_OPTS];
 static unsigned int nopts;
 static char         optstr[MAX_OPTS * 2 + 2];
-static const char*  progname;
+extern const char*  progname;
 
 void perf_opt_add(char c, perf_opttype_t type, const char* desc, const char* help,
     const char* defval, void* valp)
@@ -125,17 +124,22 @@ static uint32_t
 parse_uint(const char* desc, const char* str,
     unsigned int min, unsigned int max)
 {
-    uint32_t      val;
-    perf_result_t result;
+    unsigned long int val;
+    uint32_t          ret;
+    char*             endptr = 0;
 
-    val    = 0;
-    result = isc_parse_uint32(&val, str, 10);
-    if (result != ISC_R_SUCCESS || val < min || val > max) {
-        fprintf(stderr, "invalid %s: %s\n", desc, str);
-        perf_opt_usage();
-        exit(1);
+    errno = 0;
+    val   = strtoul(str, &endptr, 10);
+    if (!errno && str && *str && endptr && !*endptr && val <= UINT32_MAX) {
+        ret = (uint32_t)val;
+        if (ret >= min && ret <= max) {
+            return ret;
+        }
     }
-    return val;
+
+    fprintf(stderr, "invalid %s: %s\n", desc, str);
+    perf_opt_usage();
+    exit(1);
 }
 
 static double
@@ -176,8 +180,6 @@ void perf_opt_parse(int argc, char** argv)
     int          c;
     opt_t*       opt;
     unsigned int i;
-
-    progname = isc_file_basename(argv[0]);
 
     perf_opt_add('h', perf_opt_boolean, NULL, "print this help", NULL, NULL);
 

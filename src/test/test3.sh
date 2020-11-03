@@ -12,6 +12,7 @@
 ! ../dnsperf -m invalid
 ! ../dnsperf -n 43f8huishfs
 ! ../dnsperf -p 12345 unexpected argument
+! ../dnsperf -p 65536
 
 ! echo "" | ../dnsperf -y test:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8=
 ! echo "" | ../dnsperf -y hmac-md5:test:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8=

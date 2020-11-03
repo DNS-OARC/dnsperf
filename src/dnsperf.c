@@ -193,6 +193,8 @@ static isc_mem_t* mctx;
 
 static perf_datafile_t* input;
 
+const char* progname = "dnsperf";
+
 static void
 handle_sigint(int sig)
 {
