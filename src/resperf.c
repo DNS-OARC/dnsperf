@@ -202,6 +202,8 @@ static perf_dnstsigkey_t* tsigkey;
 
 static bool verbose;
 
+const char* progname = "resperf";
+
 static char*
 stringify(double value, int precision)
 {
