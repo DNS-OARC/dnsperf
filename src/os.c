@@ -26,7 +26,6 @@
 
 #include <sys/select.h>
 
-#include <isc/result.h>
 #include <isc/types.h>
 
 #include "log.h"
@@ -59,13 +58,13 @@ void perf_os_handlesignal(int sig, void (*handler)(int))
     }
 }
 
-isc_result_t
+perf_result_t
 perf_os_waituntilreadable(struct perf_net_socket* sock, int pipe_fd, int64_t timeout)
 {
     return perf_os_waituntilanyreadable(sock, 1, pipe_fd, timeout);
 }
 
-isc_result_t
+perf_result_t
 perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
     int64_t timeout)
 {
@@ -111,7 +110,7 @@ perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, i
     }
 }
 
-isc_result_t
+perf_result_t
 perf_os_waituntilanywritable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
     int64_t timeout)
 {

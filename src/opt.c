@@ -28,11 +28,11 @@
 
 #include <isc/file.h>
 #include <isc/parseint.h>
-#include <isc/result.h>
 
 #include "log.h"
 #include "opt.h"
 #include "util.h"
+#include "result.h"
 
 #define MAX_OPTS 64
 #define LINE_LENGTH 80
@@ -125,8 +125,8 @@ static uint32_t
 parse_uint(const char* desc, const char* str,
     unsigned int min, unsigned int max)
 {
-    uint32_t     val;
-    isc_result_t result;
+    uint32_t      val;
+    perf_result_t result;
 
     val    = 0;
     result = isc_parse_uint32(&val, str, 10);

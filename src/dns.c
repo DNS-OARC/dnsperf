@@ -42,7 +42,6 @@
 #include <isc/mem.h>
 #include <isc/parseint.h>
 #include <isc/region.h>
-#include <isc/result.h>
 #include <isc/util.h>
 
 #include <dns/callbacks.h>
@@ -131,7 +130,7 @@ perf_dns_createctx(bool updates)
 {
     isc_mem_t*     mctx;
     perf_dnsctx_t* ctx;
-    isc_result_t   result;
+    perf_result_t  result;
 
     if (!updates)
         return NULL;
@@ -141,7 +140,7 @@ perf_dns_createctx(bool updates)
     result = isc_mem_create(0, 0, &mctx);
     if (result != ISC_R_SUCCESS)
         perf_log_fatal("creating memory context: %s",
-            isc_result_totext(result));
+            perf_result_totext(result));
 #else
     isc_mem_create(&mctx);
 #endif
@@ -158,13 +157,13 @@ perf_dns_createctx(bool updates)
     result = dns_compress_init(&ctx->compress, 0, ctx->mctx);
     if (result != ISC_R_SUCCESS) {
         perf_log_fatal("creating compression context: %s",
-            isc_result_totext(result));
+            perf_result_totext(result));
     }
     dns_compress_setmethods(&ctx->compress, DNS_COMPRESS_GLOBAL14);
 
     result = isc_lex_create(ctx->mctx, 1024, &ctx->lexer);
     if (result != ISC_R_SUCCESS) {
-        perf_log_fatal("creating lexer: %s", isc_result_totext(result));
+        perf_log_fatal("creating lexer: %s", perf_result_totext(result));
     }
 
     return (ctx);
@@ -189,13 +188,13 @@ void perf_dns_destroyctx(perf_dnsctx_t** ctxp)
     isc_mem_destroy(&mctx);
 }
 
-static isc_result_t
+static perf_result_t
 name_fromstring(dns_name_t* name, const dns_name_t* origin,
     const char* str, unsigned int len,
     isc_buffer_t* target, const char* type)
 {
-    isc_buffer_t buffer;
-    isc_result_t result;
+    isc_buffer_t  buffer;
+    perf_result_t result;
 
     isc_buffer_constinit(&buffer, str, len);
     isc_buffer_add(&buffer, len);
@@ -219,7 +218,7 @@ perf_dns_parsetsigkey(const char* arg, isc_mem_t* mctx)
     perf_dnstsigkey_t* tsigkey;
     const char *       sep1, *sep2, *alg, *name, *secret;
     int                alglen, namelen;
-    isc_result_t       result;
+    perf_result_t      result;
 
     tsigkey = isc_mem_get(mctx, sizeof(*tsigkey));
     if (tsigkey == NULL) {
@@ -352,7 +351,7 @@ perf_dns_parseednsoption(const char* arg, isc_mem_t* mctx)
     perf_dnsednsoption_t* option;
     uint16_t              code;
     isc_buffer_t          save;
-    isc_result_t          result;
+    perf_result_t         result;
 
     copy = isc_mem_strdup(mctx, arg);
     if (copy == NULL) {
@@ -423,7 +422,7 @@ void perf_dns_destroyednsoption(perf_dnsednsoption_t** optionp)
 /*
  * Appends an OPT record to the packet.
  */
-static isc_result_t
+static perf_result_t
 add_edns(isc_buffer_t* packet, bool dnssec,
     perf_dnsednsoption_t* option)
 {
@@ -622,7 +621,7 @@ hmac_sign(perf_dnstsigkey_t* tsigkey, hmac_ctx_t* ctx, unsigned char* digest,
 /*
  * Appends a TSIG record to the packet.
  */
-static isc_result_t
+static perf_result_t
 add_tsig(isc_buffer_t* packet, perf_dnstsigkey_t* tsigkey)
 {
     unsigned char* base;
@@ -690,7 +689,7 @@ add_tsig(isc_buffer_t* packet, perf_dnstsigkey_t* tsigkey)
     return (ISC_R_SUCCESS);
 }
 
-static isc_result_t
+static perf_result_t
 build_query(const isc_textregion_t* line, isc_buffer_t* msg)
 {
     char*            domain_str;
@@ -699,7 +698,7 @@ build_query(const isc_textregion_t* line, isc_buffer_t* msg)
     dns_offsets_t    offsets;
     isc_textregion_t qtype_r;
     dns_rdatatype_t  qtype;
-    isc_result_t     result;
+    perf_result_t    result;
 
     domain_str = line->base;
     domain_len = strcspn(line->base, WHITESPACE);
@@ -742,7 +741,7 @@ token_equals(const isc_textregion_t* token, const char* str)
 /*
  * Reads one line containing an individual update for a dynamic update message.
  */
-static isc_result_t
+static perf_result_t
 read_update_line(perf_dnsctx_t* ctx, const isc_textregion_t* line, char* str,
     dns_name_t* zname, int want_ttl, int need_type,
     int want_rdata, int need_rdata, dns_name_t* name,
@@ -754,7 +753,7 @@ read_update_line(perf_dnsctx_t* ctx, const isc_textregion_t* line, char* str,
     isc_buffer_t         buffer;
     isc_textregion_t     src;
     dns_rdatacallbacks_t callbacks;
-    isc_result_t         result;
+    perf_result_t        result;
 
     while (isspace(*str & 0xff))
         str++;
@@ -820,7 +819,7 @@ read_update_line(perf_dnsctx_t* ctx, const isc_textregion_t* line, char* str,
     isc_buffer_add(&buffer, strlen(str));
     result = isc_lex_openbuffer(ctx->lexer, &buffer);
     if (result != ISC_R_SUCCESS) {
-        perf_log_warning("setting up lexer: %s", isc_result_totext(result));
+        perf_log_warning("setting up lexer: %s", perf_result_totext(result));
         return (result);
     }
     dns_rdatacallbacks_init_stdio(&callbacks);
@@ -838,7 +837,7 @@ read_update_line(perf_dnsctx_t* ctx, const isc_textregion_t* line, char* str,
 /*
  * Reads a complete dynamic update message and sends it.
  */
-static isc_result_t
+static perf_result_t
 build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
     isc_buffer_t* msg)
 {
@@ -858,7 +857,7 @@ build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
     dns_rdataclass_t rdclass;
     dns_rdata_t      rdata;
     uint16_t         rdlen;
-    isc_result_t     result;
+    perf_result_t    result;
 
     /* Reset compression context */
     dns_compress_rollback(&ctx->compress, 0);
@@ -891,7 +890,7 @@ build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
     result = dns_name_towire(zname, &ctx->compress, msg);
     if (result != ISC_R_SUCCESS) {
         perf_log_warning("error rendering zone name: %s",
-            isc_result_totext(result));
+            perf_result_totext(result));
         goto done;
     }
     isc_buffer_putuint16(msg, dns_rdatatype_soa);
@@ -968,7 +967,7 @@ build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
         result = dns_name_towire(oname, &ctx->compress, msg);
         if (result != ISC_R_SUCCESS) {
             perf_log_warning("rendering record name: %s",
-                isc_result_totext(result));
+                perf_result_totext(result));
             goto done;
         }
         if (isc_buffer_availablelength(msg) < 10) {
@@ -987,7 +986,7 @@ build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
             result = dns_rdata_towire(&rdata, &ctx->compress, msg);
             if (result != ISC_R_SUCCESS) {
                 perf_log_warning("rendering rdata: %s",
-                    isc_result_totext(result));
+                    perf_result_totext(result));
                 goto done;
             }
             rdlen = msg->used - rdlenbuf.used - 2;
@@ -1008,15 +1007,15 @@ done:
     return result;
 }
 
-isc_result_t
+perf_result_t
 perf_dns_buildrequest(perf_dnsctx_t* ctx, const isc_textregion_t* record,
     uint16_t qid,
     bool edns, bool dnssec,
     perf_dnstsigkey_t* tsigkey, perf_dnsednsoption_t* option,
     isc_buffer_t* msg)
 {
-    unsigned int flags;
-    isc_result_t result;
+    unsigned int  flags;
+    perf_result_t result;
 
     if (ctx != NULL)
         flags = dns_opcode_update << 11;

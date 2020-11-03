@@ -143,13 +143,13 @@ reopen_file(perf_datafile_t* dfile)
     }
 }
 
-static isc_result_t
+static perf_result_t
 read_more(perf_datafile_t* dfile)
 {
     unsigned char*         data;
     size_t                 size;
     ssize_t                n;
-    isc_result_t           result;
+    perf_result_t          result;
     struct perf_net_socket sock = { .mode = sock_file, .fd = dfile->fd };
 
     if (!dfile->is_file && dfile->pipe_fd >= 0) {
@@ -175,12 +175,12 @@ read_more(perf_datafile_t* dfile)
     return (ISC_R_SUCCESS);
 }
 
-static isc_result_t
+static perf_result_t
 read_one_line(perf_datafile_t* dfile, isc_buffer_t* lines)
 {
-    const char*  cur;
-    unsigned int length, curlen, nrem;
-    isc_result_t result;
+    const char*   cur;
+    unsigned int  length, curlen, nrem;
+    perf_result_t result;
 
     while (ISC_TRUE) {
         /* Get the current line */
@@ -225,12 +225,12 @@ read_one_line(perf_datafile_t* dfile, isc_buffer_t* lines)
     return (ISC_R_SUCCESS);
 }
 
-isc_result_t
+perf_result_t
 perf_datafile_next(perf_datafile_t* dfile, isc_buffer_t* lines,
     bool is_update)
 {
-    const char*  current;
-    isc_result_t result;
+    const char*   current;
+    perf_result_t result;
 
     LOCK(&dfile->lock);
 
