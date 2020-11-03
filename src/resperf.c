@@ -40,7 +40,6 @@
 #include <isc/mem.h>
 #include <isc/print.h>
 #include <isc/region.h>
-#include <isc/result.h>
 #include <isc/sockaddr.h>
 #include <isc/types.h>
 
@@ -54,6 +53,7 @@
 #include "util.h"
 #include "os.h"
 #include "list.h"
+#include "result.h"
 
 /*
  * Global stuff
@@ -227,10 +227,10 @@ setup(int argc, char** argv)
     const char*  _mode = 0;
 
 #ifdef HAVE_ISC_MEM_CREATE_RESULT
-    isc_result_t result = isc_mem_create(0, 0, &mctx);
+    perf_result_t result = isc_mem_create(0, 0, &mctx);
     if (result != ISC_R_SUCCESS)
         perf_log_fatal("creating memory context: %s",
-            isc_result_totext(result));
+            perf_result_totext(result));
 #else
     isc_mem_create(&mctx);
 #endif
@@ -467,7 +467,7 @@ init_buckets(int n)
  * Send a query based on a line of input.
  * Return ISC_R_NOMORE if we ran out of query IDs.
  */
-static isc_result_t
+static perf_result_t
 do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
 {
     query_info*    q;
@@ -476,7 +476,7 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
     isc_region_t   used;
     unsigned char* base;
     unsigned int   length;
-    isc_result_t   result;
+    perf_result_t  result;
 
     isc_buffer_clear(lines);
     result = perf_datafile_next(input, lines, false);
@@ -697,7 +697,7 @@ int main(int argc, char** argv)
     unsigned char outpacket_buffer[MAX_EDNS_PACKET];
     unsigned int  max_packet_size;
     unsigned int  current_sock;
-    isc_result_t  result;
+    perf_result_t result;
 
     printf("DNS Resolution Performance Testing Tool\n"
            "Version " PACKAGE_VERSION "\n\n");

@@ -28,7 +28,6 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
-#include <isc/result.h>
 #include <isc/sockaddr.h>
 
 #include <bind9/getaddresses.h>
@@ -68,7 +67,7 @@ void perf_net_parseserver(int family, const char* name, unsigned int port,
 {
     isc_sockaddr_t addrs[8];
     int            count, i;
-    isc_result_t   result;
+    perf_result_t  result;
 
     if (port == 0) {
         fprintf(stderr, "server port cannot be 0\n");

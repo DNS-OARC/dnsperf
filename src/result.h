@@ -17,31 +17,22 @@
  * limitations under the License.
  */
 
-#include "result.h"
+#ifndef PERF_RESULT_H
+#define PERF_RESULT_H 1
 
-#ifndef PERF_DATAFILE_H
-#define PERF_DATAFILE_H 1
+#include <isc/result.h>
 
-#include <stdbool.h>
+typedef unsigned int perf_result_t;
 
-#include <isc/types.h>
+#define PERF_R_CANCELED ISC_R_CANCELED
+#define PERF_R_EOF ISC_R_EOF
+#define PERF_R_FAILURE ISC_R_FAILURE
+#define PERF_R_INVALIDFILE ISC_R_INVALIDFILE
+#define PERF_R_NOMORE ISC_R_NOMORE
+#define PERF_R_NOSPACE ISC_R_NOSPACE
+#define PERF_R_SUCCESS ISC_R_SUCCESS
+#define PERF_R_TIMEDOUT ISC_R_TIMEDOUT
 
-typedef struct perf_datafile perf_datafile_t;
-
-perf_datafile_t*
-perf_datafile_open(isc_mem_t* mctx, const char* filename);
-
-void perf_datafile_close(perf_datafile_t** dfilep);
-
-void perf_datafile_setmaxruns(perf_datafile_t* dfile, unsigned int maxruns);
-
-void perf_datafile_setpipefd(perf_datafile_t* dfile, int pipe_fd);
-
-perf_result_t
-perf_datafile_next(perf_datafile_t* dfile, isc_buffer_t* lines,
-    bool is_update);
-
-unsigned int
-perf_datafile_nruns(const perf_datafile_t* dfile);
+#define perf_result_totext(r) isc_result_totext(r)
 
 #endif

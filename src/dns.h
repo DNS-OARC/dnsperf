@@ -17,10 +17,12 @@
  * limitations under the License.
  */
 
-#include <isc/types.h>
+#include "result.h"
 
 #ifndef PERF_DNS_H
 #define PERF_DNS_H 1
+
+#include <isc/types.h>
 
 #define MAX_UDP_PACKET 512
 #define MAX_EDNS_PACKET 4096
@@ -46,7 +48,7 @@ perf_dns_createctx(bool updates);
 
 void perf_dns_destroyctx(perf_dnsctx_t** ctxp);
 
-isc_result_t
+perf_result_t
 perf_dns_buildrequest(perf_dnsctx_t* ctx, const isc_textregion_t* record,
     uint16_t qid,
     bool edns, bool dnssec,

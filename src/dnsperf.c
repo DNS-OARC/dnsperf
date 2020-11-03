@@ -47,7 +47,6 @@
 #include <isc/netaddr.h>
 #include <isc/print.h>
 #include <isc/region.h>
-#include <isc/result.h>
 #include <isc/sockaddr.h>
 #include <isc/types.h>
 
@@ -388,10 +387,10 @@ setup(int argc, char** argv, config_t* config)
     const char* mode        = 0;
 
 #ifdef HAVE_ISC_MEM_CREATE_RESULT
-    isc_result_t result = isc_mem_create(0, 0, &mctx);
+    perf_result_t result = isc_mem_create(0, 0, &mctx);
     if (result != ISC_R_SUCCESS)
         perf_log_fatal("creating memory context: %s",
-            isc_result_totext(result));
+            perf_result_totext(result));
 #else
     isc_mem_create(&mctx);
 #endif
@@ -594,7 +593,7 @@ do_send(void* arg)
     unsigned char*  base;
     unsigned int    length;
     int             n, i, any_inprogress = 0;
-    isc_result_t    result;
+    perf_result_t   result;
 
     tinfo           = (threadinfo_t*)arg;
     config          = tinfo->config;
@@ -1157,7 +1156,7 @@ int main(int argc, char** argv)
     stats_t                total_stats;
     threadinfo_t           stats_thread;
     unsigned int           i;
-    isc_result_t           result;
+    perf_result_t          result;
     struct perf_net_socket sock = { .mode = sock_pipe };
 
     printf("DNS Performance Testing Tool\n"
