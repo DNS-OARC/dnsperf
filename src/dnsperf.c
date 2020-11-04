@@ -677,8 +677,8 @@ do_send(void* arg)
 
         isc_buffer_clear(&lines);
         result = perf_datafile_next(input, &lines, config->updates);
-        if (result != ISC_R_SUCCESS) {
-            if (result == ISC_R_INVALIDFILE)
+        if (result != PERF_R_SUCCESS) {
+            if (result == PERF_R_INVALIDFILE)
                 perf_log_fatal("input file contains no data");
             break;
         }
@@ -691,7 +691,7 @@ do_send(void* arg)
             qid, config->edns,
             config->dnssec, config->tsigkey,
             config->edns_option, &msg);
-        if (result != ISC_R_SUCCESS) {
+        if (result != PERF_R_SUCCESS) {
             LOCK(&tinfo->lock);
             query_move(tinfo, q, prepend_unused);
             UNLOCK(&tinfo->lock);
@@ -1013,7 +1013,7 @@ do_interval_stats(void* arg)
     wait_for_start();
     while (perf_os_waituntilreadable(&sock, threadpipe[0],
                tinfo->config->stats_interval)
-           == ISC_R_TIMEDOUT) {
+           == PERF_R_TIMEDOUT) {
         now = get_time();
         sum_stats(tinfo->config, &total);
         interval_time = now - last_interval_time;
@@ -1219,7 +1219,7 @@ int main(int argc, char** argv)
     sock.fd = mainpipe[0];
     result  = perf_os_waituntilreadable(&sock, intrpipe[0],
         times.stop_time - times.start_time);
-    if (result == ISC_R_CANCELED)
+    if (result == PERF_R_CANCELED)
         interrupted = true;
 
     times.end_time = get_time();

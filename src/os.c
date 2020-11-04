@@ -78,7 +78,7 @@ perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, i
     maxfd = 0;
     for (i = 0; i < nfds; i++) {
         if (socks[i].have_more)
-            return (ISC_R_SUCCESS);
+            return (PERF_R_SUCCESS);
         FD_SET(socks[i].fd, &read_fds);
         if (socks[i].fd > maxfd)
             maxfd = socks[i].fd;
@@ -100,13 +100,13 @@ perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, i
             char __s[256];
             perf_log_fatal("select(): %s", perf_strerror_r(errno, __s, sizeof(__s)));
         }
-        return (ISC_R_CANCELED);
+        return (PERF_R_CANCELED);
     } else if (n == 0) {
-        return (ISC_R_TIMEDOUT);
+        return (PERF_R_TIMEDOUT);
     } else if (FD_ISSET(pipe_fd, &read_fds)) {
-        return (ISC_R_CANCELED);
+        return (PERF_R_CANCELED);
     } else {
-        return (ISC_R_SUCCESS);
+        return (PERF_R_SUCCESS);
     }
 }
 
@@ -145,12 +145,12 @@ perf_os_waituntilanywritable(struct perf_net_socket* socks, unsigned int nfds, i
             char __s[256];
             perf_log_fatal("select(): %s", perf_strerror_r(errno, __s, sizeof(__s)));
         }
-        return (ISC_R_CANCELED);
+        return (PERF_R_CANCELED);
     } else if (n == 0) {
-        return (ISC_R_TIMEDOUT);
+        return (PERF_R_TIMEDOUT);
     } else if (FD_ISSET(pipe_fd, &read_fds)) {
-        return (ISC_R_CANCELED);
+        return (PERF_R_CANCELED);
     } else {
-        return (ISC_R_SUCCESS);
+        return (PERF_R_SUCCESS);
     }
 }

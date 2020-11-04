@@ -467,7 +467,7 @@ init_buckets(int n)
 
 /*
  * Send a query based on a line of input.
- * Return ISC_R_NOMORE if we ran out of query IDs.
+ * Return PERF_R_NOMORE if we ran out of query IDs.
  */
 static perf_result_t
 do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
@@ -482,13 +482,13 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
 
     isc_buffer_clear(lines);
     result = perf_datafile_next(input, lines, false);
-    if (result != ISC_R_SUCCESS)
+    if (result != PERF_R_SUCCESS)
         perf_log_fatal("ran out of query data");
     isc_buffer_usedregion(lines, &used);
 
     q = perf_list_head(instanding_list);
     if (!q)
-        return (ISC_R_NOMORE);
+        return (PERF_R_NOMORE);
     qid  = (q - queries) / nsocks;
     sock = (q - queries) % nsocks;
 
@@ -504,7 +504,7 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
                     perf_log_warning("failed to send packet: %s", perf_strerror_r(errno, __s, sizeof(__s)));
                 }
             }
-            return (ISC_R_FAILURE);
+            return (PERF_R_FAILURE);
         }
 
         perf_list_unlink(instanding_list, q);
@@ -516,7 +516,7 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
 
         q = perf_list_head(instanding_list);
         if (!q)
-            return (ISC_R_NOMORE);
+            return (PERF_R_NOMORE);
         qid  = (q - queries) / nsocks;
         sock = (q - queries) % nsocks;
     }
@@ -524,7 +524,7 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
     isc_buffer_clear(msg);
     result = perf_dns_buildrequest(NULL, (isc_textregion_t*)&used,
         qid, edns, dnssec, tsigkey, NULL, msg);
-    if (result != ISC_R_SUCCESS)
+    if (result != PERF_R_SUCCESS)
         return (result);
 
     q->sent_timestamp = time_now;
@@ -534,10 +534,10 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
         if (verbose) {
             perf_log_warning("failed to send packet: socket %d not ready", sock);
         }
-        return (ISC_R_FAILURE);
+        return (PERF_R_FAILURE);
     case -1:
         perf_log_warning("failed to send packet: socket %d readiness check timed out", sock);
-        return (ISC_R_FAILURE);
+        return (PERF_R_FAILURE);
     default:
         break;
     }
@@ -557,7 +557,7 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
                 perf_log_warning("failed to send packet: %s", perf_strerror_r(errno, __s, sizeof(__s)));
             }
         }
-        return (ISC_R_FAILURE);
+        return (PERF_R_FAILURE);
     }
 
     perf_list_unlink(instanding_list, q);
@@ -567,7 +567,7 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
     num_queries_sent++;
     num_queries_outstanding++;
 
-    return ISC_R_SUCCESS;
+    return PERF_R_SUCCESS;
 }
 
 static void
@@ -767,9 +767,9 @@ int main(int argc, char** argv)
             }
             if (should_send > 0) {
                 result = do_one_line(&lines, &msg);
-                if (result == ISC_R_SUCCESS)
+                if (result == PERF_R_SUCCESS)
                     find_bucket(time_now)->queries++;
-                if (result == ISC_R_NOMORE) {
+                if (result == PERF_R_NOMORE) {
                     printf("[Status] Reached %u outstanding queries\n",
                         max_outstanding);
                     enter_wait_phase();
