@@ -22,6 +22,7 @@
 #ifndef PERF_DNS_H
 #define PERF_DNS_H 1
 
+#include <stdint.h>
 #include <isc/types.h>
 
 #define MAX_UDP_PACKET 512

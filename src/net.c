@@ -27,11 +27,7 @@
 #include <poll.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-
-#include <isc/sockaddr.h>
-
-#include <bind9/getaddresses.h>
-
+#include <netdb.h>
 #include <arpa/inet.h>
 
 #include "log.h"
@@ -62,12 +58,74 @@ int perf_net_parsefamily(const char* family)
     }
 }
 
-void perf_net_parseserver(int family, const char* name, unsigned int port,
-    isc_sockaddr_t* addr)
+void perf_sockaddr_fromin(perf_sockaddr_t* sockaddr, const struct in_addr* in, in_port_t port)
 {
-    isc_sockaddr_t addrs[8];
-    int            count, i;
-    perf_result_t  result;
+    memset(sockaddr, 0, sizeof(*sockaddr));
+    sockaddr->sa.sin.sin_family = AF_INET;
+    sockaddr->sa.sin.sin_addr   = *in;
+    sockaddr->sa.sin.sin_port   = htons(port);
+    sockaddr->length            = sizeof(sockaddr->sa.sin);
+}
+
+void perf_sockaddr_fromin6(perf_sockaddr_t* sockaddr, const struct in6_addr* in, in_port_t port)
+{
+    memset(sockaddr, 0, sizeof(*sockaddr));
+    sockaddr->sa.sin6.sin6_family = AF_INET6;
+    sockaddr->sa.sin6.sin6_addr   = *in;
+    sockaddr->sa.sin6.sin6_port   = htons(port);
+    sockaddr->length              = sizeof(sockaddr->sa.sin6);
+}
+
+in_port_t perf_sockaddr_port(const perf_sockaddr_t* sockaddr)
+{
+    switch (sockaddr->sa.sa.sa_family) {
+    case AF_INET:
+        return sockaddr->sa.sin.sin_port;
+    case AF_INET6:
+        return sockaddr->sa.sin6.sin6_port;
+    default:
+        break;
+    }
+    return 0;
+}
+
+void perf_sockaddr_setport(perf_sockaddr_t* sockaddr, in_port_t port)
+{
+    switch (sockaddr->sa.sa.sa_family) {
+    case AF_INET:
+        sockaddr->sa.sin.sin_port = port;
+        break;
+    case AF_INET6:
+        sockaddr->sa.sin6.sin6_port = port;
+        break;
+    default:
+        break;
+    }
+}
+
+void perf_sockaddr_format(const perf_sockaddr_t* sockaddr, char* buf, size_t len)
+{
+    const void* src;
+
+    *buf = 0;
+
+    switch (sockaddr->sa.sa.sa_family) {
+    case AF_INET:
+        src = &sockaddr->sa.sin.sin_addr;
+        break;
+    case AF_INET6:
+        src = &sockaddr->sa.sin6.sin6_addr;
+        break;
+    default:
+        return;
+    }
+
+    (void)inet_ntop(sockaddr->sa.sa.sa_family, src, buf, len);
+}
+
+void perf_net_parseserver(int family, const char* name, unsigned int port, perf_sockaddr_t* addr)
+{
+    struct addrinfo* ai;
 
     if (port == 0) {
         fprintf(stderr, "server port cannot be 0\n");
@@ -75,15 +133,27 @@ void perf_net_parseserver(int family, const char* name, unsigned int port,
         exit(1);
     }
 
-    count  = 0;
-    result = bind9_getaddresses(name, port, addrs, 8, &count);
-    if (result == ISC_R_SUCCESS) {
-        for (i = 0; i < count; i++) {
-            if (isc_sockaddr_pf(&addrs[i]) == family || family == AF_UNSPEC) {
-                *addr = addrs[i];
+    if (getaddrinfo(name, 0, 0, &ai) == 0) {
+        struct addrinfo* a;
+
+        for (a = ai; a; a = a->ai_next) {
+            if (a->ai_family == family || family == AF_UNSPEC) {
+                switch (a->ai_family) {
+                case AF_INET:
+                    perf_sockaddr_fromin(addr, &((struct sockaddr_in*)a->ai_addr)->sin_addr, port);
+                    break;
+                case AF_INET6:
+                    perf_sockaddr_fromin6(addr, &((struct sockaddr_in6*)a->ai_addr)->sin6_addr, port);
+                    break;
+                default:
+                    continue;
+                }
+
+                freeaddrinfo(ai);
                 return;
             }
         }
+        freeaddrinfo(ai);
     }
 
     fprintf(stderr, "invalid server address %s\n", name);
@@ -92,40 +162,50 @@ void perf_net_parseserver(int family, const char* name, unsigned int port,
 }
 
 void perf_net_parselocal(int family, const char* name, unsigned int port,
-    isc_sockaddr_t* addr)
+    perf_sockaddr_t* addr)
 {
     struct in_addr  in4a;
     struct in6_addr in6a;
 
     if (name == NULL) {
-        isc_sockaddr_anyofpf(addr, family);
-        isc_sockaddr_setport(addr, port);
+        switch (family) {
+        case AF_INET:
+            in4a.s_addr = INADDR_ANY;
+            perf_sockaddr_fromin(addr, &in4a, port);
+            return;
+        case AF_INET6:
+            perf_sockaddr_fromin6(addr, &in6addr_any, port);
+            return;
+        default:
+            break;
+        }
     } else if (inet_pton(AF_INET, name, &in4a) == 1) {
-        isc_sockaddr_fromin(addr, &in4a, port);
+        perf_sockaddr_fromin(addr, &in4a, port);
+        return;
     } else if (inet_pton(AF_INET6, name, &in6a) == 1) {
-        isc_sockaddr_fromin6(addr, &in6a, port);
-    } else {
-        fprintf(stderr, "invalid local address %s\n", name);
-        perf_opt_usage();
-        exit(1);
+        perf_sockaddr_fromin6(addr, &in6a, port);
+        return;
     }
+
+    fprintf(stderr, "invalid local address %s\n", name);
+    perf_opt_usage();
+    exit(1);
 }
 
-struct perf_net_socket perf_net_opensocket(enum perf_net_mode mode, const isc_sockaddr_t* server, const isc_sockaddr_t* local,
-    unsigned int offset, int bufsize)
+struct perf_net_socket perf_net_opensocket(enum perf_net_mode mode, const perf_sockaddr_t* server, const perf_sockaddr_t* local, unsigned int offset, int bufsize)
 {
     int                    family;
-    isc_sockaddr_t         tmp;
+    perf_sockaddr_t        tmp;
     int                    port;
     int                    ret;
     int                    flags;
     struct perf_net_socket sock = { .mode = mode, .is_ready = 1 };
 
-    family = isc_sockaddr_pf(server);
+    family = server->sa.sa.sa_family;
 
-    if (isc_sockaddr_pf(local) != family)
-        perf_log_fatal("server and local addresses have "
-                       "different families");
+    if (local->sa.sa.sa_family != family) {
+        perf_log_fatal("server and local addresses have different families");
+    }
 
     switch (mode) {
     case sock_udp:
@@ -178,15 +258,15 @@ struct perf_net_socket perf_net_opensocket(enum perf_net_mode mode, const isc_so
 #endif
 
     tmp  = *local;
-    port = isc_sockaddr_getport(&tmp);
+    port = perf_sockaddr_port(&tmp);
     if (port != 0 && offset != 0) {
         port += offset;
         if (port >= 0xFFFF)
             perf_log_fatal("port %d out of range", port);
-        isc_sockaddr_setport(&tmp, port);
+        perf_sockaddr_setport(&tmp, port);
     }
 
-    if (bind(sock.fd, &tmp.type.sa, tmp.length) == -1) {
+    if (bind(sock.fd, &tmp.sa.sa, tmp.length) == -1) {
         char __s[256];
         perf_log_fatal("bind: %s", perf_strerror_r(errno, __s, sizeof(__s)));
     }
@@ -213,7 +293,7 @@ struct perf_net_socket perf_net_opensocket(enum perf_net_mode mode, const isc_so
         perf_log_fatal("fcntl(F_SETFL)");
 
     if (mode == sock_tcp || mode == sock_tls) {
-        if (connect(sock.fd, &server->type.sa, server->length)) {
+        if (connect(sock.fd, &server->sa.sa, server->length)) {
             if (errno == EINPROGRESS) {
                 sock.is_ready = 0;
             } else {
