@@ -438,7 +438,7 @@ add_edns(isc_buffer_t* packet, bool dnssec,
 
     if (isc_buffer_availablelength(packet) < total_length) {
         perf_log_warning("failed to add OPT to query packet");
-        return (ISC_R_NOSPACE);
+        return (PERF_R_NOSPACE);
     }
 
     base = isc_buffer_base(packet);
@@ -460,7 +460,7 @@ add_edns(isc_buffer_t* packet, bool dnssec,
 
     base[11]++; /* increment record count */
 
-    return (ISC_R_SUCCESS);
+    return (PERF_R_SUCCESS);
 }
 
 static void
@@ -644,7 +644,7 @@ add_tsig(isc_buffer_t* packet, perf_dnstsigkey_t* tsigkey)
     totallen = name_r.length + 10 + rdlen;
     if (totallen > isc_buffer_availablelength(packet)) {
         perf_log_warning("adding TSIG: out of space");
-        return (ISC_R_NOSPACE);
+        return (PERF_R_NOSPACE);
     }
 
     base = isc_buffer_base(packet);
@@ -686,7 +686,7 @@ add_tsig(isc_buffer_t* packet, perf_dnstsigkey_t* tsigkey)
 
     base[11]++; /* increment record count */
 
-    return (ISC_R_SUCCESS);
+    return (PERF_R_SUCCESS);
 }
 
 static perf_result_t
@@ -713,23 +713,23 @@ build_query(const isc_textregion_t* line, isc_buffer_t* msg)
     result = name_fromstring(&name, dns_rootname, domain_str, domain_len,
         msg, "domain");
     if (result != ISC_R_SUCCESS)
-        return (result);
+        return isc2perf_result(result);
 
     if (qtype_r.length == 0) {
         perf_log_warning("invalid query input format: %s", line->base);
-        return (ISC_R_FAILURE);
+        return (PERF_R_FAILURE);
     }
     result = dns_rdatatype_fromtext(&qtype, &qtype_r);
     if (result != ISC_R_SUCCESS) {
         perf_log_warning("invalid query type: %.*s",
             (int)qtype_r.length, qtype_r.base);
-        return (ISC_R_FAILURE);
+        return (PERF_R_FAILURE);
     }
 
     isc_buffer_putuint16(msg, qtype);
     isc_buffer_putuint16(msg, dns_rdataclass_in);
 
-    return ISC_R_SUCCESS;
+    return PERF_R_SUCCESS;
 }
 
 static bool
@@ -763,7 +763,7 @@ read_update_line(perf_dnsctx_t* ctx, const isc_textregion_t* line, char* str,
     curr_len = strcspn(curr_str, WHITESPACE);
     result   = name_fromstring(name, zname, curr_str, curr_len, NULL, "owner");
     if (result != ISC_R_SUCCESS)
-        return (result);
+        return isc2perf_result(result);
     str += curr_len;
     while (isspace(*str & 0xff))
         str++;
@@ -777,7 +777,7 @@ read_update_line(perf_dnsctx_t* ctx, const isc_textregion_t* line, char* str,
         result     = dns_ttl_fromtext(&src, ttlp);
         if (result != ISC_R_SUCCESS) {
             perf_log_warning("invalid ttl: %.*s", curr_len, curr_str);
-            return (result);
+            return isc2perf_result(result);
         }
         str += curr_len;
         while (isspace(*str & 0xff))
@@ -789,16 +789,16 @@ read_update_line(perf_dnsctx_t* ctx, const isc_textregion_t* line, char* str,
     curr_len = strcspn(curr_str, WHITESPACE);
     if (curr_len == 0) {
         if (!need_type)
-            return (ISC_R_SUCCESS);
+            return (PERF_R_SUCCESS);
         perf_log_warning("invalid update command: %s", line->base);
-        return (ISC_R_SUCCESS);
+        return (PERF_R_SUCCESS);
     }
     src.base   = curr_str;
     src.length = curr_len;
     result     = dns_rdatatype_fromtext(typep, &src);
     if (result != ISC_R_SUCCESS) {
         perf_log_warning("invalid type: %.*s", curr_len, curr_str);
-        return (result);
+        return isc2perf_result(result);
     }
     str += curr_len;
     while (isspace(*str & 0xff))
@@ -806,13 +806,13 @@ read_update_line(perf_dnsctx_t* ctx, const isc_textregion_t* line, char* str,
 
     /* Read the rdata */
     if (!want_rdata)
-        return (ISC_R_SUCCESS);
+        return (PERF_R_SUCCESS);
 
     if (*str == 0) {
         if (!need_rdata)
-            return (ISC_R_SUCCESS);
+            return (PERF_R_SUCCESS);
         perf_log_warning("invalid update command: %s", line->base);
-        return (ISC_R_FAILURE);
+        return (PERF_R_FAILURE);
     }
 
     isc_buffer_init(&buffer, str, strlen(str));
@@ -820,7 +820,7 @@ read_update_line(perf_dnsctx_t* ctx, const isc_textregion_t* line, char* str,
     result = isc_lex_openbuffer(ctx->lexer, &buffer);
     if (result != ISC_R_SUCCESS) {
         perf_log_warning("setting up lexer: %s", perf_result_totext(result));
-        return (result);
+        return isc2perf_result(result);
     }
     dns_rdatacallbacks_init_stdio(&callbacks);
     result = dns_rdata_fromtext(rdata, dns_rdataclass_in, *typep, ctx->lexer,
@@ -828,10 +828,10 @@ read_update_line(perf_dnsctx_t* ctx, const isc_textregion_t* line, char* str,
     (void)isc_lex_close(ctx->lexer);
     if (result != ISC_R_SUCCESS) {
         perf_log_warning("parsing rdata: %s", str);
-        return (result);
+        return isc2perf_result(result);
     }
 
-    return (ISC_R_SUCCESS);
+    return (PERF_R_SUCCESS);
 }
 
 /*
@@ -951,28 +951,28 @@ build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
             is_update = false;
         } else {
             perf_log_warning("invalid update command: %s", input.base);
-            result = ISC_R_FAILURE;
+            result = PERF_R_FAILURE;
         }
 
-        if (result != ISC_R_SUCCESS)
+        if (result != PERF_R_SUCCESS)
             goto done;
 
         if (!is_update && updates > 0) {
             perf_log_warning("prereqs must precede updates");
-            result = ISC_R_FAILURE;
+            result = PERF_R_FAILURE;
             goto done;
         }
 
         /* Render record */
         result = dns_name_towire(oname, &ctx->compress, msg);
-        if (result != ISC_R_SUCCESS) {
+        if (result != PERF_R_SUCCESS) {
             perf_log_warning("rendering record name: %s",
                 perf_result_totext(result));
             goto done;
         }
         if (isc_buffer_availablelength(msg) < 10) {
             perf_log_warning("out of space in message buffer");
-            result = ISC_R_NOSPACE;
+            result = PERF_R_NOSPACE;
             goto done;
         }
 
@@ -1001,7 +1001,7 @@ build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
     msgbase[7] = prereqs; /* ANCOUNT = number of prereqs */
     msgbase[9] = updates; /* AUCOUNT = number of updates */
 
-    result = ISC_R_SUCCESS;
+    result = PERF_R_SUCCESS;
 
 done:
     return result;
@@ -1035,20 +1035,20 @@ perf_dns_buildrequest(perf_dnsctx_t* ctx, const isc_textregion_t* record,
     } else {
         result = build_query(record, msg);
     }
-    if (result != ISC_R_SUCCESS)
+    if (result != PERF_R_SUCCESS)
         return (result);
 
     if (edns) {
         result = add_edns(msg, dnssec, option);
-        if (result != ISC_R_SUCCESS)
+        if (result != PERF_R_SUCCESS)
             return (result);
     }
 
     if (tsigkey != NULL) {
         result = add_tsig(msg, tsigkey);
-        if (result != ISC_R_SUCCESS)
+        if (result != PERF_R_SUCCESS)
             return (result);
     }
 
-    return (ISC_R_SUCCESS);
+    return (PERF_R_SUCCESS);
 }

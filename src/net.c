@@ -481,9 +481,9 @@ int perf_net_sockready(struct perf_net_socket* sock, int pipe_fd, int64_t timeou
 
         if (!sock->is_ssl_ready) {
             switch (perf_os_waituntilanywritable(sock, 1, pipe_fd, timeout)) {
-            case ISC_R_TIMEDOUT:
+            case PERF_R_TIMEDOUT:
                 return -1;
-            case ISC_R_SUCCESS: {
+            case PERF_R_SUCCESS: {
                 int       error = 0;
                 socklen_t len   = (socklen_t)sizeof(error);
 
@@ -553,9 +553,9 @@ int perf_net_sockready(struct perf_net_socket* sock, int pipe_fd, int64_t timeou
         }
 
         switch (perf_os_waituntilanywritable(sock, 1, pipe_fd, timeout)) {
-        case ISC_R_TIMEDOUT:
+        case PERF_R_TIMEDOUT:
             return -1;
-        case ISC_R_SUCCESS: {
+        case PERF_R_SUCCESS: {
             int       error = 0;
             socklen_t len   = (socklen_t)sizeof(error);
 

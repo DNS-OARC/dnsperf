@@ -21,6 +21,7 @@
 #define PERF_RESULT_H 1
 
 #include <isc/result.h>
+#include <assert.h>
 
 typedef unsigned int perf_result_t;
 
@@ -34,5 +35,21 @@ typedef unsigned int perf_result_t;
 #define PERF_R_TIMEDOUT ISC_R_TIMEDOUT
 
 #define perf_result_totext(r) isc_result_totext(r)
+
+static inline perf_result_t isc2perf_result(isc_result_t r) {
+    switch (r) {
+        case ISC_R_CANCELED:
+        case ISC_R_EOF:
+        case ISC_R_FAILURE:
+        case ISC_R_INVALIDFILE:
+        case ISC_R_NOMORE:
+        case ISC_R_NOSPACE:
+        case ISC_R_SUCCESS:
+        case ISC_R_TIMEDOUT:
+            return (perf_result_t)r;
+        default:
+            assert(0);
+    }
+}
 
 #endif

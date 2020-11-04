@@ -154,7 +154,7 @@ read_more(perf_datafile_t* dfile)
 
     if (!dfile->is_file && dfile->pipe_fd >= 0) {
         result = perf_os_waituntilreadable(&sock, dfile->pipe_fd, -1);
-        if (result != ISC_R_SUCCESS)
+        if (result != PERF_R_SUCCESS)
             return (result);
     }
 
@@ -164,7 +164,7 @@ read_more(perf_datafile_t* dfile)
 
     n = read(dfile->fd, data, size);
     if (n < 0)
-        return (ISC_R_FAILURE);
+        return (PERF_R_FAILURE);
 
     isc_buffer_add(&dfile->data, n);
     nul_terminate(dfile);
@@ -172,7 +172,7 @@ read_more(perf_datafile_t* dfile)
     if (dfile->is_file && isc_buffer_usedlength(&dfile->data) == dfile->size)
         dfile->cached = ISC_TRUE;
 
-    return (ISC_R_SUCCESS);
+    return (PERF_R_SUCCESS);
 }
 
 static perf_result_t
@@ -195,12 +195,12 @@ read_one_line(perf_datafile_t* dfile, isc_buffer_t* lines)
         if (curlen == nrem) {
             if (!dfile->cached) {
                 result = read_more(dfile);
-                if (result != ISC_R_SUCCESS)
+                if (result != PERF_R_SUCCESS)
                     return (result);
             }
             if (isc_buffer_remaininglength(&dfile->data) == 0) {
                 dfile->nruns++;
-                return (ISC_R_EOF);
+                return (PERF_R_EOF);
             }
             if (isc_buffer_remaininglength(&dfile->data) > nrem)
                 continue;
@@ -222,7 +222,7 @@ read_one_line(perf_datafile_t* dfile, isc_buffer_t* lines)
     isc_buffer_putmem(lines, cur, curlen);
     isc_buffer_putuint8(lines, 0);
 
-    return (ISC_R_SUCCESS);
+    return (PERF_R_SUCCESS);
 }
 
 perf_result_t
@@ -235,14 +235,14 @@ perf_datafile_next(perf_datafile_t* dfile, isc_buffer_t* lines,
     LOCK(&dfile->lock);
 
     if (dfile->maxruns > 0 && dfile->maxruns == dfile->nruns) {
-        result = ISC_R_EOF;
+        result = PERF_R_EOF;
         goto done;
     }
 
     result = read_one_line(dfile, lines);
-    if (result == ISC_R_EOF) {
+    if (result == PERF_R_EOF) {
         if (!dfile->read_any) {
-            result = ISC_R_INVALIDFILE;
+            result = PERF_R_INVALIDFILE;
             goto done;
         }
         if (dfile->maxruns != dfile->nruns) {
@@ -250,7 +250,7 @@ perf_datafile_next(perf_datafile_t* dfile, isc_buffer_t* lines,
             result = read_one_line(dfile, lines);
         }
     }
-    if (result != ISC_R_SUCCESS) {
+    if (result != PERF_R_SUCCESS) {
         goto done;
     }
     dfile->read_any = ISC_TRUE;
@@ -259,15 +259,15 @@ perf_datafile_next(perf_datafile_t* dfile, isc_buffer_t* lines,
         while (ISC_TRUE) {
             current = isc_buffer_used(lines);
             result  = read_one_line(dfile, lines);
-            if (result == ISC_R_EOF && dfile->maxruns != dfile->nruns) {
+            if (result == PERF_R_EOF && dfile->maxruns != dfile->nruns) {
                 reopen_file(dfile);
             }
-            if (result != ISC_R_SUCCESS || strcasecmp(current, "send") == 0)
+            if (result != PERF_R_SUCCESS || strcasecmp(current, "send") == 0)
                 break;
         };
     }
 
-    result = ISC_R_SUCCESS;
+    result = PERF_R_SUCCESS;
 done:
     UNLOCK(&dfile->lock);
     return (result);
