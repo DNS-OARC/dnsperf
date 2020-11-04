@@ -36,11 +36,9 @@
 #include <signal.h>
 
 #include <isc/buffer.h>
-#include <isc/file.h>
 #include <isc/mem.h>
 #include <isc/print.h>
 #include <isc/region.h>
-#include <isc/sockaddr.h>
 #include <isc/types.h>
 
 #include <dns/result.h>
@@ -96,8 +94,8 @@ static query_info* queries;
 
 static isc_mem_t* mctx;
 
-static isc_sockaddr_t          server_addr;
-static isc_sockaddr_t          local_addr;
+static perf_sockaddr_t         server_addr;
+static perf_sockaddr_t         local_addr;
 static unsigned int            nsocks;
 static struct perf_net_socket* socks;
 static enum perf_net_mode      mode;
@@ -339,7 +337,7 @@ setup(int argc, char** argv)
     if (family != NULL)
         sock_family = perf_net_parsefamily(family);
     perf_net_parseserver(sock_family, server_name, server_port, &server_addr);
-    perf_net_parselocal(isc_sockaddr_pf(&server_addr), local_name,
+    perf_net_parselocal(server_addr.sa.sa.sa_family, local_name,
         local_port, &local_addr);
 
     input = perf_datafile_open(mctx, filename);
@@ -545,7 +543,7 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
     base   = isc_buffer_base(msg);
     length = isc_buffer_usedlength(msg);
     if (perf_net_sendto(&socks[sock], base, length, 0,
-            &server_addr.type.sa, server_addr.length)
+            &server_addr.sa.sa, server_addr.length)
         < 1) {
         if (errno == EINPROGRESS) {
             if (verbose) {
@@ -731,7 +729,7 @@ int main(int argc, char** argv)
     time_now              = get_time();
     time_of_program_start = time_now;
 
-    printf("[Status] Command line: %s", isc_file_basename(argv[0]));
+    printf("[Status] Command line: %s", progname);
     for (i = 1; i < argc; i++) {
         printf(" %s", argv[i]);
     }

@@ -42,12 +42,10 @@
 #define ISC_BUFFER_USEINLINE
 
 #include <isc/buffer.h>
-#include <isc/file.h>
 #include <isc/mem.h>
 #include <isc/netaddr.h>
 #include <isc/print.h>
 #include <isc/region.h>
-#include <isc/sockaddr.h>
 #include <isc/types.h>
 
 #include <dns/rcode.h>
@@ -91,8 +89,8 @@ typedef struct {
     uint32_t              threads;
     uint32_t              maxruns;
     uint64_t              timelimit;
-    isc_sockaddr_t        server_addr;
-    isc_sockaddr_t        local_addr;
+    perf_sockaddr_t       server_addr;
+    perf_sockaddr_t       local_addr;
     uint64_t              timeout;
     uint32_t              bufsize;
     bool                  edns;
@@ -206,18 +204,16 @@ handle_sigint(int sig)
 static void
 print_initial_status(const config_t* config)
 {
-    time_t        now;
-    isc_netaddr_t addr;
-    char          buf[ISC_NETADDR_FORMATSIZE], ct[32];
-    int           i;
+    time_t now;
+    char   buf[255], ct[32];
+    int    i;
 
-    printf("[Status] Command line: %s", isc_file_basename(config->argv[0]));
+    printf("[Status] Command line: %s", progname);
     for (i = 1; i < config->argc; i++)
         printf(" %s", config->argv[i]);
     printf("\n");
 
-    isc_netaddr_fromsockaddr(&addr, &config->server_addr);
-    isc_netaddr_format(&addr, buf, sizeof(buf));
+    perf_sockaddr_format(&config->server_addr, buf, sizeof(buf));
     printf("[Status] Sending %s (to %s)\n",
         config->updates ? "updates" : "queries", buf);
 
@@ -485,7 +481,7 @@ setup(int argc, char** argv, config_t* config)
         config->family = perf_net_parsefamily(family);
     perf_net_parseserver(config->family, server_name, server_port,
         &config->server_addr);
-    perf_net_parselocal(isc_sockaddr_pf(&config->server_addr),
+    perf_net_parselocal(config->server_addr.sa.sa.sa_family,
         local_name, local_port, &config->local_addr);
 
     input = perf_datafile_open(mctx, filename);
@@ -710,7 +706,7 @@ do_send(void* arg)
         }
         q->timestamp = now;
 
-        n = perf_net_sendto(q->sock, base, length, 0, &config->server_addr.type.sa,
+        n = perf_net_sendto(q->sock, base, length, 0, &config->server_addr.sa.sa,
             config->server_addr.length);
         if (n < 0) {
             if (errno == EINPROGRESS) {
