@@ -484,7 +484,7 @@ setup(int argc, char** argv, config_t* config)
     perf_net_parselocal(config->server_addr.sa.sa.sa_family,
         local_name, local_port, &config->local_addr);
 
-    input = perf_datafile_open(mctx, filename);
+    input = perf_datafile_open(filename);
 
     if (config->maxruns == 0 && config->timelimit == 0)
         config->maxruns = 1;
@@ -700,6 +700,7 @@ do_send(void* arg)
 
         now = get_time();
         if (config->verbose) {
+            free(q->desc);
             q->desc = strdup(lines.base);
             if (q->desc == NULL)
                 perf_log_fatal("out of memory");

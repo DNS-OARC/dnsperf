@@ -23,11 +23,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
-
-#define ISC_BUFFER_USEINLINE
+#include <assert.h>
 
 #include <isc/buffer.h>
-#include <isc/mem.h>
 
 #include "datafile.h"
 #include "log.h"
@@ -36,71 +34,49 @@
 
 #define BUFFER_SIZE (64 * 1024)
 
-#ifndef ISC_TRUE
-#define ISC_TRUE true
-#endif
-#ifndef ISC_FALSE
-#define ISC_FALSE false
-#endif
-
 struct perf_datafile {
-    isc_mem_t*      mctx;
     pthread_mutex_t lock;
     int             pipe_fd;
     int             fd;
     bool            is_file;
-    size_t          size;
+    size_t          size, at, have;
     bool            cached;
     char            databuf[BUFFER_SIZE + 1];
-    isc_buffer_t    data;
     unsigned int    maxruns;
     unsigned int    nruns;
     bool            read_any;
 };
 
-static inline void
-nul_terminate(perf_datafile_t* dfile)
-{
-    unsigned char* data;
-
-    data  = isc_buffer_used(&dfile->data);
-    *data = '\0';
-}
-
-perf_datafile_t*
-perf_datafile_open(isc_mem_t* mctx, const char* filename)
+perf_datafile_t* perf_datafile_open(const char* filename)
 {
     perf_datafile_t* dfile;
     struct stat      buf;
 
-    dfile = isc_mem_get(mctx, sizeof(*dfile));
-    if (dfile == NULL) {
+    dfile = calloc(1, sizeof(perf_datafile_t));
+    if (!dfile) {
         perf_log_fatal("out of memory");
         return 0; // fix clang scan-build
     }
 
-    dfile->mctx = mctx;
     MUTEX_INIT(&dfile->lock);
     dfile->pipe_fd  = -1;
-    dfile->is_file  = ISC_FALSE;
+    dfile->is_file  = false;
     dfile->size     = 0;
-    dfile->cached   = ISC_FALSE;
+    dfile->cached   = false;
     dfile->maxruns  = 1;
     dfile->nruns    = 0;
-    dfile->read_any = ISC_FALSE;
-    isc_buffer_init(&dfile->data, dfile->databuf, BUFFER_SIZE);
-    if (filename == NULL) {
+    dfile->read_any = false;
+    if (!filename) {
         dfile->fd = STDIN_FILENO;
     } else {
         dfile->fd = open(filename, O_RDONLY);
         if (dfile->fd < 0)
             perf_log_fatal("unable to open file: %s", filename);
         if (fstat(dfile->fd, &buf) == 0 && S_ISREG(buf.st_mode)) {
-            dfile->is_file = ISC_TRUE;
+            dfile->is_file = true;
             dfile->size    = buf.st_size;
         }
     }
-    nul_terminate(dfile);
 
     return dfile;
 }
@@ -109,15 +85,17 @@ void perf_datafile_close(perf_datafile_t** dfilep)
 {
     perf_datafile_t* dfile;
 
-    ISC_INSIST(dfilep != NULL && *dfilep != NULL);
+    assert(dfilep);
+    assert(*dfilep);
 
     dfile   = *dfilep;
-    *dfilep = NULL;
+    *dfilep = 0;
 
-    if (dfile->fd >= 0 && dfile->fd != STDIN_FILENO)
+    if (dfile->fd >= 0 && dfile->fd != STDIN_FILENO) {
         close(dfile->fd);
+    }
     MUTEX_DESTROY(&dfile->lock);
-    isc_mem_put(dfile->mctx, dfile, sizeof(*dfile));
+    free(dfile);
 }
 
 void perf_datafile_setpipefd(perf_datafile_t* dfile, int pipe_fd)
@@ -130,24 +108,22 @@ void perf_datafile_setmaxruns(perf_datafile_t* dfile, unsigned int maxruns)
     dfile->maxruns = maxruns;
 }
 
-static void
-reopen_file(perf_datafile_t* dfile)
+static void reopen_file(perf_datafile_t* dfile)
 {
     if (dfile->cached) {
-        isc_buffer_first(&dfile->data);
+        dfile->at = 0;
     } else {
-        if (lseek(dfile->fd, 0L, SEEK_SET) < 0)
+        if (lseek(dfile->fd, 0L, SEEK_SET) < 0) {
             perf_log_fatal("cannot reread input");
-        isc_buffer_clear(&dfile->data);
-        nul_terminate(dfile);
+        }
+        dfile->at         = 0;
+        dfile->have       = 0;
+        dfile->databuf[0] = 0;
     }
 }
 
-static perf_result_t
-read_more(perf_datafile_t* dfile)
+static perf_result_t read_more(perf_datafile_t* dfile)
 {
-    unsigned char*         data;
-    size_t                 size;
     ssize_t                n;
     perf_result_t          result;
     struct perf_net_socket sock = { .mode = sock_file, .fd = dfile->fd };
@@ -158,58 +134,62 @@ read_more(perf_datafile_t* dfile)
             return (result);
     }
 
-    isc_buffer_compact(&dfile->data);
-    data = isc_buffer_used(&dfile->data);
-    size = isc_buffer_availablelength(&dfile->data);
+    if (dfile->at && dfile->at < dfile->have) {
+        memmove(dfile->databuf, &dfile->databuf[dfile->at], dfile->have - dfile->at);
+        dfile->have -= dfile->at;
+        dfile->at = 0;
+    }
 
-    n = read(dfile->fd, data, size);
-    if (n < 0)
+    n = read(dfile->fd, &dfile->databuf[dfile->at], sizeof(dfile->databuf) - dfile->have - 1);
+    if (n < 0) {
         return (PERF_R_FAILURE);
+    }
 
-    isc_buffer_add(&dfile->data, n);
-    nul_terminate(dfile);
+    dfile->have += n;
+    dfile->databuf[dfile->have] = 0;
 
-    if (dfile->is_file && isc_buffer_usedlength(&dfile->data) == dfile->size)
-        dfile->cached = ISC_TRUE;
+    if (dfile->is_file && dfile->have == dfile->size) {
+        dfile->cached = true;
+    }
 
     return (PERF_R_SUCCESS);
 }
 
-static perf_result_t
-read_one_line(perf_datafile_t* dfile, isc_buffer_t* lines)
+static perf_result_t read_one_line(perf_datafile_t* dfile, isc_buffer_t* lines)
 {
     const char*   cur;
-    unsigned int  length, curlen, nrem;
+    size_t        length, curlen, nrem;
     perf_result_t result;
 
-    while (ISC_TRUE) {
+    while (true) {
         /* Get the current line */
-        cur    = isc_buffer_current(&dfile->data);
+        cur    = &dfile->databuf[dfile->at];
         curlen = strcspn(cur, "\n");
 
         /*
          * If the current line contains the rest of the buffer,
          * we need to read more (unless the full file is cached).
          */
-        nrem = isc_buffer_remaininglength(&dfile->data);
+        nrem = dfile->have - dfile->at;
         if (curlen == nrem) {
             if (!dfile->cached) {
                 result = read_more(dfile);
                 if (result != PERF_R_SUCCESS)
                     return (result);
             }
-            if (isc_buffer_remaininglength(&dfile->data) == 0) {
+            if (dfile->have - dfile->at == 0) {
                 dfile->nruns++;
                 return (PERF_R_EOF);
             }
-            if (isc_buffer_remaininglength(&dfile->data) > nrem)
+            if (dfile->have - dfile->at > nrem)
                 continue;
         }
 
         /* We now have a line.  Advance the buffer past it. */
-        isc_buffer_forward(&dfile->data, curlen);
-        if (isc_buffer_remaininglength(&dfile->data) > 0)
-            isc_buffer_forward(&dfile->data, 1);
+        dfile->at += curlen;
+        if (dfile->have - dfile->at > 0) {
+            dfile->at += 1;
+        }
 
         /* If the line is empty or a comment, we need to try again. */
         if (curlen > 0 && cur[0] != ';')
@@ -219,15 +199,13 @@ read_one_line(perf_datafile_t* dfile, isc_buffer_t* lines)
     length = isc_buffer_availablelength(lines);
     if (curlen > length - 1)
         curlen = length - 1;
-    isc_buffer_putmem(lines, cur, curlen);
+    isc_buffer_putmem(lines, (unsigned char*)cur, curlen);
     isc_buffer_putuint8(lines, 0);
 
     return (PERF_R_SUCCESS);
 }
 
-perf_result_t
-perf_datafile_next(perf_datafile_t* dfile, isc_buffer_t* lines,
-    bool is_update)
+perf_result_t perf_datafile_next(perf_datafile_t* dfile, isc_buffer_t* lines, bool is_update)
 {
     const char*   current;
     perf_result_t result;
@@ -253,10 +231,10 @@ perf_datafile_next(perf_datafile_t* dfile, isc_buffer_t* lines,
     if (result != PERF_R_SUCCESS) {
         goto done;
     }
-    dfile->read_any = ISC_TRUE;
+    dfile->read_any = true;
 
     if (is_update) {
-        while (ISC_TRUE) {
+        while (true) {
             current = isc_buffer_used(lines);
             result  = read_one_line(dfile, lines);
             if (result == PERF_R_EOF && dfile->maxruns != dfile->nruns) {
@@ -264,7 +242,7 @@ perf_datafile_next(perf_datafile_t* dfile, isc_buffer_t* lines,
             }
             if (result != PERF_R_SUCCESS || strcasecmp(current, "send") == 0)
                 break;
-        };
+        }
     }
 
     result = PERF_R_SUCCESS;
@@ -273,8 +251,7 @@ done:
     return (result);
 }
 
-unsigned int
-perf_datafile_nruns(const perf_datafile_t* dfile)
+unsigned int perf_datafile_nruns(const perf_datafile_t* dfile)
 {
     return dfile->nruns;
 }
