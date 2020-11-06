@@ -23,25 +23,18 @@
 #define PERF_DATAFILE_H 1
 
 #include <stdbool.h>
-
 #include <isc/types.h>
 
 typedef struct perf_datafile perf_datafile_t;
 
-perf_datafile_t*
-perf_datafile_open(isc_mem_t* mctx, const char* filename);
+perf_datafile_t* perf_datafile_open(const char* filename);
 
 void perf_datafile_close(perf_datafile_t** dfilep);
-
 void perf_datafile_setmaxruns(perf_datafile_t* dfile, unsigned int maxruns);
-
 void perf_datafile_setpipefd(perf_datafile_t* dfile, int pipe_fd);
 
-perf_result_t
-perf_datafile_next(perf_datafile_t* dfile, isc_buffer_t* lines,
-    bool is_update);
+perf_result_t perf_datafile_next(perf_datafile_t* dfile, isc_buffer_t* lines, bool is_update);
 
-unsigned int
-perf_datafile_nruns(const perf_datafile_t* dfile);
+unsigned int perf_datafile_nruns(const perf_datafile_t* dfile);
 
 #endif

@@ -340,7 +340,7 @@ setup(int argc, char** argv)
     perf_net_parselocal(server_addr.sa.sa.sa_family, local_name,
         local_port, &local_addr);
 
-    input = perf_datafile_open(mctx, filename);
+    input = perf_datafile_open(filename);
 
     if (dnssec)
         edns = true;
