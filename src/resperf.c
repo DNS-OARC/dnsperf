@@ -346,7 +346,7 @@ setup(int argc, char** argv)
         edns = true;
 
     if (tsigkey_str != NULL)
-        tsigkey = perf_dns_parsetsigkey(tsigkey_str, mctx);
+        tsigkey = perf_dns_parsetsigkey(tsigkey_str);
 
     socks = isc_mem_get(mctx, nsocks * sizeof(*socks));
     if (socks == NULL)
