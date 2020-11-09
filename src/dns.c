@@ -32,12 +32,6 @@
 #include <isc/base64.h>
 #include <isc/buffer.h>
 #include <isc/hex.h>
-#ifdef HAVE_ISC_HMACMD5_H
-#include <isc/hmacmd5.h>
-#endif
-#ifdef HAVE_ISC_HMACSHA_H
-#include <isc/hmacsha.h>
-#endif
 #include <isc/lex.h>
 #include <isc/mem.h>
 #include <isc/parseint.h>
@@ -88,19 +82,13 @@ typedef enum {
 } hmac_type_t;
 
 typedef union {
-#ifdef HAVE_ISC_HMACMD5_H
-    isc_hmacmd5_t hmacmd5;
-#endif
-#ifdef HAVE_ISC_HMACSHA_H
-    isc_hmacsha1_t   hmacsha1;
-    isc_hmacsha224_t hmacsha224;
-    isc_hmacsha256_t hmacsha256;
-    isc_hmacsha384_t hmacsha384;
-    isc_hmacsha512_t hmacsha512;
-#endif
-#if !defined(HAVE_ISC_HMACMD5_H) && !defined(HAVE_ISC_HMACSHA_H)
+    // isc_hmacmd5_t hmacmd5;
+    // isc_hmacsha1_t   hmacsha1;
+    // isc_hmacsha224_t hmacsha224;
+    // isc_hmacsha256_t hmacsha256;
+    // isc_hmacsha384_t hmacsha384;
+    // isc_hmacsha512_t hmacsha512;
     int dummy;
-#endif
 } hmac_ctx_t;
 
 struct perf_dnstsigkey {
@@ -209,24 +197,21 @@ name_fromstring(dns_name_t* name, const dns_name_t* origin,
         (key)->alg.base   = TSIG_HMAC##type##_NAME;         \
         (key)->alg.length = sizeof(TSIG_HMAC##type##_NAME); \
         (key)->hmactype   = TSIG_HMAC##type;                \
-        (key)->digestlen  = ISC_##type##_DIGESTLENGTH;      \
     } while (0)
+// (key)->digestlen  = ISC_##type##_DIGESTLENGTH;
 
-perf_dnstsigkey_t*
-perf_dns_parsetsigkey(const char* arg, isc_mem_t* mctx)
+perf_dnstsigkey_t* perf_dns_parsetsigkey(const char* arg)
 {
     perf_dnstsigkey_t* tsigkey;
     const char *       sep1, *sep2, *alg, *name, *secret;
     int                alglen, namelen;
     perf_result_t      result;
 
-    tsigkey = isc_mem_get(mctx, sizeof(*tsigkey));
-    if (tsigkey == NULL) {
+    tsigkey = calloc(1, sizeof(*tsigkey));
+    if (!tsigkey) {
         perf_log_fatal("out of memory");
         return 0; // fix clang scan-build
     }
-    memset(tsigkey, 0, sizeof(*tsigkey));
-    tsigkey->mctx = mctx;
 
     sep1 = strchr(arg, ':');
     if (sep1 == NULL) {
@@ -255,41 +240,17 @@ perf_dns_parsetsigkey(const char* arg, isc_mem_t* mctx)
     /* Algorithm */
 
     if (alg == NULL || strncasecmp(alg, "hmac-md5:", 9) == 0) {
-#ifdef HAVE_ISC_HMACMD5_H
         SET_KEY(tsigkey, MD5);
-#else
-        perf_log_fatal("no support for HMACMD5");
-#endif
     } else if (strncasecmp(alg, "hmac-sha1:", 10) == 0) {
-#ifdef HAVE_ISC_HMACSHA_H
         SET_KEY(tsigkey, SHA1);
-#else
-        perf_log_fatal("no support for HMACSHA1");
-#endif
     } else if (strncasecmp(alg, "hmac-sha224:", 12) == 0) {
-#ifdef HAVE_ISC_HMACSHA_H
         SET_KEY(tsigkey, SHA224);
-#else
-        perf_log_fatal("no support for HMACSHA224");
-#endif
     } else if (strncasecmp(alg, "hmac-sha256:", 12) == 0) {
-#ifdef HAVE_ISC_HMACSHA_H
         SET_KEY(tsigkey, SHA256);
-#else
-        perf_log_fatal("no support for HMACSHA256");
-#endif
     } else if (strncasecmp(alg, "hmac-sha384:", 12) == 0) {
-#ifdef HAVE_ISC_HMACSHA_H
         SET_KEY(tsigkey, SHA384);
-#else
-        perf_log_fatal("no support for HMACSHA384");
-#endif
     } else if (strncasecmp(alg, "hmac-sha512:", 12) == 0) {
-#ifdef HAVE_ISC_HMACSHA_H
         SET_KEY(tsigkey, SHA512);
-#else
-        perf_log_fatal("no support for HMACSHA512");
-#endif
     } else {
         perf_log_warning("invalid TSIG algorithm %.*s", alglen, alg);
         perf_opt_usage();
@@ -332,14 +293,11 @@ perf_dns_parsetsigkey(const char* arg, isc_mem_t* mctx)
 
 void perf_dns_destroytsigkey(perf_dnstsigkey_t** tsigkeyp)
 {
-    perf_dnstsigkey_t* tsigkey;
+    assert(tsigkeyp);
+    assert(*tsigkeyp);
 
-    INSIST(tsigkeyp != NULL && *tsigkeyp != NULL);
-
-    tsigkey   = *tsigkeyp;
-    *tsigkeyp = NULL;
-
-    isc_mem_put(tsigkey->mctx, tsigkey, sizeof(*tsigkey));
+    free(*tsigkeyp);
+    *tsigkeyp = 0;
 }
 
 perf_dnsednsoption_t*
@@ -466,54 +424,36 @@ add_edns(isc_buffer_t* packet, bool dnssec,
 static void
 hmac_init(perf_dnstsigkey_t* tsigkey, hmac_ctx_t* ctx)
 {
-    unsigned char* secret;
-    unsigned int   length;
-
-    secret = isc_buffer_base(&tsigkey->secret);
-    length = isc_buffer_usedlength(&tsigkey->secret);
+    // unsigned char* secret;
+    // unsigned int   length;
+    //
+    // secret = isc_buffer_base(&tsigkey->secret);
+    // length = isc_buffer_usedlength(&tsigkey->secret);
 
     switch (tsigkey->hmactype) {
     case TSIG_HMACMD5:
-#ifdef HAVE_ISC_HMACMD5_H
-        isc_hmacmd5_init(&ctx->hmacmd5, secret, length);
-#else
+        // isc_hmacmd5_init(&ctx->hmacmd5, secret, length);
         perf_log_fatal("no support for HMACMD5");
-#endif
         break;
     case TSIG_HMACSHA1:
-#ifdef HAVE_ISC_HMACSHA_H
-        isc_hmacsha1_init(&ctx->hmacsha1, secret, length);
-#else
+        // isc_hmacsha1_init(&ctx->hmacsha1, secret, length);
         perf_log_fatal("no support for HMACSHA1");
-#endif
         break;
     case TSIG_HMACSHA224:
-#ifdef HAVE_ISC_HMACSHA_H
-        isc_hmacsha224_init(&ctx->hmacsha224, secret, length);
-#else
+        // isc_hmacsha224_init(&ctx->hmacsha224, secret, length);
         perf_log_fatal("no support for HMACSHA224");
-#endif
         break;
     case TSIG_HMACSHA256:
-#ifdef HAVE_ISC_HMACSHA_H
-        isc_hmacsha256_init(&ctx->hmacsha256, secret, length);
-#else
+        // isc_hmacsha256_init(&ctx->hmacsha256, secret, length);
         perf_log_fatal("no support for HMACSHA256");
-#endif
         break;
     case TSIG_HMACSHA384:
-#ifdef HAVE_ISC_HMACSHA_H
-        isc_hmacsha384_init(&ctx->hmacsha384, secret, length);
-#else
+        // isc_hmacsha384_init(&ctx->hmacsha384, secret, length);
         perf_log_fatal("no support for HMACSHA384");
-#endif
         break;
     case TSIG_HMACSHA512:
-#ifdef HAVE_ISC_HMACSHA_H
-        isc_hmacsha512_init(&ctx->hmacsha512, secret, length);
-#else
+        // isc_hmacsha512_init(&ctx->hmacsha512, secret, length);
         perf_log_fatal("no support for HMACSHA512");
-#endif
         break;
     }
 }
@@ -524,46 +464,28 @@ hmac_update(perf_dnstsigkey_t* tsigkey, hmac_ctx_t* ctx,
 {
     switch (tsigkey->hmactype) {
     case TSIG_HMACMD5:
-#ifdef HAVE_ISC_HMACMD5_H
-        isc_hmacmd5_update(&ctx->hmacmd5, data, length);
-#else
+        // isc_hmacmd5_update(&ctx->hmacmd5, data, length);
         perf_log_fatal("no support for HMACMD5");
-#endif
         break;
     case TSIG_HMACSHA1:
-#ifdef HAVE_ISC_HMACSHA_H
-        isc_hmacsha1_update(&ctx->hmacsha1, data, length);
-#else
+        // isc_hmacsha1_update(&ctx->hmacsha1, data, length);
         perf_log_fatal("no support for HMACSHA1");
-#endif
         break;
     case TSIG_HMACSHA224:
-#ifdef HAVE_ISC_HMACSHA_H
-        isc_hmacsha224_update(&ctx->hmacsha224, data, length);
-#else
+        // isc_hmacsha224_update(&ctx->hmacsha224, data, length);
         perf_log_fatal("no support for HMACSHA224");
-#endif
         break;
     case TSIG_HMACSHA256:
-#ifdef HAVE_ISC_HMACSHA_H
-        isc_hmacsha256_update(&ctx->hmacsha256, data, length);
-#else
+        // isc_hmacsha256_update(&ctx->hmacsha256, data, length);
         perf_log_fatal("no support for HMACSHA256");
-#endif
         break;
     case TSIG_HMACSHA384:
-#ifdef HAVE_ISC_HMACSHA_H
-        isc_hmacsha384_update(&ctx->hmacsha384, data, length);
-#else
+        // isc_hmacsha384_update(&ctx->hmacsha384, data, length);
         perf_log_fatal("no support for HMACSHA384");
-#endif
         break;
     case TSIG_HMACSHA512:
-#ifdef HAVE_ISC_HMACSHA_H
-        isc_hmacsha512_update(&ctx->hmacsha512, data, length);
-#else
+        // isc_hmacsha512_update(&ctx->hmacsha512, data, length);
         perf_log_fatal("no support for HMACSHA512");
-#endif
         break;
     }
 }
@@ -574,46 +496,28 @@ hmac_sign(perf_dnstsigkey_t* tsigkey, hmac_ctx_t* ctx, unsigned char* digest,
 {
     switch (tsigkey->hmactype) {
     case TSIG_HMACMD5:
-#ifdef HAVE_ISC_HMACMD5_H
-        isc_hmacmd5_sign(&ctx->hmacmd5, digest);
-#else
+        // isc_hmacmd5_sign(&ctx->hmacmd5, digest);
         perf_log_fatal("no support for HMACMD5");
-#endif
         break;
     case TSIG_HMACSHA1:
-#ifdef HAVE_ISC_HMACSHA_H
-        isc_hmacsha1_sign(&ctx->hmacsha1, digest, digestlen);
-#else
+        // isc_hmacsha1_sign(&ctx->hmacsha1, digest, digestlen);
         perf_log_fatal("no support for HMACSHA1");
-#endif
         break;
     case TSIG_HMACSHA224:
-#ifdef HAVE_ISC_HMACSHA_H
-        isc_hmacsha224_sign(&ctx->hmacsha224, digest, digestlen);
-#else
+        // isc_hmacsha224_sign(&ctx->hmacsha224, digest, digestlen);
         perf_log_fatal("no support for HMACSHA224");
-#endif
         break;
     case TSIG_HMACSHA256:
-#ifdef HAVE_ISC_HMACSHA_H
-        isc_hmacsha256_sign(&ctx->hmacsha256, digest, digestlen);
-#else
+        // isc_hmacsha256_sign(&ctx->hmacsha256, digest, digestlen);
         perf_log_fatal("no support for HMACSHA256");
-#endif
         break;
     case TSIG_HMACSHA384:
-#ifdef HAVE_ISC_HMACSHA_H
-        isc_hmacsha384_sign(&ctx->hmacsha384, digest, digestlen);
-#else
+        // isc_hmacsha384_sign(&ctx->hmacsha384, digest, digestlen);
         perf_log_fatal("no support for HMACSHA384");
-#endif
         break;
     case TSIG_HMACSHA512:
-#ifdef HAVE_ISC_HMACSHA_H
-        isc_hmacsha512_sign(&ctx->hmacsha512, digest, digestlen);
-#else
+        // isc_hmacsha512_sign(&ctx->hmacsha512, digest, digestlen);
         perf_log_fatal("no support for HMACSHA512");
-#endif
         break;
     }
 }

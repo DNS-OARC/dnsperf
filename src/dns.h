@@ -34,8 +34,7 @@ typedef struct perf_dnsctx        perf_dnsctx_t;
 
 extern const char* perf_dns_rcode_strings[];
 
-perf_dnstsigkey_t*
-perf_dns_parsetsigkey(const char* arg, isc_mem_t* mctx);
+perf_dnstsigkey_t* perf_dns_parsetsigkey(const char* arg);
 
 void perf_dns_destroytsigkey(perf_dnstsigkey_t** tsigkeyp);
 

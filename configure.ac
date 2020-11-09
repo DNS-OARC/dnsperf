@@ -126,8 +126,6 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <isc/buffer.h>]],
 )
 AC_MSG_RESULT([$returns])
 
-AC_CHECK_HEADERS([isc/hmacmd5.h isc/hmacsha.h])
-
 # Checks for sizes
 AX_TYPE_SOCKLEN_T
 AX_SA_LEN

@@ -494,7 +494,7 @@ setup(int argc, char** argv, config_t* config)
         config->edns = true;
 
     if (tsigkey != NULL)
-        config->tsigkey = perf_dns_parsetsigkey(tsigkey, mctx);
+        config->tsigkey = perf_dns_parsetsigkey(tsigkey);
 
     if (edns_option != NULL)
         config->edns_option = perf_dns_parseednsoption(edns_option, mctx);
