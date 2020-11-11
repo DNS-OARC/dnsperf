@@ -17,6 +17,14 @@
  * limitations under the License.
  */
 
+#include "config.h"
+
+#include "opt.h"
+
+#include "log.h"
+#include "util.h"
+#include "result.h"
+
 #include <getopt.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -25,13 +33,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <errno.h>
-
 #include <netinet/in.h>
-
-#include "log.h"
-#include "opt.h"
-#include "util.h"
-#include "result.h"
 
 #define MAX_OPTS 64
 #define LINE_LENGTH 80

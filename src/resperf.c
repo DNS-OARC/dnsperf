@@ -23,6 +23,16 @@
 
 #include "config.h"
 
+#include "datafile.h"
+#include "dns.h"
+#include "log.h"
+#include "net.h"
+#include "opt.h"
+#include "util.h"
+#include "os.h"
+#include "list.h"
+#include "result.h"
+
 #include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -42,16 +52,6 @@
 #include <isc/types.h>
 
 #include <dns/result.h>
-
-#include "datafile.h"
-#include "dns.h"
-#include "log.h"
-#include "net.h"
-#include "opt.h"
-#include "util.h"
-#include "os.h"
-#include "list.h"
-#include "result.h"
 
 /*
  * Global stuff

@@ -17,6 +17,15 @@
  * limitations under the License.
  */
 
+#include "config.h"
+
+#include "net.h"
+
+#include "log.h"
+#include "opt.h"
+#include "os.h"
+#include "strerror.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -25,16 +34,9 @@
 #include <unistd.h>
 #include <errno.h>
 #include <poll.h>
-#include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <netdb.h>
 #include <arpa/inet.h>
-
-#include "log.h"
-#include "net.h"
-#include "opt.h"
-#include "os.h"
-#include "strerror.h"
 
 #define TCP_RECV_BUF_SIZE (16 * 1024)
 #define TCP_SEND_BUF_SIZE (4 * 1024)

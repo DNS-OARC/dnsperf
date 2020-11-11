@@ -17,13 +17,16 @@
  * limitations under the License.
  */
 
+#include "config.h"
+
+#include "log.h"
+
+#include "util.h"
+
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#include "log.h"
-#include "util.h"
 
 pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
 

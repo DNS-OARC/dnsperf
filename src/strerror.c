@@ -19,6 +19,8 @@
 
 #include "config.h"
 
+#include "strerror.h"
+
 #include <string.h>
 #include <stdio.h>
 

@@ -17,6 +17,14 @@
  * limitations under the License.
  */
 
+#include "config.h"
+
+#include "datafile.h"
+
+#include "log.h"
+#include "os.h"
+#include "util.h"
+
 #include <fcntl.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -26,11 +34,6 @@
 #include <assert.h>
 
 #include <isc/buffer.h>
-
-#include "datafile.h"
-#include "log.h"
-#include "os.h"
-#include "util.h"
 
 #define BUFFER_SIZE (64 * 1024)
 
