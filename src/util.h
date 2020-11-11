@@ -17,20 +17,17 @@
  * limitations under the License.
  */
 
-#include <pthread.h>
-#include <inttypes.h>
-#include <stdbool.h>
-#include <string.h>
-
-#include <sys/time.h>
-
-#include <isc/types.h>
-
 #include "log.h"
 #include "strerror.h"
 
 #ifndef PERF_UTIL_H
 #define PERF_UTIL_H 1
+
+#include <pthread.h>
+#include <inttypes.h>
+#include <stdbool.h>
+#include <string.h>
+#include <sys/time.h>
 
 #define MILLION ((uint64_t)1000000)
 

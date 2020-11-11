@@ -17,20 +17,18 @@
  * limitations under the License.
  */
 
+#include "os.h"
+
+#include "log.h"
+#include "util.h"
+
 #include <errno.h>
 #include <signal.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include <sys/select.h>
-
-#include <isc/types.h>
-
-#include "log.h"
-#include "os.h"
-#include "util.h"
 
 void perf_os_blocksignal(int sig, bool block)
 {

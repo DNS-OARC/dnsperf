@@ -20,6 +20,8 @@
 #ifndef PERF_STRERROR_H
 #define PERF_STRERROR_H 1
 
+#include <stddef.h>
+
 const char* perf_strerror_r(int errnum, char* str, size_t len);
 
 #endif

@@ -92,7 +92,6 @@ typedef union {
 } hmac_ctx_t;
 
 struct perf_dnstsigkey {
-    isc_mem_t*        mctx;
     isc_constregion_t alg;
     hmac_type_t       hmactype;
     unsigned int      digestlen;
@@ -103,77 +102,78 @@ struct perf_dnstsigkey {
 };
 
 struct perf_dnsednsoption {
-    isc_mem_t*    mctx;
-    isc_buffer_t* buffer;
+    // isc_mem_t*    mctx;
+    // isc_buffer_t* buffer;
+    int dummy;
 };
 
 struct perf_dnsctx {
-    isc_mem_t*     mctx;
-    dns_compress_t compress;
-    isc_lex_t*     lexer;
+    // isc_mem_t*     mctx;
+    // dns_compress_t compress;
+    // isc_lex_t*     lexer;
+    int dummy;
 };
 
-perf_dnsctx_t*
-perf_dns_createctx(bool updates)
+perf_dnsctx_t* perf_dns_createctx(bool updates)
 {
-    isc_mem_t*     mctx;
-    perf_dnsctx_t* ctx;
-    perf_result_t  result;
+    // isc_mem_t*     mctx;
+    // perf_dnsctx_t* ctx;
+    // perf_result_t  result;
 
     if (!updates)
-        return NULL;
+        return 0;
 
-    mctx = NULL;
-#ifdef HAVE_ISC_MEM_CREATE_RESULT
-    result = isc_mem_create(0, 0, &mctx);
-    if (result != ISC_R_SUCCESS)
-        perf_log_fatal("creating memory context: %s",
-            perf_result_totext(result));
-#else
-    isc_mem_create(&mctx);
-#endif
-
-    ctx = isc_mem_get(mctx, sizeof(*ctx));
-    if (ctx == NULL) {
-        perf_log_fatal("out of memory");
-        return 0; // fix clang scan-build
-    }
-
-    memset(ctx, 0, sizeof(*ctx));
-    ctx->mctx = mctx;
-
-    result = dns_compress_init(&ctx->compress, 0, ctx->mctx);
-    if (result != ISC_R_SUCCESS) {
-        perf_log_fatal("creating compression context: %s",
-            perf_result_totext(result));
-    }
-    dns_compress_setmethods(&ctx->compress, DNS_COMPRESS_GLOBAL14);
-
-    result = isc_lex_create(ctx->mctx, 1024, &ctx->lexer);
-    if (result != ISC_R_SUCCESS) {
-        perf_log_fatal("creating lexer: %s", perf_result_totext(result));
-    }
-
-    return (ctx);
+    //     mctx = NULL;
+    // #ifdef HAVE_ISC_MEM_CREATE_RESULT
+    //     result = isc_mem_create(0, 0, &mctx);
+    //     if (result != ISC_R_SUCCESS)
+    //         perf_log_fatal("creating memory context: %s",
+    //             perf_result_totext(result));
+    // #else
+    //     isc_mem_create(&mctx);
+    // #endif
+    //
+    //     ctx = isc_mem_get(mctx, sizeof(*ctx));
+    //     if (ctx == NULL) {
+    //         perf_log_fatal("out of memory");
+    //         return 0; // fix clang scan-build
+    //     }
+    //
+    //     memset(ctx, 0, sizeof(*ctx));
+    //     ctx->mctx = mctx;
+    //
+    //     result = dns_compress_init(&ctx->compress, 0, ctx->mctx);
+    //     if (result != ISC_R_SUCCESS) {
+    //         perf_log_fatal("creating compression context: %s",
+    //             perf_result_totext(result));
+    //     }
+    //     dns_compress_setmethods(&ctx->compress, DNS_COMPRESS_GLOBAL14);
+    //
+    //     result = isc_lex_create(ctx->mctx, 1024, &ctx->lexer);
+    //     if (result != ISC_R_SUCCESS) {
+    //         perf_log_fatal("creating lexer: %s", perf_result_totext(result));
+    //     }
+    //
+    //     return (ctx);
+    return 0;
 }
 
 void perf_dns_destroyctx(perf_dnsctx_t** ctxp)
 {
-    perf_dnsctx_t* ctx;
-    isc_mem_t*     mctx;
+    // perf_dnsctx_t* ctx;
+    // isc_mem_t*     mctx;
 
-    INSIST(ctxp != NULL);
-    ctx   = *ctxp;
-    *ctxp = NULL;
+    assert(ctxp);
+    *ctxp = 0;
 
-    if (ctx == NULL)
-        return;
-
-    mctx = ctx->mctx;
-    isc_lex_destroy(&ctx->lexer);
-    dns_compress_invalidate(&ctx->compress);
-    isc_mem_put(mctx, ctx, sizeof(*ctx));
-    isc_mem_destroy(&mctx);
+    // if (ctx == NULL)
+    //     return;
+    //
+    // mctx = ctx->mctx;
+    // isc_lex_destroy(&ctx->lexer);
+    // dns_compress_invalidate(&ctx->compress);
+    // isc_mem_put(mctx, ctx, sizeof(*ctx));
+    // isc_mem_destroy(&mctx);
 }
 
 static perf_result_t
@@ -300,125 +300,123 @@ void perf_dns_destroytsigkey(perf_dnstsigkey_t** tsigkeyp)
     *tsigkeyp = 0;
 }
 
-perf_dnsednsoption_t*
-perf_dns_parseednsoption(const char* arg, isc_mem_t* mctx)
+perf_dnsednsoption_t* perf_dns_parseednsoption(const char* arg)
 {
-    char*                 copy;
-    char*                 sep;
-    char*                 value;
+    // char*                 copy;
+    // char*                 sep;
+    // char*                 value;
     perf_dnsednsoption_t* option;
-    uint16_t              code;
-    isc_buffer_t          save;
-    perf_result_t         result;
+    // uint16_t              code;
+    // isc_buffer_t          save;
+    // perf_result_t         result;
 
-    copy = isc_mem_strdup(mctx, arg);
-    if (copy == NULL) {
+    // copy = isc_mem_strdup(mctx, arg);
+    // if (copy == NULL) {
+    //     perf_log_fatal("out of memory");
+    //     return 0; // fix clang scan-build
+    // }
+    //
+    // sep = strchr(copy, ':');
+    // if (sep == NULL) {
+    //     perf_log_warning("invalid EDNS Option code:value");
+    //     perf_opt_usage();
+    //     exit(1);
+    // }
+    // *sep  = '\0';
+    // value = sep + 1;
+
+    option = calloc(1, sizeof(perf_dnsednsoption_t));
+    if (!option) {
         perf_log_fatal("out of memory");
         return 0; // fix clang scan-build
     }
 
-    sep = strchr(copy, ':');
-    if (sep == NULL) {
-        perf_log_warning("invalid EDNS Option code:value");
-        perf_opt_usage();
-        exit(1);
-    }
-    *sep  = '\0';
-    value = sep + 1;
+    perf_log_warning("EDNS option disabled");
+    exit(1);
 
-    option = isc_mem_get(mctx, sizeof(*option));
-    if (option == NULL) {
-        perf_log_fatal("out of memory");
-        return 0; // fix clang scan-build
-    }
-
-    option->mctx   = mctx;
-    option->buffer = NULL;
-#ifdef HAVE_ISC_BUFFER_ALLOCATE_RESULT
-    result = isc_buffer_allocate(mctx, &option->buffer, strlen(value) / 2 + 4);
-    if (result != ISC_R_SUCCESS)
-        perf_log_fatal("out of memory");
-#else
-    isc_buffer_allocate(mctx, &option->buffer, strlen(value) / 2 + 4);
-#endif
-
-    result = isc_parse_uint16(&code, copy, 0);
-    if (result != ISC_R_SUCCESS) {
-        perf_log_warning("invalid EDNS Option code '%s'", copy);
-        perf_opt_usage();
-        exit(1);
-    }
-
-    isc_buffer_putuint16(option->buffer, code);
-    save = *option->buffer;
-    isc_buffer_add(option->buffer, 2);
-    result = isc_hex_decodestring(value, option->buffer);
-    if (result != ISC_R_SUCCESS) {
-        perf_log_warning("invalid EDNS Option value '%s'", value);
-        perf_opt_usage();
-        exit(1);
-    }
-    isc_buffer_putuint16(&save, isc_buffer_usedlength(option->buffer) - 4);
-
-    isc_mem_free(mctx, copy);
+    //     option->mctx   = mctx;
+    //     option->buffer = NULL;
+    // #ifdef HAVE_ISC_BUFFER_ALLOCATE_RESULT
+    //     result = isc_buffer_allocate(mctx, &option->buffer, strlen(value) / 2 + 4);
+    //     if (result != ISC_R_SUCCESS)
+    //         perf_log_fatal("out of memory");
+    // #else
+    //     isc_buffer_allocate(mctx, &option->buffer, strlen(value) / 2 + 4);
+    // #endif
+    //
+    //     result = isc_parse_uint16(&code, copy, 0);
+    //     if (result != ISC_R_SUCCESS) {
+    //         perf_log_warning("invalid EDNS Option code '%s'", copy);
+    //         perf_opt_usage();
+    //         exit(1);
+    //     }
+    //
+    //     isc_buffer_putuint16(option->buffer, code);
+    //     save = *option->buffer;
+    //     isc_buffer_add(option->buffer, 2);
+    //     result = isc_hex_decodestring(value, option->buffer);
+    //     if (result != ISC_R_SUCCESS) {
+    //         perf_log_warning("invalid EDNS Option value '%s'", value);
+    //         perf_opt_usage();
+    //         exit(1);
+    //     }
+    //     isc_buffer_putuint16(&save, isc_buffer_usedlength(option->buffer) - 4);
+    //
+    //     isc_mem_free(mctx, copy);
     return option;
 }
 
 void perf_dns_destroyednsoption(perf_dnsednsoption_t** optionp)
 {
-    perf_dnsednsoption_t* option;
+    assert(optionp);
+    assert(*optionp);
 
-    INSIST(optionp != NULL && *optionp != NULL);
-
-    option   = *optionp;
-    *optionp = NULL;
-
-    isc_buffer_free(&option->buffer);
-    isc_mem_put(option->mctx, option, sizeof(*option));
+    free(*optionp);
+    *optionp = 0;
 }
 
 /*
  * Appends an OPT record to the packet.
  */
-static perf_result_t
-add_edns(isc_buffer_t* packet, bool dnssec,
-    perf_dnsednsoption_t* option)
+static perf_result_t add_edns(isc_buffer_t* packet, bool dnssec, perf_dnsednsoption_t* option)
 {
-    unsigned char* base;
-    unsigned int   option_length;
-    unsigned int   total_length;
+    // unsigned char* base;
+    // unsigned int   option_length;
+    // unsigned int   total_length;
+    //
+    // option_length = 0;
+    // if (option != NULL)
+    //     option_length += isc_buffer_usedlength(option->buffer);
+    //
+    // total_length = EDNSLEN + option_length;
+    //
+    // if (isc_buffer_availablelength(packet) < total_length) {
+    //     perf_log_warning("failed to add OPT to query packet");
+    //     return (PERF_R_NOSPACE);
+    // }
+    //
+    // base = isc_buffer_base(packet);
+    //
+    // isc_buffer_putuint8(packet, 0); /* root name */
+    // isc_buffer_putuint16(packet, dns_rdatatype_opt); /* type */
+    // isc_buffer_putuint16(packet, MAX_EDNS_PACKET); /* class */
+    // isc_buffer_putuint8(packet, 0); /* xrcode */
+    // isc_buffer_putuint8(packet, 0); /* version */
+    // if (dnssec) /* flags */
+    //     isc_buffer_putuint16(packet, 0x8000);
+    // else
+    //     isc_buffer_putuint16(packet, 0);
+    // isc_buffer_putuint16(packet, option_length); /* rdlen */
+    // if (option != NULL) {
+    //     isc_buffer_putmem(packet, isc_buffer_base(option->buffer),
+    //         option_length);
+    // }
+    //
+    // base[11]++; /* increment record count */
+    //
+    // return (PERF_R_SUCCESS);
 
-    option_length = 0;
-    if (option != NULL)
-        option_length += isc_buffer_usedlength(option->buffer);
-
-    total_length = EDNSLEN + option_length;
-
-    if (isc_buffer_availablelength(packet) < total_length) {
-        perf_log_warning("failed to add OPT to query packet");
-        return (PERF_R_NOSPACE);
-    }
-
-    base = isc_buffer_base(packet);
-
-    isc_buffer_putuint8(packet, 0); /* root name */
-    isc_buffer_putuint16(packet, dns_rdatatype_opt); /* type */
-    isc_buffer_putuint16(packet, MAX_EDNS_PACKET); /* class */
-    isc_buffer_putuint8(packet, 0); /* xrcode */
-    isc_buffer_putuint8(packet, 0); /* version */
-    if (dnssec) /* flags */
-        isc_buffer_putuint16(packet, 0x8000);
-    else
-        isc_buffer_putuint16(packet, 0);
-    isc_buffer_putuint16(packet, option_length); /* rdlen */
-    if (option != NULL) {
-        isc_buffer_putmem(packet, isc_buffer_base(option->buffer),
-            option_length);
-    }
-
-    base[11]++; /* increment record count */
-
-    return (PERF_R_SUCCESS);
+    return PERF_R_FAILURE;
 }
 
 static void
@@ -636,107 +634,107 @@ build_query(const isc_textregion_t* line, isc_buffer_t* msg)
     return PERF_R_SUCCESS;
 }
 
-static bool
-token_equals(const isc_textregion_t* token, const char* str)
-{
-    return (strlen(str) == token->length && strncasecmp(str, token->base, token->length) == 0);
-}
+// static bool
+// token_equals(const isc_textregion_t* token, const char* str)
+// {
+//     return (strlen(str) == token->length && strncasecmp(str, token->base, token->length) == 0);
+// }
 
 /*
  * Reads one line containing an individual update for a dynamic update message.
  */
-static perf_result_t
-read_update_line(perf_dnsctx_t* ctx, const isc_textregion_t* line, char* str,
-    dns_name_t* zname, int want_ttl, int need_type,
-    int want_rdata, int need_rdata, dns_name_t* name,
-    uint32_t* ttlp, dns_rdatatype_t* typep,
-    dns_rdata_t* rdata, isc_buffer_t* rdatabuf)
-{
-    char*                curr_str;
-    unsigned int         curr_len;
-    isc_buffer_t         buffer;
-    isc_textregion_t     src;
-    dns_rdatacallbacks_t callbacks;
-    perf_result_t        result;
-
-    while (isspace(*str & 0xff))
-        str++;
-
-    /* Read the owner name */
-    curr_str = str;
-    curr_len = strcspn(curr_str, WHITESPACE);
-    result   = name_fromstring(name, zname, curr_str, curr_len, NULL, "owner");
-    if (result != ISC_R_SUCCESS)
-        return isc2perf_result(result);
-    str += curr_len;
-    while (isspace(*str & 0xff))
-        str++;
-
-    /* Read the ttl */
-    if (want_ttl) {
-        curr_str   = str;
-        curr_len   = strcspn(curr_str, WHITESPACE);
-        src.base   = curr_str;
-        src.length = curr_len;
-        result     = dns_ttl_fromtext(&src, ttlp);
-        if (result != ISC_R_SUCCESS) {
-            perf_log_warning("invalid ttl: %.*s", curr_len, curr_str);
-            return isc2perf_result(result);
-        }
-        str += curr_len;
-        while (isspace(*str & 0xff))
-            str++;
-    }
-
-    /* Read the type */
-    curr_str = str;
-    curr_len = strcspn(curr_str, WHITESPACE);
-    if (curr_len == 0) {
-        if (!need_type)
-            return (PERF_R_SUCCESS);
-        perf_log_warning("invalid update command: %s", line->base);
-        return (PERF_R_SUCCESS);
-    }
-    src.base   = curr_str;
-    src.length = curr_len;
-    result     = dns_rdatatype_fromtext(typep, &src);
-    if (result != ISC_R_SUCCESS) {
-        perf_log_warning("invalid type: %.*s", curr_len, curr_str);
-        return isc2perf_result(result);
-    }
-    str += curr_len;
-    while (isspace(*str & 0xff))
-        str++;
-
-    /* Read the rdata */
-    if (!want_rdata)
-        return (PERF_R_SUCCESS);
-
-    if (*str == 0) {
-        if (!need_rdata)
-            return (PERF_R_SUCCESS);
-        perf_log_warning("invalid update command: %s", line->base);
-        return (PERF_R_FAILURE);
-    }
-
-    isc_buffer_init(&buffer, str, strlen(str));
-    isc_buffer_add(&buffer, strlen(str));
-    result = isc_lex_openbuffer(ctx->lexer, &buffer);
-    if (result != ISC_R_SUCCESS) {
-        perf_log_warning("setting up lexer: %s", perf_result_totext(result));
-        return isc2perf_result(result);
-    }
-    dns_rdatacallbacks_init_stdio(&callbacks);
-    result = dns_rdata_fromtext(rdata, dns_rdataclass_in, *typep, ctx->lexer,
-        zname, 0, ctx->mctx, rdatabuf, &callbacks);
-    (void)isc_lex_close(ctx->lexer);
-    if (result != ISC_R_SUCCESS) {
-        perf_log_warning("parsing rdata: %s", str);
-        return isc2perf_result(result);
-    }
-
-    return (PERF_R_SUCCESS);
-}
+// static perf_result_t
+// read_update_line(perf_dnsctx_t* ctx, const isc_textregion_t* line, char* str,
+//     dns_name_t* zname, int want_ttl, int need_type,
+//     int want_rdata, int need_rdata, dns_name_t* name,
+//     uint32_t* ttlp, dns_rdatatype_t* typep,
+//     dns_rdata_t* rdata, isc_buffer_t* rdatabuf)
+// {
+    // char*                curr_str;
+    // unsigned int         curr_len;
+    // isc_buffer_t         buffer;
+    // isc_textregion_t     src;
+    // dns_rdatacallbacks_t callbacks;
+    // perf_result_t        result;
+    //
+    // while (isspace(*str & 0xff))
+    //     str++;
+    //
+    // /* Read the owner name */
+    // curr_str = str;
+    // curr_len = strcspn(curr_str, WHITESPACE);
+    // result   = name_fromstring(name, zname, curr_str, curr_len, NULL, "owner");
+    // if (result != ISC_R_SUCCESS)
+    //     return isc2perf_result(result);
+    // str += curr_len;
+    // while (isspace(*str & 0xff))
+    //     str++;
+    //
+    // /* Read the ttl */
+    // if (want_ttl) {
+    //     curr_str   = str;
+    //     curr_len   = strcspn(curr_str, WHITESPACE);
+    //     src.base   = curr_str;
+    //     src.length = curr_len;
+    //     result     = dns_ttl_fromtext(&src, ttlp);
+    //     if (result != ISC_R_SUCCESS) {
+    //         perf_log_warning("invalid ttl: %.*s", curr_len, curr_str);
+    //         return isc2perf_result(result);
+    //     }
+    //     str += curr_len;
+    //     while (isspace(*str & 0xff))
+    //         str++;
+    // }
+    //
+    // /* Read the type */
+    // curr_str = str;
+    // curr_len = strcspn(curr_str, WHITESPACE);
+    // if (curr_len == 0) {
+    //     if (!need_type)
+    //         return (PERF_R_SUCCESS);
+    //     perf_log_warning("invalid update command: %s", line->base);
+    //     return (PERF_R_SUCCESS);
+    // }
+    // src.base   = curr_str;
+    // src.length = curr_len;
+    // result     = dns_rdatatype_fromtext(typep, &src);
+    // if (result != ISC_R_SUCCESS) {
+    //     perf_log_warning("invalid type: %.*s", curr_len, curr_str);
+    //     return isc2perf_result(result);
+    // }
+    // str += curr_len;
+    // while (isspace(*str & 0xff))
+    //     str++;
+    //
+    // /* Read the rdata */
+    // if (!want_rdata)
+    //     return (PERF_R_SUCCESS);
+    //
+    // if (*str == 0) {
+    //     if (!need_rdata)
+    //         return (PERF_R_SUCCESS);
+    //     perf_log_warning("invalid update command: %s", line->base);
+    //     return (PERF_R_FAILURE);
+    // }
+    //
+    // isc_buffer_init(&buffer, str, strlen(str));
+    // isc_buffer_add(&buffer, strlen(str));
+    // result = isc_lex_openbuffer(ctx->lexer, &buffer);
+    // if (result != ISC_R_SUCCESS) {
+    //     perf_log_warning("setting up lexer: %s", perf_result_totext(result));
+    //     return isc2perf_result(result);
+    // }
+    // dns_rdatacallbacks_init_stdio(&callbacks);
+    // result = dns_rdata_fromtext(rdata, dns_rdataclass_in, *typep, ctx->lexer,
+    //     zname, 0, ctx->mctx, rdatabuf, &callbacks);
+    // (void)isc_lex_close(ctx->lexer);
+    // if (result != ISC_R_SUCCESS) {
+    //     perf_log_warning("parsing rdata: %s", str);
+    //     return isc2perf_result(result);
+    // }
+    //
+    // return (PERF_R_SUCCESS);
+// }
 
 /*
  * Reads a complete dynamic update message and sends it.
@@ -745,170 +743,171 @@ static perf_result_t
 build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
     isc_buffer_t* msg)
 {
-    isc_textregion_t input;
-    char*            msgbase;
-    isc_buffer_t     rdlenbuf, rdatabuf;
-    unsigned char    rdataarray[MAX_RDATA_LENGTH];
-    isc_textregion_t token;
-    char*            str;
-    bool             is_update;
-    int              updates = 0;
-    int              prereqs = 0;
-    dns_fixedname_t  fzname, foname;
-    dns_name_t *     zname, *oname;
-    uint32_t         ttl;
-    dns_rdatatype_t  rdtype;
-    dns_rdataclass_t rdclass;
-    dns_rdata_t      rdata;
-    uint16_t         rdlen;
-    perf_result_t    result;
-
-    /* Reset compression context */
-    dns_compress_rollback(&ctx->compress, 0);
-
-    input   = *record;
-    msgbase = isc_buffer_base(msg);
-
-/* Initialize */
-#ifdef dns_fixedname_init
-    dns_fixedname_init(&foname);
-    oname = dns_fixedname_name(&foname);
-#else
-    oname = dns_fixedname_initname(&foname);
-#endif
-
-/* Parse zone name */
-#ifdef dns_fixedname_init
-    dns_fixedname_init(&fzname);
-    zname = dns_fixedname_name(&fzname);
-#else
-    zname = dns_fixedname_initname(&fzname);
-#endif
-    result = name_fromstring(zname, dns_rootname,
-        input.base, strlen(input.base),
-        NULL, "zone");
-    if (result != ISC_R_SUCCESS)
-        goto done;
-
-    /* Render zone section */
-    result = dns_name_towire(zname, &ctx->compress, msg);
-    if (result != ISC_R_SUCCESS) {
-        perf_log_warning("error rendering zone name: %s",
-            perf_result_totext(result));
-        goto done;
-    }
-    isc_buffer_putuint16(msg, dns_rdatatype_soa);
-    isc_buffer_putuint16(msg, dns_rdataclass_in);
-
-    while (true) {
-        input.base += strlen(input.base) + 1;
-        if (input.base >= record->base + record->length) {
-            perf_log_warning("warning: incomplete update");
-            goto done;
-        }
-
-        ttl    = 0;
-        rdtype = dns_rdatatype_any;
-        isc_buffer_init(&rdatabuf, rdataarray, sizeof(rdataarray));
-        dns_rdata_init(&rdata);
-        rdclass   = dns_rdataclass_in;
-        is_update = false;
-
-        token.base   = input.base;
-        token.length = strcspn(token.base, WHITESPACE);
-        str          = input.base + token.length;
-        if (token_equals(&token, "send")) {
-            break;
-        } else if (token_equals(&token, "add")) {
-            result    = read_update_line(ctx, &input, str, zname,
-                true, true, true,
-                true, oname, &ttl, &rdtype,
-                &rdata, &rdatabuf);
-            rdclass   = dns_rdataclass_in;
-            is_update = true;
-        } else if (token_equals(&token, "delete")) {
-            result = read_update_line(ctx, &input, str, zname,
-                false, false, true,
-                false, oname, &ttl,
-                &rdtype, &rdata, &rdatabuf);
-            if (isc_buffer_usedlength(&rdatabuf) > 0)
-                rdclass = dns_rdataclass_none;
-            else
-                rdclass = dns_rdataclass_any;
-            is_update = true;
-        } else if (token_equals(&token, "require")) {
-            result = read_update_line(ctx, &input, str, zname,
-                false, false, true,
-                false, oname, &ttl,
-                &rdtype, &rdata, &rdatabuf);
-            if (isc_buffer_usedlength(&rdatabuf) > 0)
-                rdclass = dns_rdataclass_in;
-            else
-                rdclass = dns_rdataclass_any;
-            is_update = false;
-        } else if (token_equals(&token, "prohibit")) {
-            result    = read_update_line(ctx, &input, str, zname,
-                false, false, false,
-                false, oname, &ttl,
-                &rdtype, &rdata, &rdatabuf);
-            rdclass   = dns_rdataclass_none;
-            is_update = false;
-        } else {
-            perf_log_warning("invalid update command: %s", input.base);
-            result = PERF_R_FAILURE;
-        }
-
-        if (result != PERF_R_SUCCESS)
-            goto done;
-
-        if (!is_update && updates > 0) {
-            perf_log_warning("prereqs must precede updates");
-            result = PERF_R_FAILURE;
-            goto done;
-        }
-
-        /* Render record */
-        result = dns_name_towire(oname, &ctx->compress, msg);
-        if (result != PERF_R_SUCCESS) {
-            perf_log_warning("rendering record name: %s",
-                perf_result_totext(result));
-            goto done;
-        }
-        if (isc_buffer_availablelength(msg) < 10) {
-            perf_log_warning("out of space in message buffer");
-            result = PERF_R_NOSPACE;
-            goto done;
-        }
-
-        isc_buffer_putuint16(msg, rdtype);
-        isc_buffer_putuint16(msg, rdclass);
-        isc_buffer_putuint32(msg, ttl);
-        rdlenbuf = *msg;
-        isc_buffer_putuint16(msg, 0); /* rdlen */
-        rdlen = isc_buffer_usedlength(&rdatabuf);
-        if (rdlen > 0) {
-            result = dns_rdata_towire(&rdata, &ctx->compress, msg);
-            if (result != ISC_R_SUCCESS) {
-                perf_log_warning("rendering rdata: %s",
-                    perf_result_totext(result));
-                goto done;
-            }
-            rdlen = msg->used - rdlenbuf.used - 2;
-            isc_buffer_putuint16(&rdlenbuf, rdlen);
-        }
-        if (is_update)
-            updates++;
-        else
-            prereqs++;
-    }
-
-    msgbase[7] = prereqs; /* ANCOUNT = number of prereqs */
-    msgbase[9] = updates; /* AUCOUNT = number of updates */
-
-    result = PERF_R_SUCCESS;
-
-done:
-    return result;
+    //     isc_textregion_t input;
+    //     char*            msgbase;
+    //     isc_buffer_t     rdlenbuf, rdatabuf;
+    //     unsigned char    rdataarray[MAX_RDATA_LENGTH];
+    //     isc_textregion_t token;
+    //     char*            str;
+    //     bool             is_update;
+    //     int              updates = 0;
+    //     int              prereqs = 0;
+    //     dns_fixedname_t  fzname, foname;
+    //     dns_name_t *     zname, *oname;
+    //     uint32_t         ttl;
+    //     dns_rdatatype_t  rdtype;
+    //     dns_rdataclass_t rdclass;
+    //     dns_rdata_t      rdata;
+    //     uint16_t         rdlen;
+    //     perf_result_t    result;
+    //
+    //     /* Reset compression context */
+    //     dns_compress_rollback(&ctx->compress, 0);
+    //
+    //     input   = *record;
+    //     msgbase = isc_buffer_base(msg);
+    //
+    // /* Initialize */
+    // #ifdef dns_fixedname_init
+    //     dns_fixedname_init(&foname);
+    //     oname = dns_fixedname_name(&foname);
+    // #else
+    //     oname = dns_fixedname_initname(&foname);
+    // #endif
+    //
+    // /* Parse zone name */
+    // #ifdef dns_fixedname_init
+    //     dns_fixedname_init(&fzname);
+    //     zname = dns_fixedname_name(&fzname);
+    // #else
+    //     zname = dns_fixedname_initname(&fzname);
+    // #endif
+    //     result = name_fromstring(zname, dns_rootname,
+    //         input.base, strlen(input.base),
+    //         NULL, "zone");
+    //     if (result != ISC_R_SUCCESS)
+    //         goto done;
+    //
+    //     /* Render zone section */
+    //     result = dns_name_towire(zname, &ctx->compress, msg);
+    //     if (result != ISC_R_SUCCESS) {
+    //         perf_log_warning("error rendering zone name: %s",
+    //             perf_result_totext(result));
+    //         goto done;
+    //     }
+    //     isc_buffer_putuint16(msg, dns_rdatatype_soa);
+    //     isc_buffer_putuint16(msg, dns_rdataclass_in);
+    //
+    //     while (true) {
+    //         input.base += strlen(input.base) + 1;
+    //         if (input.base >= record->base + record->length) {
+    //             perf_log_warning("warning: incomplete update");
+    //             goto done;
+    //         }
+    //
+    //         ttl    = 0;
+    //         rdtype = dns_rdatatype_any;
+    //         isc_buffer_init(&rdatabuf, rdataarray, sizeof(rdataarray));
+    //         dns_rdata_init(&rdata);
+    //         rdclass   = dns_rdataclass_in;
+    //         is_update = false;
+    //
+    //         token.base   = input.base;
+    //         token.length = strcspn(token.base, WHITESPACE);
+    //         str          = input.base + token.length;
+    //         if (token_equals(&token, "send")) {
+    //             break;
+    //         } else if (token_equals(&token, "add")) {
+    //             result    = read_update_line(ctx, &input, str, zname,
+    //                 true, true, true,
+    //                 true, oname, &ttl, &rdtype,
+    //                 &rdata, &rdatabuf);
+    //             rdclass   = dns_rdataclass_in;
+    //             is_update = true;
+    //         } else if (token_equals(&token, "delete")) {
+    //             result = read_update_line(ctx, &input, str, zname,
+    //                 false, false, true,
+    //                 false, oname, &ttl,
+    //                 &rdtype, &rdata, &rdatabuf);
+    //             if (isc_buffer_usedlength(&rdatabuf) > 0)
+    //                 rdclass = dns_rdataclass_none;
+    //             else
+    //                 rdclass = dns_rdataclass_any;
+    //             is_update = true;
+    //         } else if (token_equals(&token, "require")) {
+    //             result = read_update_line(ctx, &input, str, zname,
+    //                 false, false, true,
+    //                 false, oname, &ttl,
+    //                 &rdtype, &rdata, &rdatabuf);
+    //             if (isc_buffer_usedlength(&rdatabuf) > 0)
+    //                 rdclass = dns_rdataclass_in;
+    //             else
+    //                 rdclass = dns_rdataclass_any;
+    //             is_update = false;
+    //         } else if (token_equals(&token, "prohibit")) {
+    //             result    = read_update_line(ctx, &input, str, zname,
+    //                 false, false, false,
+    //                 false, oname, &ttl,
+    //                 &rdtype, &rdata, &rdatabuf);
+    //             rdclass   = dns_rdataclass_none;
+    //             is_update = false;
+    //         } else {
+    //             perf_log_warning("invalid update command: %s", input.base);
+    //             result = PERF_R_FAILURE;
+    //         }
+    //
+    //         if (result != PERF_R_SUCCESS)
+    //             goto done;
+    //
+    //         if (!is_update && updates > 0) {
+    //             perf_log_warning("prereqs must precede updates");
+    //             result = PERF_R_FAILURE;
+    //             goto done;
+    //         }
+    //
+    //         /* Render record */
+    //         result = dns_name_towire(oname, &ctx->compress, msg);
+    //         if (result != PERF_R_SUCCESS) {
+    //             perf_log_warning("rendering record name: %s",
+    //                 perf_result_totext(result));
+    //             goto done;
+    //         }
+    //         if (isc_buffer_availablelength(msg) < 10) {
+    //             perf_log_warning("out of space in message buffer");
+    //             result = PERF_R_NOSPACE;
+    //             goto done;
+    //         }
+    //
+    //         isc_buffer_putuint16(msg, rdtype);
+    //         isc_buffer_putuint16(msg, rdclass);
+    //         isc_buffer_putuint32(msg, ttl);
+    //         rdlenbuf = *msg;
+    //         isc_buffer_putuint16(msg, 0); /* rdlen */
+    //         rdlen = isc_buffer_usedlength(&rdatabuf);
+    //         if (rdlen > 0) {
+    //             result = dns_rdata_towire(&rdata, &ctx->compress, msg);
+    //             if (result != ISC_R_SUCCESS) {
+    //                 perf_log_warning("rendering rdata: %s",
+    //                     perf_result_totext(result));
+    //                 goto done;
+    //             }
+    //             rdlen = msg->used - rdlenbuf.used - 2;
+    //             isc_buffer_putuint16(&rdlenbuf, rdlen);
+    //         }
+    //         if (is_update)
+    //             updates++;
+    //         else
+    //             prereqs++;
+    //     }
+    //
+    //     msgbase[7] = prereqs; /* ANCOUNT = number of prereqs */
+    //     msgbase[9] = updates; /* AUCOUNT = number of updates */
+    //
+    //     result = PERF_R_SUCCESS;
+    //
+    // done:
+    //     return result;
+    return PERF_R_FAILURE;
 }
 
 perf_result_t

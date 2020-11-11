@@ -23,6 +23,15 @@
 
 #include "config.h"
 
+#include "net.h"
+#include "datafile.h"
+#include "dns.h"
+#include "log.h"
+#include "opt.h"
+#include "os.h"
+#include "util.h"
+#include "list.h"
+
 #include <inttypes.h>
 #include <errno.h>
 #include <math.h>
@@ -50,15 +59,6 @@
 
 #include <dns/rcode.h>
 #include <dns/result.h>
-
-#include "net.h"
-#include "datafile.h"
-#include "dns.h"
-#include "log.h"
-#include "opt.h"
-#include "os.h"
-#include "util.h"
-#include "list.h"
 
 #ifndef ISC_UINT64_MAX
 #include <stdint.h>
@@ -497,7 +497,7 @@ setup(int argc, char** argv, config_t* config)
         config->tsigkey = perf_dns_parsetsigkey(tsigkey);
 
     if (edns_option != NULL)
-        config->edns_option = perf_dns_parseednsoption(edns_option, mctx);
+        config->edns_option = perf_dns_parseednsoption(edns_option);
 
     /*
      * If we run more threads than max-qps, some threads will have

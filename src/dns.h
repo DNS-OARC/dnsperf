@@ -38,13 +38,11 @@ perf_dnstsigkey_t* perf_dns_parsetsigkey(const char* arg);
 
 void perf_dns_destroytsigkey(perf_dnstsigkey_t** tsigkeyp);
 
-perf_dnsednsoption_t*
-perf_dns_parseednsoption(const char* arg, isc_mem_t* mctx);
+perf_dnsednsoption_t* perf_dns_parseednsoption(const char* arg);
 
 void perf_dns_destroyednsoption(perf_dnsednsoption_t** optionp);
 
-perf_dnsctx_t*
-perf_dns_createctx(bool updates);
+perf_dnsctx_t* perf_dns_createctx(bool updates);
 
 void perf_dns_destroyctx(perf_dnsctx_t** ctxp);
 
