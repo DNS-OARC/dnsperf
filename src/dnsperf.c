@@ -31,6 +31,7 @@
 #include "os.h"
 #include "util.h"
 #include "list.h"
+#include "buffer.h"
 
 #include <inttypes.h>
 #include <errno.h>
@@ -48,9 +49,6 @@
 #include <openssl/conf.h>
 #include <openssl/err.h>
 
-#define ISC_BUFFER_USEINLINE
-
-#include <isc/buffer.h>
 #include <isc/netaddr.h>
 #include <isc/print.h>
 #include <isc/region.h>
@@ -567,10 +565,10 @@ do_send(void* arg)
     const times_t*  times;
     stats_t*        stats;
     unsigned int    max_packet_size;
-    isc_buffer_t    msg;
+    perf_buffer_t   msg;
     uint64_t        now, run_time, req_time;
     char            input_data[MAX_INPUT_DATA];
-    isc_buffer_t    lines;
+    perf_buffer_t   lines;
     isc_region_t    used;
     query_info*     q;
     int             qid;
@@ -585,8 +583,8 @@ do_send(void* arg)
     times           = tinfo->times;
     stats           = &tinfo->stats;
     max_packet_size = config->edns ? MAX_EDNS_PACKET : MAX_UDP_PACKET;
-    isc_buffer_init(&msg, packet_buffer, max_packet_size);
-    isc_buffer_init(&lines, input_data, sizeof(input_data));
+    perf_buffer_init(&msg, packet_buffer, max_packet_size);
+    perf_buffer_init(&lines, input_data, sizeof(input_data));
 
     wait_for_start();
     now = perf_get_time();
@@ -658,7 +656,7 @@ do_send(void* arg)
         }
         PERF_UNLOCK(&tinfo->lock);
 
-        isc_buffer_clear(&lines);
+        perf_buffer_clear(&lines);
         result = perf_datafile_next(input, &lines, config->updates);
         if (result != PERF_R_SUCCESS) {
             if (result == PERF_R_INVALIDFILE)
@@ -667,8 +665,8 @@ do_send(void* arg)
         }
 
         qid = q - tinfo->queries;
-        isc_buffer_usedregion(&lines, &used);
-        isc_buffer_clear(&msg);
+        perf_buffer_usedregion(&lines, &used);
+        perf_buffer_clear(&msg);
         result = perf_dns_buildrequest(tinfo->dnsctx,
             (isc_textregion_t*)&used,
             qid, config->edns,
@@ -682,8 +680,8 @@ do_send(void* arg)
             continue;
         }
 
-        base   = isc_buffer_base(&msg);
-        length = isc_buffer_usedlength(&msg);
+        base   = perf_buffer_base(&msg);
+        length = perf_buffer_usedlength(&msg);
 
         now = perf_get_time();
         if (config->verbose) {

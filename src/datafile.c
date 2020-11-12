@@ -33,8 +33,6 @@
 #include <sys/stat.h>
 #include <assert.h>
 
-#include <isc/buffer.h>
-
 #define BUFFER_SIZE (64 * 1024)
 
 struct perf_datafile {
@@ -158,7 +156,7 @@ static perf_result_t read_more(perf_datafile_t* dfile)
     return (PERF_R_SUCCESS);
 }
 
-static perf_result_t read_one_line(perf_datafile_t* dfile, isc_buffer_t* lines)
+static perf_result_t read_one_line(perf_datafile_t* dfile, perf_buffer_t* lines)
 {
     const char*   cur;
     size_t        length, curlen, nrem;
@@ -199,16 +197,16 @@ static perf_result_t read_one_line(perf_datafile_t* dfile, isc_buffer_t* lines)
             break;
     }
 
-    length = isc_buffer_availablelength(lines);
+    length = perf_buffer_availablelength(lines);
     if (curlen > length - 1)
         curlen = length - 1;
-    isc_buffer_putmem(lines, (unsigned char*)cur, curlen);
-    isc_buffer_putuint8(lines, 0);
+    perf_buffer_putmem(lines, (unsigned char*)cur, curlen);
+    perf_buffer_putuint8(lines, 0);
 
     return (PERF_R_SUCCESS);
 }
 
-perf_result_t perf_datafile_next(perf_datafile_t* dfile, isc_buffer_t* lines, bool is_update)
+perf_result_t perf_datafile_next(perf_datafile_t* dfile, perf_buffer_t* lines, bool is_update)
 {
     const char*   current;
     perf_result_t result;
@@ -238,7 +236,7 @@ perf_result_t perf_datafile_next(perf_datafile_t* dfile, isc_buffer_t* lines, bo
 
     if (is_update) {
         while (true) {
-            current = isc_buffer_used(lines);
+            current = perf_buffer_used(lines);
             result  = read_one_line(dfile, lines);
             if (result == PERF_R_EOF && dfile->maxruns != dfile->nruns) {
                 reopen_file(dfile);
