@@ -650,90 +650,90 @@ build_query(const isc_textregion_t* line, isc_buffer_t* msg)
 //     uint32_t* ttlp, dns_rdatatype_t* typep,
 //     dns_rdata_t* rdata, isc_buffer_t* rdatabuf)
 // {
-    // char*                curr_str;
-    // unsigned int         curr_len;
-    // isc_buffer_t         buffer;
-    // isc_textregion_t     src;
-    // dns_rdatacallbacks_t callbacks;
-    // perf_result_t        result;
-    //
-    // while (isspace(*str & 0xff))
-    //     str++;
-    //
-    // /* Read the owner name */
-    // curr_str = str;
-    // curr_len = strcspn(curr_str, WHITESPACE);
-    // result   = name_fromstring(name, zname, curr_str, curr_len, NULL, "owner");
-    // if (result != ISC_R_SUCCESS)
-    //     return isc2perf_result(result);
-    // str += curr_len;
-    // while (isspace(*str & 0xff))
-    //     str++;
-    //
-    // /* Read the ttl */
-    // if (want_ttl) {
-    //     curr_str   = str;
-    //     curr_len   = strcspn(curr_str, WHITESPACE);
-    //     src.base   = curr_str;
-    //     src.length = curr_len;
-    //     result     = dns_ttl_fromtext(&src, ttlp);
-    //     if (result != ISC_R_SUCCESS) {
-    //         perf_log_warning("invalid ttl: %.*s", curr_len, curr_str);
-    //         return isc2perf_result(result);
-    //     }
-    //     str += curr_len;
-    //     while (isspace(*str & 0xff))
-    //         str++;
-    // }
-    //
-    // /* Read the type */
-    // curr_str = str;
-    // curr_len = strcspn(curr_str, WHITESPACE);
-    // if (curr_len == 0) {
-    //     if (!need_type)
-    //         return (PERF_R_SUCCESS);
-    //     perf_log_warning("invalid update command: %s", line->base);
-    //     return (PERF_R_SUCCESS);
-    // }
-    // src.base   = curr_str;
-    // src.length = curr_len;
-    // result     = dns_rdatatype_fromtext(typep, &src);
-    // if (result != ISC_R_SUCCESS) {
-    //     perf_log_warning("invalid type: %.*s", curr_len, curr_str);
-    //     return isc2perf_result(result);
-    // }
-    // str += curr_len;
-    // while (isspace(*str & 0xff))
-    //     str++;
-    //
-    // /* Read the rdata */
-    // if (!want_rdata)
-    //     return (PERF_R_SUCCESS);
-    //
-    // if (*str == 0) {
-    //     if (!need_rdata)
-    //         return (PERF_R_SUCCESS);
-    //     perf_log_warning("invalid update command: %s", line->base);
-    //     return (PERF_R_FAILURE);
-    // }
-    //
-    // isc_buffer_init(&buffer, str, strlen(str));
-    // isc_buffer_add(&buffer, strlen(str));
-    // result = isc_lex_openbuffer(ctx->lexer, &buffer);
-    // if (result != ISC_R_SUCCESS) {
-    //     perf_log_warning("setting up lexer: %s", perf_result_totext(result));
-    //     return isc2perf_result(result);
-    // }
-    // dns_rdatacallbacks_init_stdio(&callbacks);
-    // result = dns_rdata_fromtext(rdata, dns_rdataclass_in, *typep, ctx->lexer,
-    //     zname, 0, ctx->mctx, rdatabuf, &callbacks);
-    // (void)isc_lex_close(ctx->lexer);
-    // if (result != ISC_R_SUCCESS) {
-    //     perf_log_warning("parsing rdata: %s", str);
-    //     return isc2perf_result(result);
-    // }
-    //
-    // return (PERF_R_SUCCESS);
+// char*                curr_str;
+// unsigned int         curr_len;
+// isc_buffer_t         buffer;
+// isc_textregion_t     src;
+// dns_rdatacallbacks_t callbacks;
+// perf_result_t        result;
+//
+// while (isspace(*str & 0xff))
+//     str++;
+//
+// /* Read the owner name */
+// curr_str = str;
+// curr_len = strcspn(curr_str, WHITESPACE);
+// result   = name_fromstring(name, zname, curr_str, curr_len, NULL, "owner");
+// if (result != ISC_R_SUCCESS)
+//     return isc2perf_result(result);
+// str += curr_len;
+// while (isspace(*str & 0xff))
+//     str++;
+//
+// /* Read the ttl */
+// if (want_ttl) {
+//     curr_str   = str;
+//     curr_len   = strcspn(curr_str, WHITESPACE);
+//     src.base   = curr_str;
+//     src.length = curr_len;
+//     result     = dns_ttl_fromtext(&src, ttlp);
+//     if (result != ISC_R_SUCCESS) {
+//         perf_log_warning("invalid ttl: %.*s", curr_len, curr_str);
+//         return isc2perf_result(result);
+//     }
+//     str += curr_len;
+//     while (isspace(*str & 0xff))
+//         str++;
+// }
+//
+// /* Read the type */
+// curr_str = str;
+// curr_len = strcspn(curr_str, WHITESPACE);
+// if (curr_len == 0) {
+//     if (!need_type)
+//         return (PERF_R_SUCCESS);
+//     perf_log_warning("invalid update command: %s", line->base);
+//     return (PERF_R_SUCCESS);
+// }
+// src.base   = curr_str;
+// src.length = curr_len;
+// result     = dns_rdatatype_fromtext(typep, &src);
+// if (result != ISC_R_SUCCESS) {
+//     perf_log_warning("invalid type: %.*s", curr_len, curr_str);
+//     return isc2perf_result(result);
+// }
+// str += curr_len;
+// while (isspace(*str & 0xff))
+//     str++;
+//
+// /* Read the rdata */
+// if (!want_rdata)
+//     return (PERF_R_SUCCESS);
+//
+// if (*str == 0) {
+//     if (!need_rdata)
+//         return (PERF_R_SUCCESS);
+//     perf_log_warning("invalid update command: %s", line->base);
+//     return (PERF_R_FAILURE);
+// }
+//
+// isc_buffer_init(&buffer, str, strlen(str));
+// isc_buffer_add(&buffer, strlen(str));
+// result = isc_lex_openbuffer(ctx->lexer, &buffer);
+// if (result != ISC_R_SUCCESS) {
+//     perf_log_warning("setting up lexer: %s", perf_result_totext(result));
+//     return isc2perf_result(result);
+// }
+// dns_rdatacallbacks_init_stdio(&callbacks);
+// result = dns_rdata_fromtext(rdata, dns_rdataclass_in, *typep, ctx->lexer,
+//     zname, 0, ctx->mctx, rdatabuf, &callbacks);
+// (void)isc_lex_close(ctx->lexer);
+// if (result != ISC_R_SUCCESS) {
+//     perf_log_warning("parsing rdata: %s", str);
+//     return isc2perf_result(result);
+// }
+//
+// return (PERF_R_SUCCESS);
 // }
 
 /*

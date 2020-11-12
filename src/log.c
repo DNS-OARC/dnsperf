@@ -33,13 +33,13 @@ pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
 static void
 vlog(FILE* stream, const char* prefix, const char* fmt, va_list args)
 {
-    LOCK(&log_lock);
+    PERF_LOCK(&log_lock);
     fflush(stdout);
     if (prefix != NULL)
         fprintf(stream, "%s: ", prefix);
     vfprintf(stream, fmt, args);
     fprintf(stream, "\n");
-    UNLOCK(&log_lock);
+    PERF_UNLOCK(&log_lock);
 }
 
 void perf_log_printf(const char* fmt, ...)

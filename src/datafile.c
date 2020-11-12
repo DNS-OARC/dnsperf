@@ -61,7 +61,7 @@ perf_datafile_t* perf_datafile_open(const char* filename)
         return 0; // fix clang scan-build
     }
 
-    MUTEX_INIT(&dfile->lock);
+    PERF_MUTEX_INIT(&dfile->lock);
     dfile->pipe_fd  = -1;
     dfile->is_file  = false;
     dfile->size     = 0;
@@ -97,7 +97,7 @@ void perf_datafile_close(perf_datafile_t** dfilep)
     if (dfile->fd >= 0 && dfile->fd != STDIN_FILENO) {
         close(dfile->fd);
     }
-    MUTEX_DESTROY(&dfile->lock);
+    PERF_MUTEX_DESTROY(&dfile->lock);
     free(dfile);
 }
 
@@ -213,7 +213,7 @@ perf_result_t perf_datafile_next(perf_datafile_t* dfile, isc_buffer_t* lines, bo
     const char*   current;
     perf_result_t result;
 
-    LOCK(&dfile->lock);
+    PERF_LOCK(&dfile->lock);
 
     if (dfile->maxruns > 0 && dfile->maxruns == dfile->nruns) {
         result = PERF_R_EOF;
@@ -250,7 +250,7 @@ perf_result_t perf_datafile_next(perf_datafile_t* dfile, isc_buffer_t* lines, bo
 
     result = PERF_R_SUCCESS;
 done:
-    UNLOCK(&dfile->lock);
+    PERF_UNLOCK(&dfile->lock);
     return (result);
 }
 

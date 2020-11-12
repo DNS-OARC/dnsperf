@@ -726,7 +726,7 @@ int main(int argc, char** argv)
     n_buckets = (traffic_time + bucket_interval - 1) / bucket_interval;
     buckets   = init_buckets(n_buckets);
 
-    time_now              = get_time();
+    time_now              = perf_get_time();
     time_of_program_start = time_now;
 
     printf("[Status] Command line: %s", progname);
@@ -777,10 +777,10 @@ int main(int argc, char** argv)
         try_process_response(current_sock++);
         current_sock = current_sock % nsocks;
         retire_old_queries();
-        time_now = get_time();
+        time_now = perf_get_time();
     }
 end_loop:
-    time_now           = get_time();
+    time_now           = perf_get_time();
     time_of_end_of_run = time_now;
 
     printf("[Status] Testing complete\n");
