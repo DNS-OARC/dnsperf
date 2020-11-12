@@ -18,11 +18,13 @@
  */
 
 #include "result.h"
+#include "buffer.h"
 
 #ifndef PERF_DNS_H
 #define PERF_DNS_H 1
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <isc/types.h>
 
 #define MAX_UDP_PACKET 512
@@ -51,6 +53,6 @@ perf_dns_buildrequest(perf_dnsctx_t* ctx, const isc_textregion_t* record,
     uint16_t qid,
     bool edns, bool dnssec,
     perf_dnstsigkey_t*    tsigkey,
-    perf_dnsednsoption_t* edns_option, isc_buffer_t* msg);
+    perf_dnsednsoption_t* edns_option, perf_buffer_t* msg);
 
 #endif

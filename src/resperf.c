@@ -32,6 +32,7 @@
 #include "os.h"
 #include "list.h"
 #include "result.h"
+#include "buffer.h"
 
 #include <errno.h>
 #include <stdbool.h>
@@ -45,7 +46,6 @@
 #include <openssl/err.h>
 #include <signal.h>
 
-#include <isc/buffer.h>
 #include <isc/print.h>
 #include <isc/region.h>
 #include <isc/types.h>
@@ -453,7 +453,7 @@ init_buckets(int n)
  * Return PERF_R_NOMORE if we ran out of query IDs.
  */
 static perf_result_t
-do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
+do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
 {
     query_info*    q;
     unsigned int   qid;
@@ -463,11 +463,11 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
     unsigned int   length;
     perf_result_t  result;
 
-    isc_buffer_clear(lines);
+    perf_buffer_clear(lines);
     result = perf_datafile_next(input, lines, false);
     if (result != PERF_R_SUCCESS)
         perf_log_fatal("ran out of query data");
-    isc_buffer_usedregion(lines, &used);
+    perf_buffer_usedregion(lines, &used);
 
     q = perf_list_head(instanding_list);
     if (!q)
@@ -504,7 +504,7 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
         sock = (q - queries) % nsocks;
     }
 
-    isc_buffer_clear(msg);
+    perf_buffer_clear(msg);
     result = perf_dns_buildrequest(NULL, (isc_textregion_t*)&used,
         qid, edns, dnssec, tsigkey, NULL, msg);
     if (result != PERF_R_SUCCESS)
@@ -525,8 +525,8 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
         break;
     }
 
-    base   = isc_buffer_base(msg);
-    length = isc_buffer_usedlength(msg);
+    base   = perf_buffer_base(msg);
+    length = perf_buffer_usedlength(msg);
     if (perf_net_sendto(&socks[sock], base, length, 0,
             &server_addr.sa.sa, server_addr.length)
         < 1) {
@@ -677,7 +677,7 @@ int main(int argc, char** argv)
 {
     int           i;
     FILE*         plotf;
-    isc_buffer_t  lines, msg;
+    perf_buffer_t lines, msg;
     char          input_data[MAX_INPUT_DATA];
     unsigned char outpacket_buffer[MAX_EDNS_PACKET];
     unsigned int  max_packet_size;
@@ -700,10 +700,10 @@ int main(int argc, char** argv)
 
     perf_os_handlesignal(SIGPIPE, handle_sigpipe);
 
-    isc_buffer_init(&lines, input_data, sizeof(input_data));
+    perf_buffer_init(&lines, input_data, sizeof(input_data));
 
     max_packet_size = edns ? MAX_EDNS_PACKET : MAX_UDP_PACKET;
-    isc_buffer_init(&msg, outpacket_buffer, max_packet_size);
+    perf_buffer_init(&msg, outpacket_buffer, max_packet_size);
 
     traffic_time = ramp_time + sustain_time;
     end_time     = traffic_time + wait_time;

@@ -19,6 +19,11 @@
 
 #include "config.h"
 
+#include "dns.h"
+
+#include "log.h"
+#include "opt.h"
+
 #include <ctype.h>
 #include <time.h>
 #include <inttypes.h>
@@ -45,10 +50,6 @@
 #include <dns/rdataclass.h>
 #include <dns/rdatatype.h>
 #include <dns/ttl.h>
-
-#include "dns.h"
-#include "log.h"
-#include "opt.h"
 
 #define _STATIC_DIGEST_BUFSIZE 128
 
@@ -97,12 +98,12 @@ struct perf_dnstsigkey {
     dns_fixedname_t   fname;
     dns_name_t*       name;
     unsigned char     secretdata[256];
-    isc_buffer_t      secret;
+    perf_buffer_t     secret;
 };
 
 struct perf_dnsednsoption {
     // isc_mem_t*    mctx;
-    // isc_buffer_t* buffer;
+    // perf_buffer_t* buffer;
     int dummy;
 };
 
@@ -178,16 +179,29 @@ void perf_dns_destroyctx(perf_dnsctx_t** ctxp)
 static perf_result_t
 name_fromstring(dns_name_t* name, const dns_name_t* origin,
     const char* str, unsigned int len,
-    isc_buffer_t* target, const char* type)
+    perf_buffer_t* target, const char* type)
 {
-    isc_buffer_t  buffer;
+    isc_buffer_t  buffer, _target, *_targetp = 0;
     perf_result_t result;
+
+    if (target) {
+        isc_buffer_init(&_target, target->base, target->length);
+        _target.used    = target->used;
+        _target.current = target->current;
+        _target.active  = target->active;
+        _targetp        = &_target;
+    }
 
     isc_buffer_constinit(&buffer, str, len);
     isc_buffer_add(&buffer, len);
-    result = dns_name_fromtext(name, &buffer, origin, 0, target);
+    result = dns_name_fromtext(name, &buffer, origin, 0, _targetp);
     if (result != ISC_R_SUCCESS)
         perf_log_warning("invalid %s name: %.*s", type, (int)len, str);
+    if (result == ISC_R_SUCCESS && target) {
+        target->used    = _target.used;
+        target->current = _target.current;
+        target->active  = _target.active;
+    }
     return result;
 }
 
@@ -278,9 +292,10 @@ perf_dnstsigkey_t* perf_dns_parsetsigkey(const char* arg)
 
     /* Secret */
 
-    isc_buffer_init(&tsigkey->secret, tsigkey->secretdata,
+    perf_buffer_init(&tsigkey->secret, tsigkey->secretdata,
         sizeof(tsigkey->secretdata));
-    result = isc_base64_decodestring(secret, &tsigkey->secret);
+    result = PERF_R_FAILURE;
+    // result = isc_base64_decodestring(secret, &tsigkey->secret);
     if (result != ISC_R_SUCCESS) {
         perf_log_warning("invalid TSIG secret '%s'", secret);
         perf_opt_usage();
@@ -306,7 +321,7 @@ perf_dnsednsoption_t* perf_dns_parseednsoption(const char* arg)
     // char*                 value;
     perf_dnsednsoption_t* option;
     // uint16_t              code;
-    // isc_buffer_t          save;
+    // perf_buffer_t          save;
     // perf_result_t         result;
 
     // copy = isc_mem_strdup(mctx, arg);
@@ -336,11 +351,11 @@ perf_dnsednsoption_t* perf_dns_parseednsoption(const char* arg)
     //     option->mctx   = mctx;
     //     option->buffer = NULL;
     // #ifdef HAVE_ISC_BUFFER_ALLOCATE_RESULT
-    //     result = isc_buffer_allocate(mctx, &option->buffer, strlen(value) / 2 + 4);
+    //     result = perf_buffer_allocate(mctx, &option->buffer, strlen(value) / 2 + 4);
     //     if (result != ISC_R_SUCCESS)
     //         perf_log_fatal("out of memory");
     // #else
-    //     isc_buffer_allocate(mctx, &option->buffer, strlen(value) / 2 + 4);
+    //     perf_buffer_allocate(mctx, &option->buffer, strlen(value) / 2 + 4);
     // #endif
     //
     //     result = isc_parse_uint16(&code, copy, 0);
@@ -350,16 +365,16 @@ perf_dnsednsoption_t* perf_dns_parseednsoption(const char* arg)
     //         exit(1);
     //     }
     //
-    //     isc_buffer_putuint16(option->buffer, code);
+    //     perf_buffer_putuint16(option->buffer, code);
     //     save = *option->buffer;
-    //     isc_buffer_add(option->buffer, 2);
+    //     perf_buffer_add(option->buffer, 2);
     //     result = isc_hex_decodestring(value, option->buffer);
     //     if (result != ISC_R_SUCCESS) {
     //         perf_log_warning("invalid EDNS Option value '%s'", value);
     //         perf_opt_usage();
     //         exit(1);
     //     }
-    //     isc_buffer_putuint16(&save, isc_buffer_usedlength(option->buffer) - 4);
+    //     perf_buffer_putuint16(&save, perf_buffer_usedlength(option->buffer) - 4);
     //
     //     isc_mem_free(mctx, copy);
     return option;
@@ -377,7 +392,7 @@ void perf_dns_destroyednsoption(perf_dnsednsoption_t** optionp)
 /*
  * Appends an OPT record to the packet.
  */
-static perf_result_t add_edns(isc_buffer_t* packet, bool dnssec, perf_dnsednsoption_t* option)
+static perf_result_t add_edns(perf_buffer_t* packet, bool dnssec, perf_dnsednsoption_t* option)
 {
     // unsigned char* base;
     // unsigned int   option_length;
@@ -385,29 +400,29 @@ static perf_result_t add_edns(isc_buffer_t* packet, bool dnssec, perf_dnsednsopt
     //
     // option_length = 0;
     // if (option != NULL)
-    //     option_length += isc_buffer_usedlength(option->buffer);
+    //     option_length += perf_buffer_usedlength(option->buffer);
     //
     // total_length = EDNSLEN + option_length;
     //
-    // if (isc_buffer_availablelength(packet) < total_length) {
+    // if (perf_buffer_availablelength(packet) < total_length) {
     //     perf_log_warning("failed to add OPT to query packet");
     //     return (PERF_R_NOSPACE);
     // }
     //
-    // base = isc_buffer_base(packet);
+    // base = perf_buffer_base(packet);
     //
-    // isc_buffer_putuint8(packet, 0); /* root name */
-    // isc_buffer_putuint16(packet, dns_rdatatype_opt); /* type */
-    // isc_buffer_putuint16(packet, MAX_EDNS_PACKET); /* class */
-    // isc_buffer_putuint8(packet, 0); /* xrcode */
-    // isc_buffer_putuint8(packet, 0); /* version */
+    // perf_buffer_putuint8(packet, 0); /* root name */
+    // perf_buffer_putuint16(packet, dns_rdatatype_opt); /* type */
+    // perf_buffer_putuint16(packet, MAX_EDNS_PACKET); /* class */
+    // perf_buffer_putuint8(packet, 0); /* xrcode */
+    // perf_buffer_putuint8(packet, 0); /* version */
     // if (dnssec) /* flags */
-    //     isc_buffer_putuint16(packet, 0x8000);
+    //     perf_buffer_putuint16(packet, 0x8000);
     // else
-    //     isc_buffer_putuint16(packet, 0);
-    // isc_buffer_putuint16(packet, option_length); /* rdlen */
+    //     perf_buffer_putuint16(packet, 0);
+    // perf_buffer_putuint16(packet, option_length); /* rdlen */
     // if (option != NULL) {
-    //     isc_buffer_putmem(packet, isc_buffer_base(option->buffer),
+    //     perf_buffer_putmem(packet, perf_buffer_base(option->buffer),
     //         option_length);
     // }
     //
@@ -424,8 +439,8 @@ hmac_init(perf_dnstsigkey_t* tsigkey, hmac_ctx_t* ctx)
     // unsigned char* secret;
     // unsigned int   length;
     //
-    // secret = isc_buffer_base(&tsigkey->secret);
-    // length = isc_buffer_usedlength(&tsigkey->secret);
+    // secret = perf_buffer_base(&tsigkey->secret);
+    // length = perf_buffer_usedlength(&tsigkey->secret);
 
     switch (tsigkey->hmactype) {
     case TSIG_HMACMD5:
@@ -523,7 +538,7 @@ hmac_sign(perf_dnstsigkey_t* tsigkey, hmac_ctx_t* ctx, unsigned char* digest,
  * Appends a TSIG record to the packet.
  */
 static perf_result_t
-add_tsig(isc_buffer_t* packet, perf_dnstsigkey_t* tsigkey)
+add_tsig(perf_buffer_t* packet, perf_dnstsigkey_t* tsigkey)
 {
     unsigned char* base;
     hmac_ctx_t     hmac;
@@ -531,7 +546,7 @@ add_tsig(isc_buffer_t* packet, perf_dnstsigkey_t* tsigkey)
     isc_region_t*  alg_r;
     unsigned int   rdlen, totallen;
     unsigned char  tmpdata[512];
-    isc_buffer_t   tmp;
+    perf_buffer_t  tmp;
     uint32_t       now;
     unsigned char  digest[_STATIC_DIGEST_BUFSIZE];
 
@@ -543,47 +558,47 @@ add_tsig(isc_buffer_t* packet, perf_dnstsigkey_t* tsigkey)
     /* Make sure everything will fit */
     rdlen    = alg_r->length + 16 + tsigkey->digestlen;
     totallen = name_r.length + 10 + rdlen;
-    if (totallen > isc_buffer_availablelength(packet)) {
+    if (totallen > perf_buffer_availablelength(packet)) {
         perf_log_warning("adding TSIG: out of space");
         return (PERF_R_NOSPACE);
     }
 
-    base = isc_buffer_base(packet);
+    base = perf_buffer_base(packet);
 
     /* Digest the message */
-    hmac_update(tsigkey, &hmac, isc_buffer_base(packet),
-        isc_buffer_usedlength(packet));
+    hmac_update(tsigkey, &hmac, perf_buffer_base(packet),
+        perf_buffer_usedlength(packet));
 
     /* Digest the TSIG record */
-    isc_buffer_init(&tmp, tmpdata, sizeof tmpdata);
-    isc_buffer_copyregion(&tmp, &name_r); /* name */
-    isc_buffer_putuint16(&tmp, dns_rdataclass_any); /* class */
-    isc_buffer_putuint32(&tmp, 0); /* ttl */
-    isc_buffer_copyregion(&tmp, alg_r); /* alg */
-    isc_buffer_putuint16(&tmp, 0); /* time high */
-    isc_buffer_putuint32(&tmp, now); /* time low */
-    isc_buffer_putuint16(&tmp, 300); /* fudge */
-    isc_buffer_putuint16(&tmp, 0); /* error */
-    isc_buffer_putuint16(&tmp, 0); /* other length */
-    hmac_update(tsigkey, &hmac, isc_buffer_base(&tmp),
-        isc_buffer_usedlength(&tmp));
+    perf_buffer_init(&tmp, tmpdata, sizeof tmpdata);
+    perf_buffer_copyregion(&tmp, &name_r); /* name */
+    perf_buffer_putuint16(&tmp, dns_rdataclass_any); /* class */
+    perf_buffer_putuint32(&tmp, 0); /* ttl */
+    perf_buffer_copyregion(&tmp, alg_r); /* alg */
+    perf_buffer_putuint16(&tmp, 0); /* time high */
+    perf_buffer_putuint32(&tmp, now); /* time low */
+    perf_buffer_putuint16(&tmp, 300); /* fudge */
+    perf_buffer_putuint16(&tmp, 0); /* error */
+    perf_buffer_putuint16(&tmp, 0); /* other length */
+    hmac_update(tsigkey, &hmac, perf_buffer_base(&tmp),
+        perf_buffer_usedlength(&tmp));
     hmac_sign(tsigkey, &hmac, digest, tsigkey->digestlen);
 
     /* Add the TSIG record. */
-    isc_buffer_copyregion(packet, &name_r); /* name */
-    isc_buffer_putuint16(packet, dns_rdatatype_tsig); /* type */
-    isc_buffer_putuint16(packet, dns_rdataclass_any); /* class */
-    isc_buffer_putuint32(packet, 0); /* ttl */
-    isc_buffer_putuint16(packet, rdlen); /* rdlen */
-    isc_buffer_copyregion(packet, alg_r); /* alg */
-    isc_buffer_putuint16(packet, 0); /* time high */
-    isc_buffer_putuint32(packet, now); /* time low */
-    isc_buffer_putuint16(packet, 300); /* fudge */
-    isc_buffer_putuint16(packet, tsigkey->digestlen); /* digest len */
-    isc_buffer_putmem(packet, digest, tsigkey->digestlen); /* digest */
-    isc_buffer_putmem(packet, base, 2); /* orig ID */
-    isc_buffer_putuint16(packet, 0); /* error */
-    isc_buffer_putuint16(packet, 0); /* other len */
+    perf_buffer_copyregion(packet, &name_r); /* name */
+    perf_buffer_putuint16(packet, dns_rdatatype_tsig); /* type */
+    perf_buffer_putuint16(packet, dns_rdataclass_any); /* class */
+    perf_buffer_putuint32(packet, 0); /* ttl */
+    perf_buffer_putuint16(packet, rdlen); /* rdlen */
+    perf_buffer_copyregion(packet, alg_r); /* alg */
+    perf_buffer_putuint16(packet, 0); /* time high */
+    perf_buffer_putuint32(packet, now); /* time low */
+    perf_buffer_putuint16(packet, 300); /* fudge */
+    perf_buffer_putuint16(packet, tsigkey->digestlen); /* digest len */
+    perf_buffer_putmem(packet, digest, tsigkey->digestlen); /* digest */
+    perf_buffer_putmem(packet, base, 2); /* orig ID */
+    perf_buffer_putuint16(packet, 0); /* error */
+    perf_buffer_putuint16(packet, 0); /* other len */
 
     base[11]++; /* increment record count */
 
@@ -591,7 +606,7 @@ add_tsig(isc_buffer_t* packet, perf_dnstsigkey_t* tsigkey)
 }
 
 static perf_result_t
-build_query(const isc_textregion_t* line, isc_buffer_t* msg)
+build_query(const isc_textregion_t* line, perf_buffer_t* msg)
 {
     char*            domain_str;
     int              domain_len;
@@ -627,8 +642,8 @@ build_query(const isc_textregion_t* line, isc_buffer_t* msg)
         return (PERF_R_FAILURE);
     }
 
-    isc_buffer_putuint16(msg, qtype);
-    isc_buffer_putuint16(msg, dns_rdataclass_in);
+    perf_buffer_putuint16(msg, qtype);
+    perf_buffer_putuint16(msg, dns_rdataclass_in);
 
     return PERF_R_SUCCESS;
 }
@@ -647,11 +662,11 @@ build_query(const isc_textregion_t* line, isc_buffer_t* msg)
 //     dns_name_t* zname, int want_ttl, int need_type,
 //     int want_rdata, int need_rdata, dns_name_t* name,
 //     uint32_t* ttlp, dns_rdatatype_t* typep,
-//     dns_rdata_t* rdata, isc_buffer_t* rdatabuf)
+//     dns_rdata_t* rdata, perf_buffer_t* rdatabuf)
 // {
 // char*                curr_str;
 // unsigned int         curr_len;
-// isc_buffer_t         buffer;
+// perf_buffer_t         buffer;
 // isc_textregion_t     src;
 // dns_rdatacallbacks_t callbacks;
 // perf_result_t        result;
@@ -716,8 +731,8 @@ build_query(const isc_textregion_t* line, isc_buffer_t* msg)
 //     return (PERF_R_FAILURE);
 // }
 //
-// isc_buffer_init(&buffer, str, strlen(str));
-// isc_buffer_add(&buffer, strlen(str));
+// perf_buffer_init(&buffer, str, strlen(str));
+// perf_buffer_add(&buffer, strlen(str));
 // result = isc_lex_openbuffer(ctx->lexer, &buffer);
 // if (result != ISC_R_SUCCESS) {
 //     perf_log_warning("setting up lexer: %s", perf_result_totext(result));
@@ -740,11 +755,11 @@ build_query(const isc_textregion_t* line, isc_buffer_t* msg)
  */
 static perf_result_t
 build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
-    isc_buffer_t* msg)
+    perf_buffer_t* msg)
 {
     //     isc_textregion_t input;
     //     char*            msgbase;
-    //     isc_buffer_t     rdlenbuf, rdatabuf;
+    //     perf_buffer_t     rdlenbuf, rdatabuf;
     //     unsigned char    rdataarray[MAX_RDATA_LENGTH];
     //     isc_textregion_t token;
     //     char*            str;
@@ -764,7 +779,7 @@ build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
     //     dns_compress_rollback(&ctx->compress, 0);
     //
     //     input   = *record;
-    //     msgbase = isc_buffer_base(msg);
+    //     msgbase = perf_buffer_base(msg);
     //
     // /* Initialize */
     // #ifdef dns_fixedname_init
@@ -794,8 +809,8 @@ build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
     //             perf_result_totext(result));
     //         goto done;
     //     }
-    //     isc_buffer_putuint16(msg, dns_rdatatype_soa);
-    //     isc_buffer_putuint16(msg, dns_rdataclass_in);
+    //     perf_buffer_putuint16(msg, dns_rdatatype_soa);
+    //     perf_buffer_putuint16(msg, dns_rdataclass_in);
     //
     //     while (true) {
     //         input.base += strlen(input.base) + 1;
@@ -806,7 +821,7 @@ build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
     //
     //         ttl    = 0;
     //         rdtype = dns_rdatatype_any;
-    //         isc_buffer_init(&rdatabuf, rdataarray, sizeof(rdataarray));
+    //         perf_buffer_init(&rdatabuf, rdataarray, sizeof(rdataarray));
     //         dns_rdata_init(&rdata);
     //         rdclass   = dns_rdataclass_in;
     //         is_update = false;
@@ -828,7 +843,7 @@ build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
     //                 false, false, true,
     //                 false, oname, &ttl,
     //                 &rdtype, &rdata, &rdatabuf);
-    //             if (isc_buffer_usedlength(&rdatabuf) > 0)
+    //             if (perf_buffer_usedlength(&rdatabuf) > 0)
     //                 rdclass = dns_rdataclass_none;
     //             else
     //                 rdclass = dns_rdataclass_any;
@@ -838,7 +853,7 @@ build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
     //                 false, false, true,
     //                 false, oname, &ttl,
     //                 &rdtype, &rdata, &rdatabuf);
-    //             if (isc_buffer_usedlength(&rdatabuf) > 0)
+    //             if (perf_buffer_usedlength(&rdatabuf) > 0)
     //                 rdclass = dns_rdataclass_in;
     //             else
     //                 rdclass = dns_rdataclass_any;
@@ -871,18 +886,18 @@ build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
     //                 perf_result_totext(result));
     //             goto done;
     //         }
-    //         if (isc_buffer_availablelength(msg) < 10) {
+    //         if (perf_buffer_availablelength(msg) < 10) {
     //             perf_log_warning("out of space in message buffer");
     //             result = PERF_R_NOSPACE;
     //             goto done;
     //         }
     //
-    //         isc_buffer_putuint16(msg, rdtype);
-    //         isc_buffer_putuint16(msg, rdclass);
-    //         isc_buffer_putuint32(msg, ttl);
+    //         perf_buffer_putuint16(msg, rdtype);
+    //         perf_buffer_putuint16(msg, rdclass);
+    //         perf_buffer_putuint32(msg, ttl);
     //         rdlenbuf = *msg;
-    //         isc_buffer_putuint16(msg, 0); /* rdlen */
-    //         rdlen = isc_buffer_usedlength(&rdatabuf);
+    //         perf_buffer_putuint16(msg, 0); /* rdlen */
+    //         rdlen = perf_buffer_usedlength(&rdatabuf);
     //         if (rdlen > 0) {
     //             result = dns_rdata_towire(&rdata, &ctx->compress, msg);
     //             if (result != ISC_R_SUCCESS) {
@@ -891,7 +906,7 @@ build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
     //                 goto done;
     //             }
     //             rdlen = msg->used - rdlenbuf.used - 2;
-    //             isc_buffer_putuint16(&rdlenbuf, rdlen);
+    //             perf_buffer_putuint16(&rdlenbuf, rdlen);
     //         }
     //         if (is_update)
     //             updates++;
@@ -914,7 +929,7 @@ perf_dns_buildrequest(perf_dnsctx_t* ctx, const isc_textregion_t* record,
     uint16_t qid,
     bool edns, bool dnssec,
     perf_dnstsigkey_t* tsigkey, perf_dnsednsoption_t* option,
-    isc_buffer_t* msg)
+    perf_buffer_t* msg)
 {
     unsigned int  flags;
     perf_result_t result;
@@ -925,12 +940,12 @@ perf_dns_buildrequest(perf_dnsctx_t* ctx, const isc_textregion_t* record,
         flags = DNS_MESSAGEFLAG_RD;
 
     /* Create the DNS packet header */
-    isc_buffer_putuint16(msg, qid);
-    isc_buffer_putuint16(msg, flags); /* flags */
-    isc_buffer_putuint16(msg, 1); /* qdcount */
-    isc_buffer_putuint16(msg, 0); /* ancount */
-    isc_buffer_putuint16(msg, 0); /* aucount */
-    isc_buffer_putuint16(msg, 0); /* arcount */
+    perf_buffer_putuint16(msg, qid);
+    perf_buffer_putuint16(msg, flags); /* flags */
+    perf_buffer_putuint16(msg, 1); /* qdcount */
+    perf_buffer_putuint16(msg, 0); /* ancount */
+    perf_buffer_putuint16(msg, 0); /* aucount */
+    perf_buffer_putuint16(msg, 0); /* arcount */
 
     if (ctx != NULL) {
         result = build_update(ctx, record, msg);
