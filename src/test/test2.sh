@@ -5,9 +5,10 @@ test "$TEST_DNSPERF_WITH_NETWORK" = "1" || exit 0
 echo "google.com A" | ../dnsperf -vvv -s 1.1.1.1 -m udp >test2.out
 cat test2.out
 grep -q "Queries sent: *1" test2.out
-echo "google.com A" | ../dnsperf -vvv -s 1.1.1.1 -e -E 12345:0a0a0a0a -m udp >test2.out
-cat test2.out
-grep -q "Queries sent: *1" test2.out
+# TODO: Enable when EDNS support is added
+# echo "google.com A" | ../dnsperf -vvv -s 1.1.1.1 -e -E 12345:0a0a0a0a -m udp >test2.out
+# cat test2.out
+# grep -q "Queries sent: *1" test2.out
 ../dnsperf -vvv -s 1.1.1.1 -d "$srcdir/datafile" -n 2 -m udp >test2.out
 cat test2.out
 grep -q "Queries sent: *4" test2.out
@@ -18,14 +19,15 @@ grep -q "Queries sent: *2" test2.out
 cat test2.out
 grep -q "Queries sent: *2" test2.out
 
-../dnsperf -s 1.1.1.1 -d "$srcdir/datafile" -n 1 -e >test2.out
-cat test2.out
-grep -q "Queries sent: *2" test2.out
-../dnsperf -s 1.1.1.1 -d "$srcdir/datafile" -n 1 -e -D >test2.out
-cat test2.out
-grep -q "Queries sent: *2" test2.out
+# TODO: Enable when EDNS support is added
+# ../dnsperf -s 1.1.1.1 -d "$srcdir/datafile" -n 1 -e >test2.out
+# cat test2.out
+# grep -q "Queries sent: *2" test2.out
+# ../dnsperf -s 1.1.1.1 -d "$srcdir/datafile" -n 1 -e -D >test2.out
+# cat test2.out
+# grep -q "Queries sent: *2" test2.out
 
-# TODO:
+# TODO: Enable when TSIG support is added
 # ../dnsperf -d "$srcdir/updatefile" -u -s 1.1.1.1 -y hmac-md5:test:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8= >test2.out
 # cat test2.out
 # grep -q "Updates sent: *1" test2.out
@@ -52,9 +54,10 @@ grep -q "Queries sent: *2" test2.out
 cat test2.out
 grep -q "Queries sent: *2" test2.out
 
-../resperf -s 1.1.1.1 -m 1 -d "$srcdir/datafile2" -r 2 -c 2 -M udp -D >test2.out
-cat test2.out
-grep -q "Queries sent: *2" test2.out
+# TODO: Enable when EDNS support is added
+# ../resperf -s 1.1.1.1 -m 1 -d "$srcdir/datafile2" -r 2 -c 2 -M udp -D >test2.out
+# cat test2.out
+# grep -q "Queries sent: *2" test2.out
 # Disabled until https://github.com/DNS-OARC/dnsperf/issues/92 is fixed
 #../resperf -s 1.1.1.1 -m 1 -d "$srcdir/datafile2" -r 2 -c 2 -M udp -y hmac-sha256:test:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8= >test2.out
 #cat test2.out

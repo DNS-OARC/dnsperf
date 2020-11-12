@@ -51,7 +51,6 @@
 #define ISC_BUFFER_USEINLINE
 
 #include <isc/buffer.h>
-#include <isc/mem.h>
 #include <isc/netaddr.h>
 #include <isc/print.h>
 #include <isc/region.h>
@@ -186,8 +185,6 @@ static bool interrupted = false;
 static int threadpipe[2];
 static int mainpipe[2];
 static int intrpipe[2];
-
-static isc_mem_t* mctx;
 
 static perf_datafile_t* input;
 
@@ -384,15 +381,6 @@ setup(int argc, char** argv, config_t* config)
     const char* tsigkey     = NULL;
     const char* mode        = 0;
 
-#ifdef HAVE_ISC_MEM_CREATE_RESULT
-    perf_result_t result = isc_mem_create(0, 0, &mctx);
-    if (result != ISC_R_SUCCESS)
-        perf_log_fatal("creating memory context: %s",
-            perf_result_totext(result));
-#else
-    isc_mem_create(&mctx);
-#endif
-
     dns_result_register();
 
     memset(config, 0, sizeof(*config));
@@ -528,7 +516,6 @@ cleanup(config_t* config)
         perf_dns_destroytsigkey(&config->tsigkey);
     if (config->edns_option != NULL)
         perf_dns_destroyednsoption(&config->edns_option);
-    isc_mem_destroy(&mctx);
 }
 
 typedef enum {
@@ -1108,9 +1095,9 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
     if (tinfo->nsocks > MAX_SOCKETS)
         tinfo->nsocks = MAX_SOCKETS;
 
-    tinfo->socks = isc_mem_get(mctx, tinfo->nsocks * sizeof(*tinfo->socks));
-    if (tinfo->socks == NULL)
+    if (!(tinfo->socks = calloc(tinfo->nsocks, sizeof(*tinfo->socks)))) {
         perf_log_fatal("out of memory");
+    }
     socket_offset = 0;
     for (i = 0; i < offset; i++)
         socket_offset += threads[i].nsocks;
@@ -1142,7 +1129,6 @@ threadinfo_cleanup(threadinfo_t* tinfo, times_t* times)
         cancel_queries(tinfo);
     for (i = 0; i < tinfo->nsocks; i++)
         perf_net_close(&tinfo->socks[i]);
-    isc_mem_put(mctx, tinfo->socks, tinfo->nsocks * sizeof(*tinfo->socks));
     perf_dns_destroyctx(&tinfo->dnsctx);
     if (tinfo->last_recv > times->end_time)
         times->end_time = tinfo->last_recv;
@@ -1187,9 +1173,9 @@ int main(int argc, char** argv)
 
     print_initial_status(&config);
 
-    threads = isc_mem_get(mctx, config.threads * sizeof(threadinfo_t));
-    if (threads == NULL)
+    if (!(threads = calloc(config.threads, sizeof(threadinfo_t)))) {
         perf_log_fatal("out of memory");
+    }
     for (i = 0; i < config.threads; i++)
         threadinfo_init(&threads[i], &config, &times);
     if (config.stats_interval > 0) {
@@ -1236,7 +1222,6 @@ int main(int argc, char** argv)
     sum_stats(&config, &total_stats);
     print_statistics(&config, &times, &total_stats);
 
-    isc_mem_put(mctx, threads, config.threads * sizeof(threadinfo_t));
     cleanup(&config);
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
     ERR_free_strings();

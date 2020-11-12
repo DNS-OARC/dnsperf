@@ -41,7 +41,6 @@
 #include <dns/callbacks.h>
 #include <dns/fixedname.h>
 #include <dns/message.h>
-#include <dns/name.h>
 #include <dns/rdata.h>
 #include <dns/rdataclass.h>
 #include <dns/rdatatype.h>
