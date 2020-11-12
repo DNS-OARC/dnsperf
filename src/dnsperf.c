@@ -277,14 +277,14 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats)
         units, stats->num_sent);
     printf("  %s completed:    %" PRIu64 " (%.2lf%%)\n",
         units, stats->num_completed,
-        SAFE_DIV(100.0 * stats->num_completed, stats->num_sent));
+        PERF_SAFE_DIV(100.0 * stats->num_completed, stats->num_sent));
     printf("  %s lost:         %" PRIu64 " (%.2lf%%)\n",
         units, stats->num_timedout,
-        SAFE_DIV(100.0 * stats->num_timedout, stats->num_sent));
+        PERF_SAFE_DIV(100.0 * stats->num_timedout, stats->num_sent));
     if (stats->num_interrupted > 0)
         printf("  %s interrupted:  %" PRIu64 " (%.2lf%%)\n",
             units, stats->num_interrupted,
-            SAFE_DIV(100.0 * stats->num_interrupted, stats->num_sent));
+            PERF_SAFE_DIV(100.0 * stats->num_interrupted, stats->num_sent));
     printf("\n");
 
     printf("  Response codes:       ");
@@ -303,18 +303,18 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats)
     printf("\n");
 
     printf("  Average packet size:  request %u, response %u\n",
-        (unsigned int)SAFE_DIV(stats->total_request_size, stats->num_sent),
-        (unsigned int)SAFE_DIV(stats->total_response_size,
+        (unsigned int)PERF_SAFE_DIV(stats->total_request_size, stats->num_sent),
+        (unsigned int)PERF_SAFE_DIV(stats->total_response_size,
             stats->num_completed));
     printf("  Run time (s):         %u.%06u\n",
         (unsigned int)(run_time / MILLION),
         (unsigned int)(run_time % MILLION));
     printf("  %s per second:   %.6lf\n", units,
-        SAFE_DIV(stats->num_completed, (((double)run_time) / MILLION)));
+        PERF_SAFE_DIV(stats->num_completed, (((double)run_time) / MILLION)));
 
     printf("\n");
 
-    latency_avg = SAFE_DIV(stats->latency_sum, stats->num_completed);
+    latency_avg = PERF_SAFE_DIV(stats->latency_sum, stats->num_completed);
     printf("  Average Latency (s):  %u.%06u (min %u.%06u, max %u.%06u)\n",
         (unsigned int)(latency_avg / MILLION),
         (unsigned int)(latency_avg % MILLION),
@@ -566,10 +566,10 @@ num_outstanding(const stats_t* stats)
 static void
 wait_for_start(void)
 {
-    LOCK(&start_lock);
+    PERF_LOCK(&start_lock);
     while (!started)
-        WAIT(&start_cond, &start_lock);
-    UNLOCK(&start_lock);
+        PERF_WAIT(&start_cond, &start_lock);
+    PERF_UNLOCK(&start_lock);
 }
 
 static void*
@@ -602,7 +602,7 @@ do_send(void* arg)
     isc_buffer_init(&lines, input_data, sizeof(input_data));
 
     wait_for_start();
-    now = get_time();
+    now = perf_get_time();
     while (!interrupted && now < times->stop_time) {
         /* Avoid flooding the network too quickly. */
         if (stats->num_sent < tinfo->max_outstanding && stats->num_sent % 2 == 1) {
@@ -610,7 +610,7 @@ do_send(void* arg)
                 usleep(1000);
             else
                 sleep(0);
-            now = get_time();
+            now = perf_get_time();
         }
 
         /* Rate limiting */
@@ -619,18 +619,18 @@ do_send(void* arg)
             req_time = (MILLION * stats->num_sent) / tinfo->max_qps;
             if (req_time > run_time) {
                 usleep(req_time - run_time);
-                now = get_time();
+                now = perf_get_time();
                 continue;
             }
         }
 
-        LOCK(&tinfo->lock);
+        PERF_LOCK(&tinfo->lock);
 
         /* Limit in-flight queries */
         if (num_outstanding(stats) >= tinfo->max_outstanding) {
-            TIMEDWAIT(&tinfo->cond, &tinfo->lock, &times->stop_time_ns, NULL);
-            UNLOCK(&tinfo->lock);
-            now = get_time();
+            PERF_TIMEDWAIT(&tinfo->cond, &tinfo->lock, &times->stop_time_ns, NULL);
+            PERF_UNLOCK(&tinfo->lock);
+            now = perf_get_time();
             continue;
         }
 
@@ -665,11 +665,11 @@ do_send(void* arg)
 
         if (!q->sock) {
             query_move(tinfo, q, prepend_unused);
-            UNLOCK(&tinfo->lock);
-            now = get_time();
+            PERF_UNLOCK(&tinfo->lock);
+            now = perf_get_time();
             continue;
         }
-        UNLOCK(&tinfo->lock);
+        PERF_UNLOCK(&tinfo->lock);
 
         isc_buffer_clear(&lines);
         result = perf_datafile_next(input, &lines, config->updates);
@@ -688,17 +688,17 @@ do_send(void* arg)
             config->dnssec, config->tsigkey,
             config->edns_option, &msg);
         if (result != PERF_R_SUCCESS) {
-            LOCK(&tinfo->lock);
+            PERF_LOCK(&tinfo->lock);
             query_move(tinfo, q, prepend_unused);
-            UNLOCK(&tinfo->lock);
-            now = get_time();
+            PERF_UNLOCK(&tinfo->lock);
+            now = perf_get_time();
             continue;
         }
 
         base   = isc_buffer_base(&msg);
         length = isc_buffer_usedlength(&msg);
 
-        now = get_time();
+        now = perf_get_time();
         if (config->verbose) {
             free(q->desc);
             q->desc = strdup(lines.base);
@@ -720,16 +720,16 @@ do_send(void* arg)
                     char __s[256];
                     perf_log_warning("failed to send packet: %s", perf_strerror_r(errno, __s, sizeof(__s)));
                 }
-                LOCK(&tinfo->lock);
+                PERF_LOCK(&tinfo->lock);
                 query_move(tinfo, q, prepend_unused);
-                UNLOCK(&tinfo->lock);
+                PERF_UNLOCK(&tinfo->lock);
                 continue;
             }
         } else if ((unsigned int)n != length) {
             perf_log_warning("failed to send full packet: only sent %d of %u", n, length);
-            LOCK(&tinfo->lock);
+            PERF_LOCK(&tinfo->lock);
             query_move(tinfo, q, prepend_unused);
-            UNLOCK(&tinfo->lock);
+            PERF_UNLOCK(&tinfo->lock);
             continue;
         }
         stats->num_sent++;
@@ -746,7 +746,7 @@ do_send(void* arg)
         }
     }
 
-    tinfo->done_send_time = get_time();
+    tinfo->done_send_time = perf_get_time();
     tinfo->done_sending   = true;
     if (write(mainpipe[1], "", 1)) { // lgtm [cpp/empty-block]
     }
@@ -766,7 +766,7 @@ process_timeouts(threadinfo_t* tinfo, uint64_t now)
     if (q == NULL || q->timestamp > now || now - q->timestamp < config->timeout)
         return;
 
-    LOCK(&tinfo->lock);
+    PERF_LOCK(&tinfo->lock);
 
     do {
         query_move(tinfo, q, append_unused);
@@ -783,7 +783,7 @@ process_timeouts(threadinfo_t* tinfo, uint64_t now)
         q = perf_list_tail(tinfo->outstanding_queries);
     } while (q != NULL && q->timestamp < now && now - q->timestamp >= config->timeout);
 
-    UNLOCK(&tinfo->lock);
+    PERF_UNLOCK(&tinfo->lock);
 }
 
 typedef struct {
@@ -810,7 +810,7 @@ recv_one(threadinfo_t* tinfo, int which_sock,
     packet_header = (uint16_t*)packet_buffer;
 
     n   = perf_net_recv(&tinfo->socks[which_sock], packet_buffer, packet_size, 0);
-    now = get_time();
+    now = perf_get_time();
     if (n < 0) {
         *saved_errnop = errno;
         return false;
@@ -874,7 +874,7 @@ do_recv(void* arg)
     stats = &tinfo->stats;
 
     wait_for_start();
-    now         = get_time();
+    now         = perf_get_time();
     last_socket = 0;
     while (!interrupted) {
         process_timeouts(tinfo, now);
@@ -912,7 +912,7 @@ do_recv(void* arg)
         nrecvd = i;
 
         /* Do all of the processing that requires the lock */
-        LOCK(&tinfo->lock);
+        PERF_LOCK(&tinfo->lock);
         for (i = 0; i < nrecvd; i++) {
             if (recvd[i].short_response)
                 continue;
@@ -927,8 +927,8 @@ do_recv(void* arg)
             recvd[i].desc = q->desc;
             q->desc       = NULL;
         }
-        SIGNAL(&tinfo->cond);
-        UNLOCK(&tinfo->lock);
+        PERF_SIGNAL(&tinfo->cond);
+        PERF_UNLOCK(&tinfo->lock);
 
         /* Now do the rest of the processing unlocked */
         for (i = 0; i < nrecvd; i++) {
@@ -978,7 +978,7 @@ do_recv(void* arg)
             } else if (saved_errno == EAGAIN) {
                 perf_os_waituntilanyreadable(tinfo->socks, tinfo->nsocks,
                     threadpipe[0], TIMEOUT_CHECK_TIME);
-                now = get_time();
+                now = perf_get_time();
                 continue;
             } else {
                 char __s[256];
@@ -1011,7 +1011,7 @@ do_interval_stats(void* arg)
     while (perf_os_waituntilreadable(&sock, threadpipe[0],
                tinfo->config->stats_interval)
            == PERF_R_TIMEDOUT) {
-        now = get_time();
+        now = perf_get_time();
         sum_stats(tinfo->config, &total);
         interval_time = now - last_interval_time;
         num_completed = total.num_completed - last_completed;
@@ -1073,8 +1073,8 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
     unsigned int offset, socket_offset, i;
 
     memset(tinfo, 0, sizeof(*tinfo));
-    MUTEX_INIT(&tinfo->lock);
-    COND_INIT(&tinfo->cond);
+    PERF_MUTEX_INIT(&tinfo->lock);
+    PERF_COND_INIT(&tinfo->cond);
 
     perf_list_init(tinfo->outstanding_queries);
     perf_list_init(tinfo->unused_queries);
@@ -1121,16 +1121,16 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
             config->bufsize);
     tinfo->current_sock = 0;
 
-    THREAD(&tinfo->receiver, do_recv, tinfo);
-    THREAD(&tinfo->sender, do_send, tinfo);
+    PERF_THREAD(&tinfo->receiver, do_recv, tinfo);
+    PERF_THREAD(&tinfo->sender, do_send, tinfo);
 }
 
 static void
 threadinfo_stop(threadinfo_t* tinfo)
 {
-    SIGNAL(&tinfo->cond);
-    JOIN(tinfo->sender, NULL);
-    JOIN(tinfo->receiver, NULL);
+    PERF_SIGNAL(&tinfo->cond);
+    PERF_JOIN(tinfo->sender, NULL);
+    PERF_JOIN(tinfo->receiver, NULL);
 }
 
 static void
@@ -1195,10 +1195,10 @@ int main(int argc, char** argv)
     if (config.stats_interval > 0) {
         stats_thread.config = &config;
         stats_thread.times  = &times;
-        THREAD(&stats_thread.sender, do_interval_stats, &stats_thread);
+        PERF_THREAD(&stats_thread.sender, do_interval_stats, &stats_thread);
     }
 
-    times.start_time = get_time();
+    times.start_time = perf_get_time();
     if (config.timelimit > 0)
         times.stop_time = times.start_time + config.timelimit;
     else
@@ -1206,10 +1206,10 @@ int main(int argc, char** argv)
     times.stop_time_ns.tv_sec  = times.stop_time / MILLION;
     times.stop_time_ns.tv_nsec = (times.stop_time % MILLION) * 1000;
 
-    LOCK(&start_lock);
+    PERF_LOCK(&start_lock);
     started = true;
-    BROADCAST(&start_cond);
-    UNLOCK(&start_lock);
+    PERF_BROADCAST(&start_cond);
+    PERF_UNLOCK(&start_lock);
 
     perf_os_handlesignal(SIGINT, handle_sigint);
     perf_os_blocksignal(SIGINT, false);
@@ -1219,14 +1219,14 @@ int main(int argc, char** argv)
     if (result == PERF_R_CANCELED)
         interrupted = true;
 
-    times.end_time = get_time();
+    times.end_time = perf_get_time();
 
     if (write(threadpipe[1], "", 1)) { // lgtm [cpp/empty-block]
     }
     for (i = 0; i < config.threads; i++)
         threadinfo_stop(&threads[i]);
     if (config.stats_interval > 0)
-        JOIN(stats_thread.sender, NULL);
+        PERF_JOIN(stats_thread.sender, NULL);
 
     for (i = 0; i < config.threads; i++)
         threadinfo_cleanup(&threads[i], &times);
