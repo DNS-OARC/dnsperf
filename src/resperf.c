@@ -46,7 +46,6 @@
 #include <signal.h>
 
 #include <isc/buffer.h>
-#include <isc/mem.h>
 #include <isc/print.h>
 #include <isc/region.h>
 #include <isc/types.h>
@@ -91,8 +90,6 @@ static query_list outstanding_list;
 static query_list instanding_list;
 
 static query_info* queries;
-
-static isc_mem_t* mctx;
 
 static perf_sockaddr_t         server_addr;
 static perf_sockaddr_t         local_addr;
@@ -226,15 +223,6 @@ setup(int argc, char** argv)
     unsigned int i;
     const char*  _mode = 0;
 
-#ifdef HAVE_ISC_MEM_CREATE_RESULT
-    perf_result_t result = isc_mem_create(0, 0, &mctx);
-    if (result != ISC_R_SUCCESS)
-        perf_log_fatal("creating memory context: %s",
-            perf_result_totext(result));
-#else
-    isc_mem_create(&mctx);
-#endif
-
     dns_result_register();
 
     sock_family     = AF_UNSPEC;
@@ -325,9 +313,9 @@ setup(int argc, char** argv)
 
     perf_list_init(outstanding_list);
     perf_list_init(instanding_list);
-    queries = isc_mem_get(mctx, max_outstanding * sizeof(query_info));
-    if (queries == NULL)
+    if (!(queries = calloc(max_outstanding, sizeof(query_info)))) {
         perf_log_fatal("out of memory");
+    }
     for (i = 0; i < max_outstanding; i++) {
         perf_link_init(&queries[i]);
         perf_list_append(instanding_list, &queries[i]);
@@ -348,9 +336,9 @@ setup(int argc, char** argv)
     if (tsigkey_str != NULL)
         tsigkey = perf_dns_parsetsigkey(tsigkey_str);
 
-    socks = isc_mem_get(mctx, nsocks * sizeof(*socks));
-    if (socks == NULL)
+    if (!(socks = calloc(nsocks, sizeof(*socks)))) {
         perf_log_fatal("out of memory");
+    }
     for (i = 0; i < nsocks; i++)
         socks[i] = perf_net_opensocket(mode, &server_addr, &local_addr, i, bufsize);
 }
@@ -363,10 +351,6 @@ cleanup(void)
     perf_datafile_close(&input);
     for (i = 0; i < nsocks; i++)
         (void)perf_net_close(&socks[i]);
-    isc_mem_put(mctx, socks, nsocks * sizeof(*socks));
-    isc_mem_put(mctx, queries, max_outstanding * sizeof(query_info));
-    isc_mem_put(mctx, buckets, n_buckets * sizeof(ramp_bucket));
-    isc_mem_destroy(&mctx);
     close(dummypipe[0]);
     close(dummypipe[1]);
 }
@@ -453,9 +437,10 @@ init_buckets(int n)
     ramp_bucket* p;
     int          i;
 
-    p = isc_mem_get(mctx, n * sizeof(*p));
-    if (p == NULL)
+    if (!(p = calloc(n, sizeof(*p)))) {
         perf_log_fatal("out of memory");
+        return 0; // fix clang scan-build
+    }
     for (i = 0; i < n; i++) {
         p[i].queries = p[i].responses = p[i].failures = 0;
         p[i].latency_sum                              = 0.0;
