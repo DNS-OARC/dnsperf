@@ -49,19 +49,6 @@
 #include <openssl/conf.h>
 #include <openssl/err.h>
 
-#include <isc/netaddr.h>
-#include <isc/print.h>
-#include <isc/region.h>
-#include <isc/types.h>
-
-#include <dns/rcode.h>
-#include <dns/result.h>
-
-#ifndef ISC_UINT64_MAX
-#include <stdint.h>
-#define ISC_UINT64_MAX UINT64_MAX
-#endif
-
 #define DEFAULT_SERVER_NAME "127.0.0.1"
 #define DEFAULT_SERVER_PORT 53
 #define DEFAULT_SERVER_TLS_PORT 853
@@ -379,8 +366,6 @@ setup(int argc, char** argv, config_t* config)
     const char* tsigkey     = NULL;
     const char* mode        = 0;
 
-    dns_result_register();
-
     memset(config, 0, sizeof(*config));
     config->argc = argc;
     config->argv = argv;
@@ -569,7 +554,7 @@ do_send(void* arg)
     uint64_t        now, run_time, req_time;
     char            input_data[MAX_INPUT_DATA];
     perf_buffer_t   lines;
-    isc_region_t    used;
+    perf_region_t   used;
     query_info*     q;
     int             qid;
     unsigned char   packet_buffer[MAX_EDNS_PACKET];
@@ -621,7 +606,7 @@ do_send(void* arg)
 
         q = perf_list_head(tinfo->unused_queries);
         query_move(tinfo, q, prepend_outstanding);
-        q->timestamp = ISC_UINT64_MAX;
+        q->timestamp = UINT64_MAX;
 
         i = tinfo->nsocks * 2;
         while (i--) {
@@ -668,7 +653,7 @@ do_send(void* arg)
         perf_buffer_usedregion(&lines, &used);
         perf_buffer_clear(&msg);
         result = perf_dns_buildrequest(tinfo->dnsctx,
-            (isc_textregion_t*)&used,
+            &used,
             qid, config->edns,
             config->dnssec, config->tsigkey,
             config->edns_option, &msg);
@@ -903,7 +888,7 @@ do_recv(void* arg)
                 continue;
 
             q = &tinfo->queries[recvd[i].qid];
-            if (q->list != &tinfo->outstanding_queries || q->timestamp == ISC_UINT64_MAX || !perf_net_sockeq(q->sock, recvd[i].sock)) {
+            if (q->list != &tinfo->outstanding_queries || q->timestamp == UINT64_MAX || !perf_net_sockeq(q->sock, recvd[i].sock)) {
                 recvd[i].unexpected = true;
                 continue;
             }
@@ -1022,7 +1007,7 @@ cancel_queries(threadinfo_t* tinfo)
             break;
         query_move(tinfo, q, append_unused);
 
-        if (q->timestamp == ISC_UINT64_MAX)
+        if (q->timestamp == UINT64_MAX)
             continue;
 
         tinfo->stats.num_interrupted++;
@@ -1186,7 +1171,7 @@ int main(int argc, char** argv)
     if (config.timelimit > 0)
         times.stop_time = times.start_time + config.timelimit;
     else
-        times.stop_time = ISC_UINT64_MAX;
+        times.stop_time = UINT64_MAX;
     times.stop_time_ns.tv_sec  = times.stop_time / MILLION;
     times.stop_time_ns.tv_nsec = (times.stop_time % MILLION) * 1000;
 

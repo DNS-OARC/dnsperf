@@ -46,12 +46,6 @@
 #include <openssl/err.h>
 #include <signal.h>
 
-#include <isc/print.h>
-#include <isc/region.h>
-#include <isc/types.h>
-
-#include <dns/result.h>
-
 /*
  * Global stuff
  */
@@ -68,6 +62,9 @@
 #define MAX_INPUT_DATA (4 * 1024)
 
 #define TIMEOUT_CHECK_TIME 5000000
+
+#define DNS_RCODE_NOERROR 0
+#define DNS_RCODE_NXDOMAIN 3
 
 struct query_info;
 
@@ -222,8 +219,6 @@ setup(int argc, char** argv)
     unsigned int bufsize;
     unsigned int i;
     const char*  _mode = 0;
-
-    dns_result_register();
 
     sock_family     = AF_UNSPEC;
     server_port     = 0;
@@ -458,7 +453,7 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
     query_info*    q;
     unsigned int   qid;
     unsigned int   sock;
-    isc_region_t   used;
+    perf_region_t  used;
     unsigned char* base;
     unsigned int   length;
     perf_result_t  result;
@@ -505,7 +500,7 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
     }
 
     perf_buffer_clear(msg);
-    result = perf_dns_buildrequest(NULL, (isc_textregion_t*)&used,
+    result = perf_dns_buildrequest(NULL, &used,
         qid, edns, dnssec, tsigkey, NULL, msg);
     if (result != PERF_R_SUCCESS)
         return (result);
@@ -623,7 +618,7 @@ try_process_response(unsigned int sockindex)
     latency = (time_now - q->sent_timestamp) / (double)MILLION;
     b       = find_bucket(q->sent_timestamp);
     b->responses++;
-    if (!(rcode == dns_rcode_noerror || rcode == dns_rcode_nxdomain))
+    if (!(rcode == DNS_RCODE_NOERROR || rcode == DNS_RCODE_NXDOMAIN))
         b->failures++;
     b->latency_sum += latency;
     num_responses_received++;
@@ -736,7 +731,7 @@ int main(int argc, char** argv)
                 enter_wait_phase();
             break;
         case PHASE_WAIT:
-            if (time_since_start >= end_time || ISC_LIST_EMPTY(outstanding_list))
+            if (time_since_start >= end_time || perf_list_empty(outstanding_list))
                 goto end_loop;
             break;
         }

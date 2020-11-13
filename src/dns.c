@@ -33,23 +33,10 @@
 #include <string.h>
 
 #define ISC_BUFFER_USEINLINE
-
-#include <isc/base64.h>
 #include <isc/buffer.h>
-#include <isc/hex.h>
-#include <isc/lex.h>
-#include <isc/mem.h>
-#include <isc/parseint.h>
-#include <isc/region.h>
-#include <isc/util.h>
-
-#include <dns/callbacks.h>
 #include <dns/fixedname.h>
-#include <dns/message.h>
 #include <dns/rdata.h>
-#include <dns/rdataclass.h>
 #include <dns/rdatatype.h>
-#include <dns/ttl.h>
 
 #define _STATIC_DIGEST_BUFSIZE 128
 
@@ -92,13 +79,13 @@ typedef union {
 } hmac_ctx_t;
 
 struct perf_dnstsigkey {
-    isc_constregion_t alg;
-    hmac_type_t       hmactype;
-    unsigned int      digestlen;
-    dns_fixedname_t   fname;
-    dns_name_t*       name;
-    unsigned char     secretdata[256];
-    perf_buffer_t     secret;
+    // isc_constregion_t alg;
+    hmac_type_t  hmactype;
+    unsigned int digestlen;
+    // dns_fixedname_t   fname;
+    // dns_name_t*       name;
+    unsigned char secretdata[256];
+    perf_buffer_t secret;
 };
 
 struct perf_dnsednsoption {
@@ -205,12 +192,12 @@ name_fromstring(dns_name_t* name, const dns_name_t* origin,
     return result;
 }
 
-#define SET_KEY(key, type)                                  \
-    do {                                                    \
-        (key)->alg.base   = TSIG_HMAC##type##_NAME;         \
-        (key)->alg.length = sizeof(TSIG_HMAC##type##_NAME); \
-        (key)->hmactype   = TSIG_HMAC##type;                \
+#define SET_KEY(key, type)                 \
+    do {                                   \
+        (key)->hmactype = TSIG_HMAC##type; \
     } while (0)
+// (key)->alg.base   = TSIG_HMAC##type##_NAME;
+// (key)->alg.length = sizeof(TSIG_HMAC##type##_NAME);
 // (key)->digestlen  = ISC_##type##_DIGESTLENGTH;
 
 perf_dnstsigkey_t* perf_dns_parsetsigkey(const char* arg)
@@ -276,25 +263,30 @@ perf_dnstsigkey_t* perf_dns_parsetsigkey(const char* arg)
 
     /* Name */
 
-#ifdef dns_fixedname_init
-    dns_fixedname_init(&tsigkey->fname);
-    tsigkey->name = dns_fixedname_name(&tsigkey->fname);
-#else
-    tsigkey->name = dns_fixedname_initname(&tsigkey->fname);
-#endif
-    result = name_fromstring(tsigkey->name, dns_rootname, name, namelen,
-        NULL, "TSIG key");
+    (void)name;
+    (void)namelen;
+    (void)secret;
+    perf_log_warning("TSIG option disabled");
+    exit(1);
+
+    // #ifdef dns_fixedname_init
+    //     dns_fixedname_init(&tsigkey->fname);
+    //     tsigkey->name = dns_fixedname_name(&tsigkey->fname);
+    // #else
+    //     tsigkey->name = dns_fixedname_initname(&tsigkey->fname);
+    // #endif
+    //     result = name_fromstring(tsigkey->name, dns_rootname, name, namelen,
+    //         NULL, "TSIG key");
     if (result != ISC_R_SUCCESS) {
         perf_opt_usage();
         exit(1);
     }
-    (void)dns_name_downcase(tsigkey->name, tsigkey->name, NULL);
+    // (void)dns_name_downcase(tsigkey->name, tsigkey->name, NULL);
 
     /* Secret */
 
     perf_buffer_init(&tsigkey->secret, tsigkey->secretdata,
         sizeof(tsigkey->secretdata));
-    result = PERF_R_FAILURE;
     // result = isc_base64_decodestring(secret, &tsigkey->secret);
     if (result != ISC_R_SUCCESS) {
         perf_log_warning("invalid TSIG secret '%s'", secret);
@@ -540,73 +532,74 @@ hmac_sign(perf_dnstsigkey_t* tsigkey, hmac_ctx_t* ctx, unsigned char* digest,
 static perf_result_t
 add_tsig(perf_buffer_t* packet, perf_dnstsigkey_t* tsigkey)
 {
-    unsigned char* base;
-    hmac_ctx_t     hmac;
-    isc_region_t   name_r;
-    isc_region_t*  alg_r;
-    unsigned int   rdlen, totallen;
-    unsigned char  tmpdata[512];
-    perf_buffer_t  tmp;
-    uint32_t       now;
-    unsigned char  digest[_STATIC_DIGEST_BUFSIZE];
+    // unsigned char* base;
+    hmac_ctx_t hmac;
+    // isc_region_t   name_r;
+    // isc_region_t*  alg_r;
+    // unsigned int   rdlen, totallen;
+    unsigned char tmpdata[512];
+    perf_buffer_t tmp;
+    // uint32_t       now;
+    unsigned char digest[_STATIC_DIGEST_BUFSIZE];
 
     hmac_init(tsigkey, &hmac);
-    now = time(NULL);
-    dns_name_toregion(tsigkey->name, &name_r);
-    alg_r = (isc_region_t*)&tsigkey->alg;
-
-    /* Make sure everything will fit */
-    rdlen    = alg_r->length + 16 + tsigkey->digestlen;
-    totallen = name_r.length + 10 + rdlen;
-    if (totallen > perf_buffer_availablelength(packet)) {
-        perf_log_warning("adding TSIG: out of space");
-        return (PERF_R_NOSPACE);
-    }
-
-    base = perf_buffer_base(packet);
-
-    /* Digest the message */
+    // now = time(NULL);
+    // dns_name_toregion(tsigkey->name, &name_r);
+    // alg_r = (isc_region_t*)&tsigkey->alg;
+    //
+    // /* Make sure everything will fit */
+    // rdlen    = alg_r->length + 16 + tsigkey->digestlen;
+    // totallen = name_r.length + 10 + rdlen;
+    // if (totallen > perf_buffer_availablelength(packet)) {
+    //     perf_log_warning("adding TSIG: out of space");
+    //     return (PERF_R_NOSPACE);
+    // }
+    //
+    // base = perf_buffer_base(packet);
+    //
+    // /* Digest the message */
     hmac_update(tsigkey, &hmac, perf_buffer_base(packet),
         perf_buffer_usedlength(packet));
 
-    /* Digest the TSIG record */
+    // /* Digest the TSIG record */
     perf_buffer_init(&tmp, tmpdata, sizeof tmpdata);
-    perf_buffer_copyregion(&tmp, &name_r); /* name */
-    perf_buffer_putuint16(&tmp, dns_rdataclass_any); /* class */
-    perf_buffer_putuint32(&tmp, 0); /* ttl */
-    perf_buffer_copyregion(&tmp, alg_r); /* alg */
-    perf_buffer_putuint16(&tmp, 0); /* time high */
-    perf_buffer_putuint32(&tmp, now); /* time low */
-    perf_buffer_putuint16(&tmp, 300); /* fudge */
-    perf_buffer_putuint16(&tmp, 0); /* error */
-    perf_buffer_putuint16(&tmp, 0); /* other length */
+    // perf_buffer_copyregion(&tmp, &name_r); /* name */
+    // perf_buffer_putuint16(&tmp, dns_rdataclass_any); /* class */
+    // perf_buffer_putuint32(&tmp, 0); /* ttl */
+    // perf_buffer_copyregion(&tmp, alg_r); /* alg */
+    // perf_buffer_putuint16(&tmp, 0); /* time high */
+    // perf_buffer_putuint32(&tmp, now); /* time low */
+    // perf_buffer_putuint16(&tmp, 300); /* fudge */
+    // perf_buffer_putuint16(&tmp, 0); /* error */
+    // perf_buffer_putuint16(&tmp, 0); /* other length */
     hmac_update(tsigkey, &hmac, perf_buffer_base(&tmp),
         perf_buffer_usedlength(&tmp));
     hmac_sign(tsigkey, &hmac, digest, tsigkey->digestlen);
 
-    /* Add the TSIG record. */
-    perf_buffer_copyregion(packet, &name_r); /* name */
-    perf_buffer_putuint16(packet, dns_rdatatype_tsig); /* type */
-    perf_buffer_putuint16(packet, dns_rdataclass_any); /* class */
-    perf_buffer_putuint32(packet, 0); /* ttl */
-    perf_buffer_putuint16(packet, rdlen); /* rdlen */
-    perf_buffer_copyregion(packet, alg_r); /* alg */
-    perf_buffer_putuint16(packet, 0); /* time high */
-    perf_buffer_putuint32(packet, now); /* time low */
-    perf_buffer_putuint16(packet, 300); /* fudge */
-    perf_buffer_putuint16(packet, tsigkey->digestlen); /* digest len */
-    perf_buffer_putmem(packet, digest, tsigkey->digestlen); /* digest */
-    perf_buffer_putmem(packet, base, 2); /* orig ID */
-    perf_buffer_putuint16(packet, 0); /* error */
-    perf_buffer_putuint16(packet, 0); /* other len */
-
-    base[11]++; /* increment record count */
-
-    return (PERF_R_SUCCESS);
+    // /* Add the TSIG record. */
+    // perf_buffer_copyregion(packet, &name_r); /* name */
+    // perf_buffer_putuint16(packet, dns_rdatatype_tsig); /* type */
+    // perf_buffer_putuint16(packet, dns_rdataclass_any); /* class */
+    // perf_buffer_putuint32(packet, 0); /* ttl */
+    // perf_buffer_putuint16(packet, rdlen); /* rdlen */
+    // perf_buffer_copyregion(packet, alg_r); /* alg */
+    // perf_buffer_putuint16(packet, 0); /* time high */
+    // perf_buffer_putuint32(packet, now); /* time low */
+    // perf_buffer_putuint16(packet, 300); /* fudge */
+    // perf_buffer_putuint16(packet, tsigkey->digestlen); /* digest len */
+    // perf_buffer_putmem(packet, digest, tsigkey->digestlen); /* digest */
+    // perf_buffer_putmem(packet, base, 2); /* orig ID */
+    // perf_buffer_putuint16(packet, 0); /* error */
+    // perf_buffer_putuint16(packet, 0); /* other len */
+    //
+    // base[11]++; /* increment record count */
+    //
+    // return (PERF_R_SUCCESS);
+    return PERF_R_FAILURE;
 }
 
 static perf_result_t
-build_query(const isc_textregion_t* line, perf_buffer_t* msg)
+build_query(const perf_region_t* line, perf_buffer_t* msg)
 {
     char*            domain_str;
     int              domain_len;
@@ -632,7 +625,7 @@ build_query(const isc_textregion_t* line, perf_buffer_t* msg)
         return isc2perf_result(result);
 
     if (qtype_r.length == 0) {
-        perf_log_warning("invalid query input format: %s", line->base);
+        perf_log_warning("invalid query input format: %s", (char*)line->base);
         return (PERF_R_FAILURE);
     }
     result = dns_rdatatype_fromtext(&qtype, &qtype_r);
@@ -754,7 +747,7 @@ build_query(const isc_textregion_t* line, perf_buffer_t* msg)
  * Reads a complete dynamic update message and sends it.
  */
 static perf_result_t
-build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
+build_update(perf_dnsctx_t* ctx, const perf_region_t* record,
     perf_buffer_t* msg)
 {
     //     isc_textregion_t input;
@@ -925,7 +918,7 @@ build_update(perf_dnsctx_t* ctx, const isc_textregion_t* record,
 }
 
 perf_result_t
-perf_dns_buildrequest(perf_dnsctx_t* ctx, const isc_textregion_t* record,
+perf_dns_buildrequest(perf_dnsctx_t* ctx, const perf_region_t* record,
     uint16_t qid,
     bool edns, bool dnssec,
     perf_dnstsigkey_t* tsigkey, perf_dnsednsoption_t* option,
