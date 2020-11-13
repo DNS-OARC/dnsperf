@@ -25,7 +25,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <isc/types.h>
 
 #define MAX_UDP_PACKET 512
 #define MAX_EDNS_PACKET 4096
@@ -49,7 +48,7 @@ perf_dnsctx_t* perf_dns_createctx(bool updates);
 void perf_dns_destroyctx(perf_dnsctx_t** ctxp);
 
 perf_result_t
-perf_dns_buildrequest(perf_dnsctx_t* ctx, const isc_textregion_t* record,
+perf_dns_buildrequest(perf_dnsctx_t* ctx, const perf_region_t* record,
     uint16_t qid,
     bool edns, bool dnssec,
     perf_dnstsigkey_t*    tsigkey,
