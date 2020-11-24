@@ -17,6 +17,8 @@
  * limitations under the License.
  */
 
+#include "config.h"
+
 #include "os.h"
 
 #include "log.h"

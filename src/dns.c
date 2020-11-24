@@ -23,6 +23,7 @@
 
 #include "log.h"
 #include "opt.h"
+#include "qtype.h"
 
 #include <ctype.h>
 #include <time.h>
@@ -31,12 +32,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-
-#define ISC_BUFFER_USEINLINE
-#include <isc/buffer.h>
-#include <dns/fixedname.h>
-#include <dns/rdata.h>
-#include <dns/rdatatype.h>
 
 #define _STATIC_DIGEST_BUFSIZE 128
 
@@ -163,33 +158,58 @@ void perf_dns_destroyctx(perf_dnsctx_t** ctxp)
     // isc_mem_destroy(&mctx);
 }
 
-static perf_result_t
-name_fromstring(dns_name_t* name, const dns_name_t* origin,
-    const char* str, unsigned int len,
-    perf_buffer_t* target, const char* type)
+static perf_result_t name_fromstring(const char* str, size_t len, perf_buffer_t* target)
 {
-    isc_buffer_t  buffer, _target, *_targetp = 0;
-    perf_result_t result;
+    size_t label_len;
 
-    if (target) {
-        isc_buffer_init(&_target, target->base, target->length);
-        _target.used    = target->used;
-        _target.current = target->current;
-        _target.active  = target->active;
-        _targetp        = &_target;
+    if (perf_buffer_availablelength(target) < len) {
+        return PERF_R_NOSPACE;
     }
 
-    isc_buffer_constinit(&buffer, str, len);
-    isc_buffer_add(&buffer, len);
-    result = dns_name_fromtext(name, &buffer, origin, 0, _targetp);
-    if (result != ISC_R_SUCCESS)
-        perf_log_warning("invalid %s name: %.*s", type, (int)len, str);
-    if (result == ISC_R_SUCCESS && target) {
-        target->used    = _target.used;
-        target->current = _target.current;
-        target->active  = _target.active;
+    while (len) {
+        for (label_len = 0; label_len < len; label_len++) {
+            if (*(str + label_len) == '.') {
+                break;
+            }
+        }
+        if (!label_len) {
+            // Just a dot
+            perf_buffer_putuint8(target, 0);
+            break;
+        }
+        if (label_len > 63) {
+            return PERF_R_FAILURE; // TODO: PERF_R_INVALIDNAME
+        }
+        perf_buffer_putuint8(target, label_len);
+        perf_buffer_putmem(target, str, label_len);
+        str += label_len;
+        len -= label_len;
+        if (len < 2) {
+            // Last label/dot
+            perf_buffer_putuint8(target, 0);
+            break;
+        }
+        // advance past dot
+        str++;
+        len--;
     }
-    return result;
+
+    return PERF_R_SUCCESS;
+}
+
+static perf_result_t qtype_fromstring(const char* str, size_t len, perf_buffer_t* target)
+{
+    const perf_qtype_t* q = qtype_table;
+
+    while (q->type) {
+        if (!strncasecmp(q->type, str, len)) {
+            perf_buffer_putuint16(target, q->value);
+            return PERF_R_SUCCESS;
+        }
+        q++;
+    }
+
+    return PERF_R_FAILURE;
 }
 
 #define SET_KEY(key, type)                 \
@@ -205,7 +225,7 @@ perf_dnstsigkey_t* perf_dns_parsetsigkey(const char* arg)
     perf_dnstsigkey_t* tsigkey;
     const char *       sep1, *sep2, *alg, *name, *secret;
     int                alglen, namelen;
-    perf_result_t      result;
+    // perf_result_t      result;
 
     tsigkey = calloc(1, sizeof(*tsigkey));
     if (!tsigkey) {
@@ -277,10 +297,10 @@ perf_dnstsigkey_t* perf_dns_parsetsigkey(const char* arg)
     // #endif
     //     result = name_fromstring(tsigkey->name, dns_rootname, name, namelen,
     //         NULL, "TSIG key");
-    if (result != ISC_R_SUCCESS) {
-        perf_opt_usage();
-        exit(1);
-    }
+    // if (result != ISC_R_SUCCESS) {
+    //     perf_opt_usage();
+    //     exit(1);
+    // }
     // (void)dns_name_downcase(tsigkey->name, tsigkey->name, NULL);
 
     /* Secret */
@@ -288,11 +308,11 @@ perf_dnstsigkey_t* perf_dns_parsetsigkey(const char* arg)
     perf_buffer_init(&tsigkey->secret, tsigkey->secretdata,
         sizeof(tsigkey->secretdata));
     // result = isc_base64_decodestring(secret, &tsigkey->secret);
-    if (result != ISC_R_SUCCESS) {
-        perf_log_warning("invalid TSIG secret '%s'", secret);
-        perf_opt_usage();
-        exit(1);
-    }
+    // if (result != ISC_R_SUCCESS) {
+    //     perf_log_warning("invalid TSIG secret '%s'", secret);
+    //     perf_opt_usage();
+    //     exit(1);
+    // }
 
     return tsigkey;
 }
@@ -601,42 +621,42 @@ add_tsig(perf_buffer_t* packet, perf_dnstsigkey_t* tsigkey)
 static perf_result_t
 build_query(const perf_region_t* line, perf_buffer_t* msg)
 {
-    char*            domain_str;
-    int              domain_len;
-    dns_name_t       name;
-    dns_offsets_t    offsets;
-    isc_textregion_t qtype_r;
-    dns_rdatatype_t  qtype;
-    perf_result_t    result;
+    char *        domain_str, *qtype_str;
+    size_t        domain_len, qtype_len;
+    perf_result_t result;
 
     domain_str = line->base;
     domain_len = strcspn(line->base, WHITESPACE);
 
-    qtype_r.base = line->base + domain_len;
-    while (isspace(*qtype_r.base & 0xff))
-        qtype_r.base++;
-    qtype_r.length = strcspn(qtype_r.base, WHITESPACE);
+    if (!domain_len) {
+        perf_log_warning("invalid query input format: %s", (char*)line->base);
+        return PERF_R_FAILURE;
+    }
+
+    qtype_str = line->base + domain_len;
+    while (isspace(*qtype_str))
+        qtype_str++;
+    qtype_len = strcspn(qtype_str, WHITESPACE);
 
     /* Create the question section */
-    DNS_NAME_INIT(&name, offsets);
-    result = name_fromstring(&name, dns_rootname, domain_str, domain_len,
-        msg, "domain");
-    if (result != ISC_R_SUCCESS)
-        return isc2perf_result(result);
+    result = name_fromstring(domain_str, domain_len, msg);
+    if (result != PERF_R_SUCCESS) {
+        perf_log_warning("invalid domain name: %.*s", (int)domain_len, domain_str);
+        return result;
+    }
 
-    if (qtype_r.length == 0) {
+    if (!qtype_len) {
         perf_log_warning("invalid query input format: %s", (char*)line->base);
-        return (PERF_R_FAILURE);
-    }
-    result = dns_rdatatype_fromtext(&qtype, &qtype_r);
-    if (result != ISC_R_SUCCESS) {
-        perf_log_warning("invalid query type: %.*s",
-            (int)qtype_r.length, qtype_r.base);
-        return (PERF_R_FAILURE);
+        return PERF_R_FAILURE;
     }
 
-    perf_buffer_putuint16(msg, qtype);
-    perf_buffer_putuint16(msg, dns_rdataclass_in);
+    result = qtype_fromstring(qtype_str, qtype_len, msg);
+    if (result != PERF_R_SUCCESS) {
+        perf_log_warning("invalid qtype: %.*s", (int)qtype_len, qtype_str);
+        return result;
+    }
+
+    perf_buffer_putuint16(msg, 1); // class IN
 
     return PERF_R_SUCCESS;
 }
@@ -928,9 +948,9 @@ perf_dns_buildrequest(perf_dnsctx_t* ctx, const perf_region_t* record,
     perf_result_t result;
 
     if (ctx != NULL)
-        flags = dns_opcode_update << 11;
+        flags = 5 << 11; // opcode UPDATE
     else
-        flags = DNS_MESSAGEFLAG_RD;
+        flags = 0x0100U; // flag RD
 
     /* Create the DNS packet header */
     perf_buffer_putuint16(msg, qid);
