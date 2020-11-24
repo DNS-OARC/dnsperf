@@ -1,4 +1,20 @@
-/*
+#!/usr/bin/python3
+
+import csv
+from urllib.request import Request, urlopen
+from io import StringIO
+
+qtype = {}
+
+for row in csv.reader(StringIO(urlopen(Request('http://www.iana.org/assignments/dns-parameters/dns-parameters-4.csv')).read().decode('utf-8'))):
+    if row[0] == 'TYPE':
+        continue
+    try:
+        qtype[row[0]] = int(row[1])
+    except Exception:
+        continue
+
+print("""/*
  * Copyright 2019-2020 OARC, Inc.
  * Copyright 2017-2018 Akamai Technologies
  * Copyright 2006-2016 Nominum, Inc.
@@ -17,20 +33,14 @@
  * limitations under the License.
  */
 
-#ifndef PERF_RESULT_H
-#define PERF_RESULT_H 1
+#include "config.h"
 
-#include <assert.h>
+#include "qtype.h"
 
-typedef unsigned int perf_result_t;
+const perf_qtype_t qtype_table[] = {""")
 
-#define PERF_R_SUCCESS 0
-#define PERF_R_FAILURE 1
-#define PERF_R_CANCELED 2
-#define PERF_R_EOF 3
-#define PERF_R_INVALIDFILE 4
-#define PERF_R_NOMORE 5
-#define PERF_R_NOSPACE 6
-#define PERF_R_TIMEDOUT 7
+for k, v in qtype.items():
+    print("    { \"%s\", %d }," % (k, v))
 
-#endif
+print("""    { 0, 0 }
+};""")

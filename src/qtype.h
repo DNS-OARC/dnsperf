@@ -17,20 +17,16 @@
  * limitations under the License.
  */
 
-#ifndef PERF_RESULT_H
-#define PERF_RESULT_H 1
+#ifndef PERF_QTYPE_H
+#define PERF_QTYPE_H 1
 
-#include <assert.h>
+#include <stdint.h>
 
-typedef unsigned int perf_result_t;
+typedef struct perf_qtype {
+    char*    type;
+    uint16_t value;
+} perf_qtype_t;
 
-#define PERF_R_SUCCESS 0
-#define PERF_R_FAILURE 1
-#define PERF_R_CANCELED 2
-#define PERF_R_EOF 3
-#define PERF_R_INVALIDFILE 4
-#define PERF_R_NOMORE 5
-#define PERF_R_NOSPACE 6
-#define PERF_R_TIMEDOUT 7
+extern const perf_qtype_t qtype_table[];
 
 #endif

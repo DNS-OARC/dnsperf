@@ -13,19 +13,7 @@ Source0:        https://www.dns-oarc.net/files/dnsperf/%{name}-%{version}.tar.gz
 BuildRequires:  autoconf
 BuildRequires:  automake
 BuildRequires:  libtool
-BuildRequires:  bind-devel
-BuildRequires:  krb5-devel
 BuildRequires:  openssl-devel
-BuildRequires:  libcap-devel
-BuildRequires:  libxml2-devel
-%if 0%{?suse_version} || 0%{?sle_version}
-BuildRequires:  libjson-c-devel
-%else
-BuildRequires:  json-c-devel
-%endif
-%if 0%{?suse_version} <= 1500
-BuildRequires:  GeoIP-devel
-%endif
 BuildRequires:  pkgconfig
 
 %description
