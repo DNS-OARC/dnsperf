@@ -6,7 +6,7 @@ from io import StringIO
 
 qtype = {}
 
-for row in csv.reader(StringIO(urlopen(Request('http://www.iana.org/assignments/dns-parameters/dns-parameters-4.csv')).read().decode('utf-8'))):
+for row in csv.reader(StringIO(urlopen(Request('https://www.iana.org/assignments/dns-parameters/dns-parameters-4.csv')).read().decode('utf-8'))):
     if row[0] == 'TYPE':
         continue
     try:

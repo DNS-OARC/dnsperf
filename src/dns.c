@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <limits.h>
 
 #define _STATIC_DIGEST_BUFSIZE 128
 
@@ -84,9 +85,8 @@ struct perf_dnstsigkey {
 };
 
 struct perf_dnsednsoption {
-    // isc_mem_t*    mctx;
-    // perf_buffer_t* buffer;
-    int dummy;
+    perf_buffer_t buffer;
+    char          data[];
 };
 
 struct perf_dnsctx {
@@ -328,67 +328,77 @@ void perf_dns_destroytsigkey(perf_dnstsigkey_t** tsigkeyp)
 
 perf_dnsednsoption_t* perf_dns_parseednsoption(const char* arg)
 {
-    // char*                 copy;
-    // char*                 sep;
-    // char*                 value;
+    char *                copy, *sep, *value, *endptr, hex[3];
     perf_dnsednsoption_t* option;
-    // uint16_t              code;
-    // perf_buffer_t          save;
-    // perf_result_t         result;
+    size_t                data_len;
+    unsigned long int     u;
+    perf_buffer_t         save;
 
-    // copy = isc_mem_strdup(mctx, arg);
-    // if (copy == NULL) {
-    //     perf_log_fatal("out of memory");
-    //     return 0; // fix clang scan-build
-    // }
-    //
-    // sep = strchr(copy, ':');
-    // if (sep == NULL) {
-    //     perf_log_warning("invalid EDNS Option code:value");
-    //     perf_opt_usage();
-    //     exit(1);
-    // }
-    // *sep  = '\0';
-    // value = sep + 1;
-
-    option = calloc(1, sizeof(perf_dnsednsoption_t));
-    if (!option) {
+    copy = strdup(arg);
+    if (!copy) {
         perf_log_fatal("out of memory");
         return 0; // fix clang scan-build
     }
 
-    perf_log_warning("EDNS option disabled");
-    exit(1);
+    sep = strchr(copy, ':');
+    if (!sep) {
+        perf_log_warning("invalid EDNS Option, must be code:value");
+        perf_opt_usage();
+        exit(1);
+    }
+    *sep  = '\0';
+    value = sep + 1;
 
-    //     option->mctx   = mctx;
-    //     option->buffer = NULL;
-    // #ifdef HAVE_ISC_BUFFER_ALLOCATE_RESULT
-    //     result = perf_buffer_allocate(mctx, &option->buffer, strlen(value) / 2 + 4);
-    //     if (result != ISC_R_SUCCESS)
-    //         perf_log_fatal("out of memory");
-    // #else
-    //     perf_buffer_allocate(mctx, &option->buffer, strlen(value) / 2 + 4);
-    // #endif
-    //
-    //     result = isc_parse_uint16(&code, copy, 0);
-    //     if (result != ISC_R_SUCCESS) {
-    //         perf_log_warning("invalid EDNS Option code '%s'", copy);
-    //         perf_opt_usage();
-    //         exit(1);
-    //     }
-    //
-    //     perf_buffer_putuint16(option->buffer, code);
-    //     save = *option->buffer;
-    //     perf_buffer_add(option->buffer, 2);
-    //     result = isc_hex_decodestring(value, option->buffer);
-    //     if (result != ISC_R_SUCCESS) {
-    //         perf_log_warning("invalid EDNS Option value '%s'", value);
-    //         perf_opt_usage();
-    //         exit(1);
-    //     }
-    //     perf_buffer_putuint16(&save, perf_buffer_usedlength(option->buffer) - 4);
-    //
-    //     isc_mem_free(mctx, copy);
+    data_len = strlen(value);
+    if (!data_len) {
+        perf_log_warning("invalid EDNS Option, value is empty");
+        perf_opt_usage();
+        exit(1);
+    }
+    if (data_len & 1) {
+        perf_log_warning("invalid EDNS Option, value must hex string (even number of characters)");
+        perf_opt_usage();
+        exit(1);
+    }
+    data_len /= 2;
+    data_len += 4; // code, len, data...
+
+    option = calloc(1, sizeof(perf_dnsednsoption_t) + data_len);
+    if (!option) {
+        perf_log_fatal("out of memory");
+        free(copy); // fix clang scan-build
+        return 0; // fix clang scan-build
+    }
+    perf_buffer_init(&option->buffer, &option->data[0], data_len);
+
+    endptr = 0;
+    u      = strtoul(copy, &endptr, 10);
+    if (*endptr || u == ULONG_MAX) {
+        perf_log_warning("invalid EDNS Option code '%s'", copy);
+        perf_opt_usage();
+        exit(1);
+    }
+    perf_buffer_putuint16(&option->buffer, u & 0xffff);
+
+    save = option->buffer;
+    perf_buffer_add(&option->buffer, 2);
+    hex[2] = 0;
+    while (*value) {
+        memcpy(hex, value, 2);
+        endptr = 0;
+        u      = strtoul(hex, &endptr, 16);
+        if (*endptr || u == ULONG_MAX) {
+            perf_log_warning("invalid EDNS Option hex value '%.*s'", 2, value);
+            perf_opt_usage();
+            exit(1);
+        }
+        perf_buffer_putuint8(&option->buffer, u & 0xff);
+        value += 2;
+    }
+    perf_buffer_putuint16(&save, perf_buffer_usedlength(&option->buffer) - 4);
+
+    free(copy);
+
     return option;
 }
 
@@ -406,43 +416,40 @@ void perf_dns_destroyednsoption(perf_dnsednsoption_t** optionp)
  */
 static perf_result_t add_edns(perf_buffer_t* packet, bool dnssec, perf_dnsednsoption_t* option)
 {
-    // unsigned char* base;
-    // unsigned int   option_length;
-    // unsigned int   total_length;
-    //
-    // option_length = 0;
-    // if (option != NULL)
-    //     option_length += perf_buffer_usedlength(option->buffer);
-    //
-    // total_length = EDNSLEN + option_length;
-    //
-    // if (perf_buffer_availablelength(packet) < total_length) {
-    //     perf_log_warning("failed to add OPT to query packet");
-    //     return (PERF_R_NOSPACE);
-    // }
-    //
-    // base = perf_buffer_base(packet);
-    //
-    // perf_buffer_putuint8(packet, 0); /* root name */
-    // perf_buffer_putuint16(packet, dns_rdatatype_opt); /* type */
-    // perf_buffer_putuint16(packet, MAX_EDNS_PACKET); /* class */
-    // perf_buffer_putuint8(packet, 0); /* xrcode */
-    // perf_buffer_putuint8(packet, 0); /* version */
-    // if (dnssec) /* flags */
-    //     perf_buffer_putuint16(packet, 0x8000);
-    // else
-    //     perf_buffer_putuint16(packet, 0);
-    // perf_buffer_putuint16(packet, option_length); /* rdlen */
-    // if (option != NULL) {
-    //     perf_buffer_putmem(packet, perf_buffer_base(option->buffer),
-    //         option_length);
-    // }
-    //
-    // base[11]++; /* increment record count */
-    //
-    // return (PERF_R_SUCCESS);
+    unsigned char* base;
+    size_t         option_length = 0, total_length;
 
-    return PERF_R_FAILURE;
+    if (option) {
+        option_length = perf_buffer_usedlength(&option->buffer);
+    }
+    total_length = EDNSLEN + option_length;
+
+    if (perf_buffer_availablelength(packet) < total_length) {
+        perf_log_warning("failed to add OPT to query packet");
+        return PERF_R_NOSPACE;
+    }
+
+    base = perf_buffer_base(packet);
+
+    perf_buffer_putuint8(packet, 0); /* root name */
+    perf_buffer_putuint16(packet, 41); /* OPT record */
+    perf_buffer_putuint16(packet, MAX_EDNS_PACKET); /* class */
+    perf_buffer_putuint8(packet, 0); /* xrcode */
+    perf_buffer_putuint8(packet, 0); /* version */
+    if (dnssec) {
+        /* flags */
+        perf_buffer_putuint16(packet, 0x8000);
+    } else {
+        perf_buffer_putuint16(packet, 0);
+    }
+    perf_buffer_putuint16(packet, option_length); /* rdlen */
+    if (option) {
+        perf_buffer_putmem(packet, perf_buffer_base(&option->buffer), option_length);
+    }
+
+    base[11]++; /* increment additional record count */
+
+    return PERF_R_SUCCESS;
 }
 
 static void

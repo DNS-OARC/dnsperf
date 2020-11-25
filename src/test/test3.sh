@@ -28,6 +28,7 @@
 ! ../dnsperf -e -E invalid
 ! ../dnsperf -e -E 9999999:invalid
 ! ../dnsperf -e -E 123:invalid
+! ../dnsperf -e -E 123:fa0
 
 ! ../resperf -d does_not_exist
 ! ../resperf -r 0 -c 0
