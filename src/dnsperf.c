@@ -66,27 +66,27 @@
 #define RECV_BATCH_SIZE 16
 
 typedef struct {
-    int                   argc;
-    char**                argv;
-    int                   family;
-    uint32_t              clients;
-    uint32_t              threads;
-    uint32_t              maxruns;
-    uint64_t              timelimit;
-    perf_sockaddr_t       server_addr;
-    perf_sockaddr_t       local_addr;
-    uint64_t              timeout;
-    uint32_t              bufsize;
-    bool                  edns;
-    bool                  dnssec;
-    perf_dnstsigkey_t*    tsigkey;
-    perf_dnsednsoption_t* edns_option;
-    uint32_t              max_outstanding;
-    uint32_t              max_qps;
-    uint64_t              stats_interval;
-    bool                  updates;
-    bool                  verbose;
-    enum perf_net_mode    mode;
+    int                argc;
+    char**             argv;
+    int                family;
+    uint32_t           clients;
+    uint32_t           threads;
+    uint32_t           maxruns;
+    uint64_t           timelimit;
+    perf_sockaddr_t    server_addr;
+    perf_sockaddr_t    local_addr;
+    uint64_t           timeout;
+    uint32_t           bufsize;
+    bool               edns;
+    bool               dnssec;
+    perf_tsigkey_t*    tsigkey;
+    perf_ednsoption_t* edns_option;
+    uint32_t           max_outstanding;
+    uint32_t           max_qps;
+    uint64_t           stats_interval;
+    bool               updates;
+    bool               verbose;
+    enum perf_net_mode mode;
 } config_t;
 
 typedef struct {
@@ -420,7 +420,7 @@ setup(int argc, char** argv, config_t* config)
         "set the DNSSEC OK bit (implies EDNS)", NULL,
         &config->dnssec);
     perf_opt_add('y', perf_opt_string, "[alg:]name:secret",
-        "the TSIG algorithm, name and secret", NULL,
+        "the TSIG algorithm, name and secret (base64)", NULL,
         &tsigkey);
     perf_opt_add('q', perf_opt_uint, "num_queries",
         "the maximum number of queries outstanding",
@@ -465,10 +465,10 @@ setup(int argc, char** argv, config_t* config)
         config->edns = true;
 
     if (tsigkey != NULL)
-        config->tsigkey = perf_dns_parsetsigkey(tsigkey);
+        config->tsigkey = perf_tsig_parsekey(tsigkey);
 
     if (edns_option != NULL)
-        config->edns_option = perf_dns_parseednsoption(edns_option);
+        config->edns_option = perf_edns_parseoption(edns_option);
 
     /*
      * If we run more threads than max-qps, some threads will have
@@ -496,9 +496,9 @@ cleanup(config_t* config)
         close(intrpipe[i]);
     }
     if (config->tsigkey != NULL)
-        perf_dns_destroytsigkey(&config->tsigkey);
+        perf_tsig_destroykey(&config->tsigkey);
     if (config->edns_option != NULL)
-        perf_dns_destroyednsoption(&config->edns_option);
+        perf_edns_destroyoption(&config->edns_option);
 }
 
 typedef enum {

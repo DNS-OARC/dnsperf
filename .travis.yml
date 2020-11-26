@@ -3,13 +3,7 @@ addons:
   apt:
     update: true
     packages:
-    - libbind-dev
-    - libkrb5-dev
     - libssl-dev
-    - libcap-dev
-    - libxml2-dev
-    - libjson-c-dev
-    - libgeoip-dev
 language: c
 compiler:
   - clang

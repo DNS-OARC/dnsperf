@@ -190,7 +190,7 @@ static enum phase phase = PHASE_RAMP;
 /* The time when the sustain/wait phase began */
 static uint64_t sustain_phase_began, wait_phase_began;
 
-static perf_dnstsigkey_t* tsigkey;
+static perf_tsigkey_t* tsigkey;
 
 static bool verbose;
 
@@ -329,7 +329,7 @@ setup(int argc, char** argv)
         edns = true;
 
     if (tsigkey_str != NULL)
-        tsigkey = perf_dns_parsetsigkey(tsigkey_str);
+        tsigkey = perf_tsig_parsekey(tsigkey_str);
 
     if (!(socks = calloc(nsocks, sizeof(*socks)))) {
         perf_log_fatal("out of memory");

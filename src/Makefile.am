@@ -29,9 +29,10 @@ EXTRA_DIST = dnsperf.1.in resperf-report resperf.1.in
 bin_PROGRAMS = dnsperf resperf
 dist_bin_SCRIPTS = resperf-report
 
-_libperf_sources = datafile.c dns.c log.c net.c opt.c os.c strerror.c qtype.c
+_libperf_sources = datafile.c dns.c log.c net.c opt.c os.c strerror.c qtype.c \
+  edns.c tsig.c ext/base64.c
 _libperf_headers = datafile.h dns.h log.h net.h opt.h os.h util.h strerror.h \
-  list.h result.h buffer.h qtype.h
+  list.h result.h buffer.h qtype.h edns.h tsig.h
 
 dnsperf_SOURCES = $(_libperf_sources) dnsperf.c
 dist_dnsperf_SOURCES = $(_libperf_headers)

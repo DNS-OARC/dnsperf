@@ -33,21 +33,6 @@
 #include <sys/stat.h>
 #include <assert.h>
 
-#define BUFFER_SIZE (64 * 1024)
-
-struct perf_datafile {
-    pthread_mutex_t lock;
-    int             pipe_fd;
-    int             fd;
-    bool            is_file;
-    size_t          size, at, have;
-    bool            cached;
-    char            databuf[BUFFER_SIZE + 1];
-    unsigned int    maxruns;
-    unsigned int    nruns;
-    bool            read_any;
-};
-
 perf_datafile_t* perf_datafile_open(const char* filename)
 {
     perf_datafile_t* dfile;
