@@ -39,8 +39,6 @@
 #define TSIG_HMACSHA384_NAME "hmac-sha384"
 #define TSIG_HMACSHA512_NAME "hmac-sha512"
 
-extern int base64_decode(const char* str, void* data);
-
 static unsigned char* decode64(const void* base64, int* len)
 {
     unsigned char* out;
@@ -52,7 +50,31 @@ static unsigned char* decode64(const void* base64, int* len)
     out = calloc(1, *len);
     assert(out);
 
-    *len = base64_decode(base64, out);
+    int olen = *len;
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    EVP_ENCODE_CTX evp;
+    EVP_DecodeInit(&evp);
+    if (EVP_DecodeUpdate(&evp, out, &olen, base64, *len)) {
+        free(out);
+        return 0;
+    }
+#else
+    EVP_ENCODE_CTX* evp = EVP_ENCODE_CTX_new();
+    if (!evp) {
+        free(out);
+        return 0;
+    }
+    EVP_DecodeInit(evp);
+    if (EVP_DecodeUpdate(evp, out, &olen, base64, *len)) {
+        free(out);
+        EVP_ENCODE_CTX_free(evp);
+        return 0;
+    }
+    EVP_ENCODE_CTX_free(evp);
+#endif
+
+    *len = olen;
 
     return out;
 }
@@ -147,6 +169,9 @@ perf_tsigkey_t* perf_tsig_parsekey(const char* arg)
 
     keylen             = secretlen;
     unsigned char* key = decode64(secret, &keylen);
+    if (!key) {
+        perf_log_fatal("unable to setup TSIG, invalid base64 secret");
+    }
 
     /* Setup HMAC */
 
