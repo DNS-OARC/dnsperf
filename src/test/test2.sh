@@ -25,7 +25,7 @@ grep -q "Queries sent: *2" test2.out
 cat test2.out
 grep -q "Queries sent: *2" test2.out
 
-# TODO: Enable when TSIG support is added
+# TODO: enable when dynamic update support is readded
 # ../dnsperf -d "$srcdir/updatefile" -u -s 1.1.1.1 -y hmac-md5:test:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8= >test2.out
 # cat test2.out
 # grep -q "Updates sent: *1" test2.out

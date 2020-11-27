@@ -23,9 +23,21 @@
 #ifndef PERF_DATAFILE_H
 #define PERF_DATAFILE_H 1
 
+#include <pthread.h>
 #include <stdbool.h>
 
-typedef struct perf_datafile perf_datafile_t;
+typedef struct perf_datafile {
+    pthread_mutex_t lock;
+    int             pipe_fd;
+    int             fd;
+    bool            is_file;
+    size_t          size, at, have;
+    bool            cached;
+    char            databuf[(64 * 1024) + 1];
+    unsigned int    maxruns;
+    unsigned int    nruns;
+    bool            read_any;
+} perf_datafile_t;
 
 perf_datafile_t* perf_datafile_open(const char* filename);
 

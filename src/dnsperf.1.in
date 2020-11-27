@@ -336,6 +336,8 @@ use a range of ports starting with the specified one.
 Add a TSIG record [RFC2845] to all packets sent, using the specified TSIG
 key algorithm, name and secret, where the algorithm defaults to hmac-md5 and
 the secret is expressed as a base-64 encoded string.
+Available algorithms are: hmac-md5, hmac-sha1, hmac-sha224, hmac-sha256,
+hmac-sha384 and hmac-sha512.
 .RE
 .SH "SEE ALSO"
 \fBresperf\fR(1)

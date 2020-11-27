@@ -19,6 +19,8 @@
 
 #include "result.h"
 #include "buffer.h"
+#include "edns.h"
+#include "tsig.h"
 
 #ifndef PERF_DNS_H
 #define PERF_DNS_H 1
@@ -27,31 +29,28 @@
 #include <stdbool.h>
 
 #define MAX_UDP_PACKET 512
-#define MAX_EDNS_PACKET 4096
 
-typedef struct perf_dnstsigkey    perf_dnstsigkey_t;
-typedef struct perf_dnsednsoption perf_dnsednsoption_t;
-typedef struct perf_dnsctx        perf_dnsctx_t;
+typedef struct perf_dnsctx {
+    // isc_mem_t*     mctx;
+    // dns_compress_t compress;
+    // isc_lex_t*     lexer;
+    int dummy;
+} perf_dnsctx_t;
 
 extern const char* perf_dns_rcode_strings[];
-
-perf_dnstsigkey_t* perf_dns_parsetsigkey(const char* arg);
-
-void perf_dns_destroytsigkey(perf_dnstsigkey_t** tsigkeyp);
-
-perf_dnsednsoption_t* perf_dns_parseednsoption(const char* arg);
-
-void perf_dns_destroyednsoption(perf_dnsednsoption_t** optionp);
 
 perf_dnsctx_t* perf_dns_createctx(bool updates);
 
 void perf_dns_destroyctx(perf_dnsctx_t** ctxp);
 
+perf_result_t perf_dname_fromstring(const char* str, size_t len, perf_buffer_t* target);
+perf_result_t perf_qtype_fromstring(const char* str, size_t len, perf_buffer_t* target);
+
 perf_result_t
 perf_dns_buildrequest(perf_dnsctx_t* ctx, const perf_region_t* record,
     uint16_t qid,
     bool edns, bool dnssec,
-    perf_dnstsigkey_t*    tsigkey,
-    perf_dnsednsoption_t* edns_option, perf_buffer_t* msg);
+    perf_tsigkey_t*    tsigkey,
+    perf_ednsoption_t* edns_option, perf_buffer_t* msg);
 
 #endif
