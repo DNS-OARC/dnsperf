@@ -151,6 +151,9 @@ perf_tsigkey_t* perf_tsig_parsekey(const char* arg)
 
     if (namelen > sizeof(tsigkey->name)) {
         perf_log_fatal("unable to setup TSIG, name too long");
+        // fix clang scan-build / sonarcloud:
+        free(tsigkey);
+        return 0;
     }
     memcpy(tsigkey->name, name, namelen);
     tsigkey->namelen = namelen;
