@@ -8,6 +8,7 @@ extraction:
         - libtool
         - pkg-config
         - libssl-dev
+        - libldns-dev
     configure:
       command:
         - ./autogen.sh

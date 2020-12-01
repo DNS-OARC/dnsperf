@@ -144,8 +144,6 @@ typedef struct {
     int                     current_sock;
     struct perf_net_socket* socks;
 
-    perf_dnsctx_t* dnsctx;
-
     bool     done_sending;
     uint64_t done_send_time;
 
@@ -482,6 +480,12 @@ setup(int argc, char** argv, config_t* config)
      */
     if (config->threads > config->clients)
         config->threads = config->clients;
+
+#ifndef HAVE_LDNS
+    if (config->updates) {
+        perf_log_fatal("Unable to dynamic update, support not built in");
+    }
+#endif
 }
 
 static void
@@ -652,11 +656,10 @@ do_send(void* arg)
         qid = q - tinfo->queries;
         perf_buffer_usedregion(&lines, &used);
         perf_buffer_clear(&msg);
-        result = perf_dns_buildrequest(tinfo->dnsctx,
-            &used,
-            qid, config->edns,
-            config->dnssec, config->tsigkey,
-            config->edns_option, &msg);
+        result = perf_dns_buildrequest(&used, qid,
+            config->edns, config->dnssec, config->updates,
+            config->tsigkey, config->edns_option,
+            &msg);
         if (result != PERF_R_SUCCESS) {
             PERF_LOCK(&tinfo->lock);
             query_move(tinfo, q, prepend_unused);
@@ -1056,8 +1059,6 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
 
     offset = tinfo - threads;
 
-    tinfo->dnsctx = perf_dns_createctx(config->updates);
-
     tinfo->config = config;
     tinfo->times  = times;
 
@@ -1112,7 +1113,6 @@ threadinfo_cleanup(threadinfo_t* tinfo, times_t* times)
         cancel_queries(tinfo);
     for (i = 0; i < tinfo->nsocks; i++)
         perf_net_close(&tinfo->socks[i]);
-    perf_dns_destroyctx(&tinfo->dnsctx);
     if (tinfo->last_recv > times->end_time)
         times->end_time = tinfo->last_recv;
 }

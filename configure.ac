@@ -55,19 +55,20 @@ AM_EXTRA_RECURSIVE_TARGETS([gcov])
 
 # Checks for support.
 AX_PTHREAD
-# TODO: AC_CHECK_LIB([socket], [socket])
-# TODO: AC_CHECK_LIB([nsl], [inet_ntoa])
 AC_CHECK_LIB([m], [sqrt])
 
 # Check for OpenSSL
 PKG_CHECK_MODULES([libssl], [libssl])
-PKG_CHECK_MODULES([libcrypto], [libcrypto]) # also check libcrypto which might be needed for libssl
+PKG_CHECK_MODULES([libcrypto], [libcrypto])
 AC_CHECK_LIB([ssl], [TLS_client_method],
-	[AC_DEFINE([HAVE_TLS_CLIENT_METHOD], [1], [Define to 1 if you have the 'TLS_client_method' function])])
+  [AC_DEFINE([HAVE_TLS_CLIENT_METHOD], [1], [Define to 1 if you have the 'TLS_client_method' function])])
 
-# TODO: # Checks for sizes
-# AX_TYPE_SOCKLEN_T
-# AX_SA_LEN
+# Check for LDNS
+PKG_CHECK_MODULES([libldns], [libldns >= 1.7.0], [AC_DEFINE([HAVE_LDNS], [1], [Define to 1 if you have the LDNS library])], [
+  PKG_CHECK_MODULES([libldns], [ldns >= 1.7.0], [AC_DEFINE([HAVE_LDNS], [1], [Define to 1 if you have the LDNS library])], [
+    AC_MSG_NOTICE([LDNS (>= 1.7.0) not found, dynamic update support disabled])
+  ])
+])
 
 # Output Makefiles
 AC_CONFIG_FILES([
