@@ -500,8 +500,10 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
     }
 
     perf_buffer_clear(msg);
-    result = perf_dns_buildrequest(NULL, &used,
-        qid, edns, dnssec, tsigkey, NULL, msg);
+    result = perf_dns_buildrequest(&used, qid,
+        edns, dnssec, false,
+        tsigkey, 0,
+        msg);
     if (result != PERF_R_SUCCESS)
         return (result);
 

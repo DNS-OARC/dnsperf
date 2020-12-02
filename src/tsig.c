@@ -225,6 +225,7 @@ perf_result_t perf_add_tsig(perf_buffer_t* packet, perf_tsigkey_t* tsigkey)
     unsigned int   mdlen;
     perf_buffer_t  tmp;
     uint32_t       now;
+    perf_result_t  result;
 
     now = time(NULL);
 
@@ -238,10 +239,28 @@ perf_result_t perf_add_tsig(perf_buffer_t* packet, perf_tsigkey_t* tsigkey)
 
     // /* Digest the TSIG record */
     perf_buffer_init(&tmp, tmpdata, sizeof tmpdata);
-    perf_dname_fromstring(tsigkey->name, tsigkey->namelen, &tmp); /* name */
+    switch ((result = perf_dname_fromstring(tsigkey->name, tsigkey->namelen, &tmp))) {
+    case PERF_R_SUCCESS:
+        break;
+    case PERF_R_NOSPACE:
+        perf_log_warning("adding TSIG: out of space in digest record");
+        return result;
+    default:
+        perf_log_warning("adding TSIG: invalid owner name");
+        return result;
+    }
     perf_buffer_putuint16(&tmp, 255); /* class ANY */
     perf_buffer_putuint32(&tmp, 0); /* ttl */
-    perf_dname_fromstring(tsigkey->alg, tsigkey->alglen, &tmp); /* name */
+    switch ((result = perf_dname_fromstring(tsigkey->alg, tsigkey->alglen, &tmp))) {
+    case PERF_R_SUCCESS:
+        break;
+    case PERF_R_NOSPACE:
+        perf_log_warning("adding TSIG: out of space in digest record");
+        return result;
+    default:
+        perf_log_warning("adding TSIG: invalid algorithm name");
+        return result;
+    }
     perf_buffer_putuint16(&tmp, 0); /* time high */
     perf_buffer_putuint32(&tmp, now); /* time low */
     perf_buffer_putuint16(&tmp, 300); /* fudge */
@@ -268,12 +287,30 @@ perf_result_t perf_add_tsig(perf_buffer_t* packet, perf_tsigkey_t* tsigkey)
     base = perf_buffer_base(packet);
 
     // /* Add the TSIG record. */
-    perf_dname_fromstring(tsigkey->name, tsigkey->namelen, packet); /* name */
+    switch ((result = perf_dname_fromstring(tsigkey->name, tsigkey->namelen, packet))) {
+    case PERF_R_SUCCESS:
+        break;
+    case PERF_R_NOSPACE:
+        perf_log_warning("adding TSIG: out of space");
+        return result;
+    default:
+        perf_log_warning("adding TSIG: invalid owner name");
+        return result;
+    }
     perf_buffer_putuint16(packet, 250); /* type TSIG */
     perf_buffer_putuint16(packet, 255); /* class ANY */
     perf_buffer_putuint32(packet, 0); /* ttl */
     perf_buffer_putuint16(packet, rdlen); /* rdlen */
-    perf_dname_fromstring(tsigkey->alg, tsigkey->alglen, packet); /* name */
+    switch ((result = perf_dname_fromstring(tsigkey->alg, tsigkey->alglen, packet))) {
+    case PERF_R_SUCCESS:
+        break;
+    case PERF_R_NOSPACE:
+        perf_log_warning("adding TSIG: out of space");
+        return result;
+    default:
+        perf_log_warning("adding TSIG: invalid algorithm name");
+        return result;
+    }
     perf_buffer_putuint16(packet, 0); /* time high */
     perf_buffer_putuint32(packet, now); /* time low */
     perf_buffer_putuint16(packet, 300); /* fudge */

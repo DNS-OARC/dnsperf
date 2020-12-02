@@ -43,19 +43,27 @@ those queries to DNS servers to measure performance.
 `dnsperf` requires a couple of libraries beside a normal C compiling
 environment with autoconf, automake, libtool and pkgconfig.
 
+- [OpenSSL](https://www.openssl.org/) - for TSIG support
+- [LDNS](https://nlnetlabs.nl/projects/ldns/about/) - optional for dynamic update support
+
 To install the dependencies under Debian/Ubuntu:
 ```
-apt-get install -y libssl-dev
+apt-get install -y libssl-dev libldns-dev
 ```
 
 To install the dependencies under CentOS (with EPEL enabled):
 ```
-yum install -y openssl-devel
+yum install -y openssl-devel ldns-devel
 ```
 
 To install the dependencies under FreeBSD 12+ using `pkg`:
 ```
-pkg install -y openssl-devel
+pkg install -y openssl ldns
+```
+
+To install the dependencies under OpenBSD 6+ using `pkg_add`:
+```
+pkg_add libldns
 ```
 
 ## Building from source tarball

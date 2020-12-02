@@ -49,6 +49,8 @@ typedef struct perf_buffer {
         (b)->used += (n);                     \
     }
 
+#define perf_buffer_length(b) ((b)->length)
+
 #define perf_buffer_availablelength(b) ((b)->length - (b)->used)
 
 #define perf_buffer_base(b) ((b)->base)

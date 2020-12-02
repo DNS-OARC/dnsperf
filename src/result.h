@@ -33,4 +33,6 @@ typedef unsigned int perf_result_t;
 #define PERF_R_NOSPACE 6
 #define PERF_R_TIMEDOUT 7
 
+#define PERF_R_INVALIDUPDATE 100
+
 #endif

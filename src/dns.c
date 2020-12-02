@@ -34,6 +34,10 @@
 #include <string.h>
 #include <limits.h>
 
+#ifdef HAVE_LDNS
+#include <ldns/ldns.h>
+#endif
+
 #define WHITESPACE " \t\n"
 
 #define MAX_RDATA_LENGTH 65535
@@ -45,68 +49,6 @@ const char* perf_dns_rcode_strings[] = {
     "NXRRSET", "NOTAUTH", "NOTZONE", "rcode11",
     "rcode12", "rcode13", "rcode14", "rcode15"
 };
-
-perf_dnsctx_t* perf_dns_createctx(bool updates)
-{
-    // isc_mem_t*     mctx;
-    // perf_dnsctx_t* ctx;
-    // perf_result_t  result;
-
-    if (!updates)
-        return 0;
-
-    //     mctx = NULL;
-    // #ifdef HAVE_ISC_MEM_CREATE_RESULT
-    //     result = isc_mem_create(0, 0, &mctx);
-    //     if (result != ISC_R_SUCCESS)
-    //         perf_log_fatal("creating memory context: %s",
-    //             perf_result_totext(result));
-    // #else
-    //     isc_mem_create(&mctx);
-    // #endif
-    //
-    //     ctx = isc_mem_get(mctx, sizeof(*ctx));
-    //     if (ctx == NULL) {
-    //         perf_log_fatal("out of memory");
-    //         return 0; // fix clang scan-build
-    //     }
-    //
-    //     memset(ctx, 0, sizeof(*ctx));
-    //     ctx->mctx = mctx;
-    //
-    //     result = dns_compress_init(&ctx->compress, 0, ctx->mctx);
-    //     if (result != ISC_R_SUCCESS) {
-    //         perf_log_fatal("creating compression context: %s",
-    //             perf_result_totext(result));
-    //     }
-    //     dns_compress_setmethods(&ctx->compress, DNS_COMPRESS_GLOBAL14);
-    //
-    //     result = isc_lex_create(ctx->mctx, 1024, &ctx->lexer);
-    //     if (result != ISC_R_SUCCESS) {
-    //         perf_log_fatal("creating lexer: %s", perf_result_totext(result));
-    //     }
-    //
-    //     return (ctx);
-    return 0;
-}
-
-void perf_dns_destroyctx(perf_dnsctx_t** ctxp)
-{
-    // perf_dnsctx_t* ctx;
-    // isc_mem_t*     mctx;
-
-    assert(ctxp);
-    *ctxp = 0;
-
-    // if (ctx == NULL)
-    //     return;
-    //
-    // mctx = ctx->mctx;
-    // isc_lex_destroy(&ctx->lexer);
-    // dns_compress_invalidate(&ctx->compress);
-    // isc_mem_put(mctx, ctx, sizeof(*ctx));
-    // isc_mem_destroy(&mctx);
-}
 
 perf_result_t perf_dname_fromstring(const char* str, size_t len, perf_buffer_t* target)
 {
@@ -128,7 +70,7 @@ perf_result_t perf_dname_fromstring(const char* str, size_t len, perf_buffer_t* 
             break;
         }
         if (label_len > 63) {
-            return PERF_R_FAILURE; // TODO: PERF_R_INVALIDNAME
+            return PERF_R_FAILURE;
         }
         perf_buffer_putuint8(target, label_len);
         perf_buffer_putmem(target, str, label_len);
@@ -162,8 +104,7 @@ perf_result_t perf_qtype_fromstring(const char* str, size_t len, perf_buffer_t* 
     return PERF_R_FAILURE;
 }
 
-static perf_result_t
-build_query(const perf_region_t* line, perf_buffer_t* msg)
+static perf_result_t build_query(const perf_region_t* line, perf_buffer_t* msg)
 {
     char *        domain_str, *qtype_str;
     size_t        domain_len, qtype_len;
@@ -185,7 +126,7 @@ build_query(const perf_region_t* line, perf_buffer_t* msg)
     /* Create the question section */
     result = perf_dname_fromstring(domain_str, domain_len, msg);
     if (result != PERF_R_SUCCESS) {
-        perf_log_warning("invalid domain name: %.*s", (int)domain_len, domain_str);
+        perf_log_warning("invalid domain name (or out of space): %.*s", (int)domain_len, domain_str);
         return result;
     }
 
@@ -205,293 +146,302 @@ build_query(const perf_region_t* line, perf_buffer_t* msg)
     return PERF_R_SUCCESS;
 }
 
-// static bool
-// token_equals(const isc_textregion_t* token, const char* str)
-// {
-//     return (strlen(str) == token->length && strncasecmp(str, token->base, token->length) == 0);
-// }
+#ifdef HAVE_LDNS
+static bool token_equals(const perf_region_t* token, const char* str)
+{
+    return (strlen(str) == token->length && strncasecmp(str, token->base, token->length) == 0);
+}
 
 /*
  * Reads one line containing an individual update for a dynamic update message.
  */
-// static perf_result_t
-// read_update_line(perf_dnsctx_t* ctx, const isc_textregion_t* line, char* str,
-//     dns_name_t* zname, int want_ttl, int need_type,
-//     int want_rdata, int need_rdata, dns_name_t* name,
-//     uint32_t* ttlp, dns_rdatatype_t* typep,
-//     dns_rdata_t* rdata, perf_buffer_t* rdatabuf)
-// {
-// char*                curr_str;
-// unsigned int         curr_len;
-// perf_buffer_t         buffer;
-// isc_textregion_t     src;
-// dns_rdatacallbacks_t callbacks;
-// perf_result_t        result;
-//
-// while (isspace(*str & 0xff))
-//     str++;
-//
-// /* Read the owner name */
-// curr_str = str;
-// curr_len = strcspn(curr_str, WHITESPACE);
-// result   = name_fromstring(name, zname, curr_str, curr_len, NULL, "owner");
-// if (result != ISC_R_SUCCESS)
-//     return isc2perf_result(result);
-// str += curr_len;
-// while (isspace(*str & 0xff))
-//     str++;
-//
-// /* Read the ttl */
-// if (want_ttl) {
-//     curr_str   = str;
-//     curr_len   = strcspn(curr_str, WHITESPACE);
-//     src.base   = curr_str;
-//     src.length = curr_len;
-//     result     = dns_ttl_fromtext(&src, ttlp);
-//     if (result != ISC_R_SUCCESS) {
-//         perf_log_warning("invalid ttl: %.*s", curr_len, curr_str);
-//         return isc2perf_result(result);
-//     }
-//     str += curr_len;
-//     while (isspace(*str & 0xff))
-//         str++;
-// }
-//
-// /* Read the type */
-// curr_str = str;
-// curr_len = strcspn(curr_str, WHITESPACE);
-// if (curr_len == 0) {
-//     if (!need_type)
-//         return (PERF_R_SUCCESS);
-//     perf_log_warning("invalid update command: %s", line->base);
-//     return (PERF_R_SUCCESS);
-// }
-// src.base   = curr_str;
-// src.length = curr_len;
-// result     = dns_rdatatype_fromtext(typep, &src);
-// if (result != ISC_R_SUCCESS) {
-//     perf_log_warning("invalid type: %.*s", curr_len, curr_str);
-//     return isc2perf_result(result);
-// }
-// str += curr_len;
-// while (isspace(*str & 0xff))
-//     str++;
-//
-// /* Read the rdata */
-// if (!want_rdata)
-//     return (PERF_R_SUCCESS);
-//
-// if (*str == 0) {
-//     if (!need_rdata)
-//         return (PERF_R_SUCCESS);
-//     perf_log_warning("invalid update command: %s", line->base);
-//     return (PERF_R_FAILURE);
-// }
-//
-// perf_buffer_init(&buffer, str, strlen(str));
-// perf_buffer_add(&buffer, strlen(str));
-// result = isc_lex_openbuffer(ctx->lexer, &buffer);
-// if (result != ISC_R_SUCCESS) {
-//     perf_log_warning("setting up lexer: %s", perf_result_totext(result));
-//     return isc2perf_result(result);
-// }
-// dns_rdatacallbacks_init_stdio(&callbacks);
-// result = dns_rdata_fromtext(rdata, dns_rdataclass_in, *typep, ctx->lexer,
-//     zname, 0, ctx->mctx, rdatabuf, &callbacks);
-// (void)isc_lex_close(ctx->lexer);
-// if (result != ISC_R_SUCCESS) {
-//     perf_log_warning("parsing rdata: %s", str);
-//     return isc2perf_result(result);
-// }
-//
-// return (PERF_R_SUCCESS);
-// }
+static perf_result_t
+read_update_line(char* str, const ldns_rdf* origin,
+    bool want_ttl, bool need_type, bool want_rdata, bool need_rdata,
+    ldns_rr** rr, const char** errstr)
+{
+    char   tmp[256], *str2;
+    size_t len;
+
+    while (isspace(*str & 0xff))
+        str++;
+    str2 = str;
+
+    /*
+     * Read the owner name
+     */
+    len = strcspn(str, WHITESPACE);
+    if (len > sizeof(tmp) - 1) {
+        *errstr = "domain name too large";
+        return PERF_R_NOSPACE;
+    }
+    memcpy(tmp, str, len);
+    tmp[len] = 0;
+
+    ldns_rdf* owner;
+    if (!(owner = ldns_dname_new_frm_str(tmp))) {
+        *errstr = "invalid name or out of memory";
+        return PERF_R_FAILURE;
+    }
+    ldns_rr_set_owner(*rr, owner);
+    if (!ldns_dname_str_absolute(tmp) && origin) {
+        if (ldns_dname_cat(ldns_rr_owner(*rr), origin) != LDNS_STATUS_OK) {
+            return PERF_R_FAILURE;
+        }
+    }
+
+    str += len;
+    while (isspace(*str & 0xff))
+        str++;
+
+    /*
+     * Read the ttl
+     */
+    if (want_ttl) {
+        len = strcspn(str, WHITESPACE);
+        if (len > sizeof(tmp) - 1) {
+            *errstr = "TTL string too large";
+            return PERF_R_NOSPACE;
+        }
+        memcpy(tmp, str, len);
+        tmp[len] = 0;
+
+        char*             endptr = 0;
+        unsigned long int u      = strtoul(tmp, &endptr, 10);
+        if (*endptr || u == ULONG_MAX) {
+            *errstr = "TTL invalid";
+            return PERF_R_INVALIDUPDATE;
+        }
+
+        ldns_rr_set_ttl(*rr, u);
+
+        str += len;
+        while (isspace(*str & 0xff))
+            str++;
+    }
+
+    /*
+     * Read the type
+     */
+    len = strcspn(str, WHITESPACE);
+    if (!len) {
+        if (!need_type)
+            return PERF_R_SUCCESS;
+
+        *errstr = "TYPE required";
+        return PERF_R_INVALIDUPDATE;
+    }
+    if (len > sizeof(tmp) - 1) {
+        *errstr = "TYPE string too large";
+        return PERF_R_NOSPACE;
+    }
+    memcpy(tmp, str, len);
+    tmp[len] = 0;
+
+    ldns_rr_type type = ldns_get_rr_type_by_name(tmp);
+    if (!type) {
+        *errstr = "TYPE invalid";
+        return PERF_R_INVALIDUPDATE;
+    }
+    ldns_rr_set_type(*rr, type);
+
+    str += len;
+    while (isspace(*str & 0xff))
+        str++;
+
+    if (!want_rdata)
+        return PERF_R_SUCCESS;
+
+    /*
+     * Read the rdata
+     */
+    if (*str == 0) {
+        if (!need_rdata)
+            return PERF_R_SUCCESS;
+
+        *errstr = "RDATA required";
+        return PERF_R_INVALIDUPDATE;
+    }
+
+    // Need to recreate ldns_rr because there is no new_frm_str function to
+    // correctly parse RDATA (quotes etc) for a RDF
+    ldns_rr* rr2 = 0;
+    if (ldns_rr_new_frm_str(&rr2, str2, 0, origin, 0) != LDNS_STATUS_OK) {
+        *errstr = "invalid RDATA or out of memory";
+        return PERF_R_INVALIDUPDATE;
+    }
+
+    // Force set TTL since if its missing in the input it will get the default
+    // 3600 and not 0 as it should
+    ldns_rr_set_ttl(rr2, ldns_rr_ttl(*rr));
+
+    ldns_rr_free(*rr);
+    *rr = rr2;
+
+    return PERF_R_SUCCESS;
+}
+
+static void compression_free(ldns_rbnode_t* node, void* arg)
+{
+    (void)arg;
+    ldns_rdf_deep_free((ldns_rdf*)node->key);
+    LDNS_FREE(node);
+}
 
 /*
  * Reads a complete dynamic update message and sends it.
  */
-static perf_result_t
-build_update(perf_dnsctx_t* ctx, const perf_region_t* record,
-    perf_buffer_t* msg)
+static perf_result_t build_update(const perf_region_t* record, perf_buffer_t* msg)
 {
-    //     isc_textregion_t input;
-    //     char*            msgbase;
-    //     perf_buffer_t     rdlenbuf, rdatabuf;
-    //     unsigned char    rdataarray[MAX_RDATA_LENGTH];
-    //     isc_textregion_t token;
-    //     char*            str;
-    //     bool             is_update;
-    //     int              updates = 0;
-    //     int              prereqs = 0;
-    //     dns_fixedname_t  fzname, foname;
-    //     dns_name_t *     zname, *oname;
-    //     uint32_t         ttl;
-    //     dns_rdatatype_t  rdtype;
-    //     dns_rdataclass_t rdclass;
-    //     dns_rdata_t      rdata;
-    //     uint16_t         rdlen;
-    //     perf_result_t    result;
-    //
-    //     /* Reset compression context */
-    //     dns_compress_rollback(&ctx->compress, 0);
-    //
-    //     input   = *record;
-    //     msgbase = perf_buffer_base(msg);
-    //
-    // /* Initialize */
-    // #ifdef dns_fixedname_init
-    //     dns_fixedname_init(&foname);
-    //     oname = dns_fixedname_name(&foname);
-    // #else
-    //     oname = dns_fixedname_initname(&foname);
-    // #endif
-    //
-    // /* Parse zone name */
-    // #ifdef dns_fixedname_init
-    //     dns_fixedname_init(&fzname);
-    //     zname = dns_fixedname_name(&fzname);
-    // #else
-    //     zname = dns_fixedname_initname(&fzname);
-    // #endif
-    //     result = name_fromstring(zname, dns_rootname,
-    //         input.base, strlen(input.base),
-    //         NULL, "zone");
-    //     if (result != ISC_R_SUCCESS)
-    //         goto done;
-    //
-    //     /* Render zone section */
-    //     result = dns_name_towire(zname, &ctx->compress, msg);
-    //     if (result != ISC_R_SUCCESS) {
-    //         perf_log_warning("error rendering zone name: %s",
-    //             perf_result_totext(result));
-    //         goto done;
-    //     }
-    //     perf_buffer_putuint16(msg, dns_rdatatype_soa);
-    //     perf_buffer_putuint16(msg, dns_rdataclass_in);
-    //
-    //     while (true) {
-    //         input.base += strlen(input.base) + 1;
-    //         if (input.base >= record->base + record->length) {
-    //             perf_log_warning("warning: incomplete update");
-    //             goto done;
-    //         }
-    //
-    //         ttl    = 0;
-    //         rdtype = dns_rdatatype_any;
-    //         perf_buffer_init(&rdatabuf, rdataarray, sizeof(rdataarray));
-    //         dns_rdata_init(&rdata);
-    //         rdclass   = dns_rdataclass_in;
-    //         is_update = false;
-    //
-    //         token.base   = input.base;
-    //         token.length = strcspn(token.base, WHITESPACE);
-    //         str          = input.base + token.length;
-    //         if (token_equals(&token, "send")) {
-    //             break;
-    //         } else if (token_equals(&token, "add")) {
-    //             result    = read_update_line(ctx, &input, str, zname,
-    //                 true, true, true,
-    //                 true, oname, &ttl, &rdtype,
-    //                 &rdata, &rdatabuf);
-    //             rdclass   = dns_rdataclass_in;
-    //             is_update = true;
-    //         } else if (token_equals(&token, "delete")) {
-    //             result = read_update_line(ctx, &input, str, zname,
-    //                 false, false, true,
-    //                 false, oname, &ttl,
-    //                 &rdtype, &rdata, &rdatabuf);
-    //             if (perf_buffer_usedlength(&rdatabuf) > 0)
-    //                 rdclass = dns_rdataclass_none;
-    //             else
-    //                 rdclass = dns_rdataclass_any;
-    //             is_update = true;
-    //         } else if (token_equals(&token, "require")) {
-    //             result = read_update_line(ctx, &input, str, zname,
-    //                 false, false, true,
-    //                 false, oname, &ttl,
-    //                 &rdtype, &rdata, &rdatabuf);
-    //             if (perf_buffer_usedlength(&rdatabuf) > 0)
-    //                 rdclass = dns_rdataclass_in;
-    //             else
-    //                 rdclass = dns_rdataclass_any;
-    //             is_update = false;
-    //         } else if (token_equals(&token, "prohibit")) {
-    //             result    = read_update_line(ctx, &input, str, zname,
-    //                 false, false, false,
-    //                 false, oname, &ttl,
-    //                 &rdtype, &rdata, &rdatabuf);
-    //             rdclass   = dns_rdataclass_none;
-    //             is_update = false;
-    //         } else {
-    //             perf_log_warning("invalid update command: %s", input.base);
-    //             result = PERF_R_FAILURE;
-    //         }
-    //
-    //         if (result != PERF_R_SUCCESS)
-    //             goto done;
-    //
-    //         if (!is_update && updates > 0) {
-    //             perf_log_warning("prereqs must precede updates");
-    //             result = PERF_R_FAILURE;
-    //             goto done;
-    //         }
-    //
-    //         /* Render record */
-    //         result = dns_name_towire(oname, &ctx->compress, msg);
-    //         if (result != PERF_R_SUCCESS) {
-    //             perf_log_warning("rendering record name: %s",
-    //                 perf_result_totext(result));
-    //             goto done;
-    //         }
-    //         if (perf_buffer_availablelength(msg) < 10) {
-    //             perf_log_warning("out of space in message buffer");
-    //             result = PERF_R_NOSPACE;
-    //             goto done;
-    //         }
-    //
-    //         perf_buffer_putuint16(msg, rdtype);
-    //         perf_buffer_putuint16(msg, rdclass);
-    //         perf_buffer_putuint32(msg, ttl);
-    //         rdlenbuf = *msg;
-    //         perf_buffer_putuint16(msg, 0); /* rdlen */
-    //         rdlen = perf_buffer_usedlength(&rdatabuf);
-    //         if (rdlen > 0) {
-    //             result = dns_rdata_towire(&rdata, &ctx->compress, msg);
-    //             if (result != ISC_R_SUCCESS) {
-    //                 perf_log_warning("rendering rdata: %s",
-    //                     perf_result_totext(result));
-    //                 goto done;
-    //             }
-    //             rdlen = msg->used - rdlenbuf.used - 2;
-    //             perf_buffer_putuint16(&rdlenbuf, rdlen);
-    //         }
-    //         if (is_update)
-    //             updates++;
-    //         else
-    //             prereqs++;
-    //     }
-    //
-    //     msgbase[7] = prereqs; /* ANCOUNT = number of prereqs */
-    //     msgbase[9] = updates; /* AUCOUNT = number of updates */
-    //
-    //     result = PERF_R_SUCCESS;
-    //
-    // done:
-    //     return result;
-    return PERF_R_FAILURE;
-}
+    perf_region_t input, token;
+    char *        msgbase, *str;
+    bool          is_update;
+    int           updates = 0;
+    int           prereqs = 0;
+    perf_result_t result  = PERF_R_FAILURE;
+    ldns_rdf*     origin  = 0;
+    ldns_rr*      rr      = 0;
+    ldns_buffer*  lmsg    = 0;
+    ldns_rbtree_t compression;
+    const char*   errstr;
 
-perf_result_t
-perf_dns_buildrequest(perf_dnsctx_t* ctx, const perf_region_t* record,
-    uint16_t qid,
-    bool edns, bool dnssec,
-    perf_tsigkey_t* tsigkey, perf_ednsoption_t* option,
+    input   = *record;
+    msgbase = perf_buffer_base(msg);
+    ldns_rbtree_init(&compression, ldns_dname_compare_v);
+
+    // Fill LDNS buffer with current message (DNS headers)
+    if (!(lmsg = ldns_buffer_new(perf_buffer_length(msg)))) {
+        perf_log_fatal("unable to create LDNS buffer for DNS message");
+        goto done; // for scan-build / sonarcloud
+    }
+    ldns_buffer_write(lmsg, perf_buffer_base(msg), perf_buffer_usedlength(msg));
+
+    if (!(origin = ldns_rdf_new_frm_str(LDNS_RDF_TYPE_DNAME, input.base))) {
+        perf_log_warning("Unable to parse domain name %s", (char*)input.base);
+        goto done;
+    }
+    if (ldns_dname2buffer_wire_compress(lmsg, origin, &compression) != LDNS_STATUS_OK) {
+        perf_log_warning("Unable to write domain name %s to wire format", (char*)input.base);
+        goto done;
+    }
+
+    ldns_buffer_write_u16(lmsg, 6); // SOA
+    ldns_buffer_write_u16(lmsg, 1); // IN
+
+    while (true) {
+        input.base += strlen(input.base) + 1;
+        if (input.base >= record->base + record->length) {
+            perf_log_warning("incomplete update: %s", (char*)record->base);
+            result = PERF_R_FAILURE;
+            goto done;
+        }
+
+        is_update    = false;
+        token.base   = input.base;
+        token.length = strcspn(token.base, WHITESPACE);
+        str          = input.base + token.length;
+        errstr       = 0;
+        if (token_equals(&token, "send")) {
+            break;
+        }
+
+        rr = ldns_rr_new();
+        ldns_rr_set_ttl(rr, 0);
+        ldns_rr_set_type(rr, LDNS_RR_TYPE_ANY);
+        ldns_rr_set_class(rr, LDNS_RR_CLASS_IN);
+
+        if (token_equals(&token, "add")) {
+            result = read_update_line(str, origin, true, true, true, true, &rr, &errstr);
+            ldns_rr_set_class(rr, LDNS_RR_CLASS_IN);
+            is_update = true;
+        } else if (token_equals(&token, "delete")) {
+            result = read_update_line(str, origin, false, false, true, false, &rr, &errstr);
+            if (ldns_rr_rd_count(rr)) {
+                ldns_rr_set_class(rr, LDNS_RR_CLASS_NONE);
+            } else {
+                ldns_rr_set_class(rr, LDNS_RR_CLASS_ANY);
+            }
+            is_update = true;
+        } else if (token_equals(&token, "require")) {
+            result = read_update_line(str, origin, false, false, true, false, &rr, &errstr);
+            if (ldns_rr_rd_count(rr)) {
+                ldns_rr_set_class(rr, LDNS_RR_CLASS_IN);
+            } else {
+                ldns_rr_set_class(rr, LDNS_RR_CLASS_ANY);
+            }
+            is_update = false;
+        } else if (token_equals(&token, "prohibit")) {
+            result = read_update_line(str, origin, false, false, false, false, &rr, &errstr);
+            ldns_rr_set_class(rr, LDNS_RR_CLASS_NONE);
+            is_update = false;
+        } else {
+            perf_log_warning("invalid update command: %s", (char*)input.base);
+            result = PERF_R_FAILURE;
+        }
+
+        if (result != PERF_R_SUCCESS) {
+            if (errstr) {
+                perf_log_warning("invalid update command, %s: %s", errstr, (char*)input.base);
+            } else if (result == PERF_R_INVALIDUPDATE) {
+                perf_log_warning("invalid update command: %s", (char*)input.base);
+            } else {
+                perf_log_warning("error processing update command: %s", (char*)input.base);
+            }
+            ldns_rr_free(rr);
+            goto done;
+        }
+
+        if (!is_update && updates > 0) {
+            perf_log_warning("prereqs must precede updates");
+            result = PERF_R_FAILURE;
+            ldns_rr_free(rr);
+            goto done;
+        }
+
+        if (ldns_rr2buffer_wire_compress(lmsg, rr, LDNS_SECTION_ANSWER, &compression) != LDNS_STATUS_OK) {
+            perf_log_warning("Unable to write update message to wire format");
+            ldns_rr_free(rr);
+            goto done;
+        }
+        ldns_rr_free(rr);
+
+        if (is_update)
+            updates++;
+        else
+            prereqs++;
+    }
+
+    if (ldns_buffer_position(lmsg) - perf_buffer_usedlength(msg) > perf_buffer_availablelength(msg)) {
+        perf_log_warning("out of space in message buffer");
+        result = PERF_R_NOSPACE;
+        goto done;
+    }
+    uint8_t* p = ldns_buffer_begin(lmsg) + perf_buffer_usedlength(msg);
+    perf_buffer_putmem(msg, p, ldns_buffer_position(lmsg) - perf_buffer_usedlength(msg));
+
+    msgbase[7] = prereqs; /* ANCOUNT = number of prereqs */
+    msgbase[9] = updates; /* AUCOUNT = number of updates */
+
+    result = PERF_R_SUCCESS;
+
+done:
+    ldns_buffer_free(lmsg);
+    ldns_rdf_deep_free(origin);
+    ldns_traverse_postorder(&compression, compression_free, 0);
+
+    return result;
+}
+#endif
+
+perf_result_t perf_dns_buildrequest(const perf_region_t* record, uint16_t qid,
+    bool edns, bool dnssec, bool is_update,
+    perf_tsigkey_t* tsigkey, perf_ednsoption_t* edns_option,
     perf_buffer_t* msg)
 {
     unsigned int  flags;
     perf_result_t result;
 
-    if (ctx != NULL)
+    if (is_update)
         flags = 5 << 11; // opcode UPDATE
     else
         flags = 0x0100U; // flag RD
@@ -504,25 +454,23 @@ perf_dns_buildrequest(perf_dnsctx_t* ctx, const perf_region_t* record,
     perf_buffer_putuint16(msg, 0); /* aucount */
     perf_buffer_putuint16(msg, 0); /* arcount */
 
-    if (ctx != NULL) {
-        result = build_update(ctx, record, msg);
+    if (is_update) {
+#ifdef HAVE_LDNS
+        result = build_update(record, msg);
+#else
+        result = PERF_R_FAILURE;
+#endif
     } else {
         result = build_query(record, msg);
     }
-    if (result != PERF_R_SUCCESS)
-        return (result);
 
-    if (edns) {
-        result = perf_add_edns(msg, dnssec, option);
-        if (result != PERF_R_SUCCESS)
-            return (result);
+    if (result == PERF_R_SUCCESS && edns) {
+        result = perf_add_edns(msg, dnssec, edns_option);
     }
 
-    if (tsigkey != NULL) {
+    if (result == PERF_R_SUCCESS && tsigkey) {
         result = perf_add_tsig(msg, tsigkey);
-        if (result != PERF_R_SUCCESS)
-            return (result);
     }
 
-    return (PERF_R_SUCCESS);
+    return result;
 }

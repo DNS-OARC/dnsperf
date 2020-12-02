@@ -4,6 +4,7 @@ addons:
     update: true
     packages:
     - libssl-dev
+    - libldns-dev
 language: c
 compiler:
   - clang

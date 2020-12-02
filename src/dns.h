@@ -30,27 +30,14 @@
 
 #define MAX_UDP_PACKET 512
 
-typedef struct perf_dnsctx {
-    // isc_mem_t*     mctx;
-    // dns_compress_t compress;
-    // isc_lex_t*     lexer;
-    int dummy;
-} perf_dnsctx_t;
-
 extern const char* perf_dns_rcode_strings[];
-
-perf_dnsctx_t* perf_dns_createctx(bool updates);
-
-void perf_dns_destroyctx(perf_dnsctx_t** ctxp);
 
 perf_result_t perf_dname_fromstring(const char* str, size_t len, perf_buffer_t* target);
 perf_result_t perf_qtype_fromstring(const char* str, size_t len, perf_buffer_t* target);
 
-perf_result_t
-perf_dns_buildrequest(perf_dnsctx_t* ctx, const perf_region_t* record,
-    uint16_t qid,
-    bool edns, bool dnssec,
-    perf_tsigkey_t*    tsigkey,
-    perf_ednsoption_t* edns_option, perf_buffer_t* msg);
+perf_result_t perf_dns_buildrequest(const perf_region_t* record, uint16_t qid,
+    bool edns, bool dnssec, bool is_update,
+    perf_tsigkey_t* tsigkey, perf_ednsoption_t* edns_option,
+    perf_buffer_t* msg);
 
 #endif
