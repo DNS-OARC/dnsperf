@@ -17,6 +17,9 @@ grep -q "Queries sent: *2" test2.out
 ../dnsperf -s 1.1.1.1 -d "$srcdir/datafile" -n 1 -m tls >test2.out
 cat test2.out
 grep -q "Queries sent: *2" test2.out
+../dnsperf -s 1.1.1.1 -d "$srcdir/datafile" -n 1 -m dot >test2.out
+cat test2.out
+grep -q "Queries sent: *2" test2.out
 
 ../dnsperf -s 1.1.1.1 -d "$srcdir/datafile" -n 1 -e >test2.out
 cat test2.out

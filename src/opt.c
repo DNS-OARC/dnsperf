@@ -58,36 +58,40 @@ typedef struct {
 
 static opt_t        opts[MAX_OPTS];
 static unsigned int nopts;
-static char         optstr[MAX_OPTS * 2 + 2];
+static char         optstr[MAX_OPTS * 2 + 2 + 1] = { 0 };
 extern const char*  progname;
 
 void perf_opt_add(char c, perf_opttype_t type, const char* desc, const char* help,
     const char* defval, void* valp)
 {
     opt_t* opt;
-    char   s[3];
 
-    if (nopts == MAX_OPTS)
+    if (nopts == MAX_OPTS) {
         perf_log_fatal("too many defined options");
+        return;
+    }
     opt       = &opts[nopts++];
     opt->c    = c;
     opt->type = type;
     opt->desc = desc;
     opt->help = help;
     if (defval != NULL) {
+        opt->defvalbuf[sizeof(opt->defvalbuf) - 1] = 0;
         strncpy(opt->defvalbuf, defval, sizeof(opt->defvalbuf));
+        if (opt->defvalbuf[sizeof(opt->defvalbuf) - 1]) {
+            perf_log_fatal("perf_opt_add(): defval too large");
+            return;
+        }
         opt->defval = opt->defvalbuf;
     } else {
         opt->defval = NULL;
     }
     opt->u.valp = valp;
 
-    snprintf(s, sizeof(s), "%c%s", c, (type == perf_opt_boolean ? "" : ":"));
-#ifdef __OpenBSD__
-    strlcat(optstr, s, sizeof(optstr));
-#else
-    strcat(optstr, s);
-#endif
+    char newoptstr[sizeof(optstr) + 2];
+    snprintf(newoptstr, sizeof(newoptstr), "%s%c%s", optstr, c, (type == perf_opt_boolean ? "" : ":"));
+    memcpy(optstr, newoptstr, sizeof(optstr) - 1);
+    optstr[sizeof(optstr) - 1] = 0;
 }
 
 void perf_opt_usage(void)

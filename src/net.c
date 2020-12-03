@@ -222,13 +222,18 @@ struct perf_net_socket perf_net_opensocket(enum perf_net_mode mode, const perf_s
             perf_log_fatal("socket: %s", perf_strerror_r(errno, __s, sizeof(__s)));
         }
         if (!ssl_ctx) {
-#ifdef HAVE_TLS_CLIENT_METHOD
-            if (!(ssl_ctx = SSL_CTX_new(TLS_client_method()))) {
-#else
-            if (!(ssl_ctx = SSL_CTX_new(SSLv23_client_method()))) {
-#endif
+#ifdef HAVE_TLS_METHOD
+            if (!(ssl_ctx = SSL_CTX_new(TLS_method()))) {
                 perf_log_fatal("SSL_CTX_new(): %s", ERR_error_string(ERR_get_error(), 0));
             }
+            if (!SSL_CTX_set_min_proto_version(ssl_ctx, TLS1_2_VERSION)) {
+                perf_log_fatal("SSL_CTX_set_min_proto_version(TLS1_2_VERSION): %s", ERR_error_string(ERR_get_error(), 0));
+            }
+#else
+            if (!(ssl_ctx = SSL_CTX_new(SSLv23_client_method()))) {
+                perf_log_fatal("SSL_CTX_new(): %s", ERR_error_string(ERR_get_error(), 0));
+            }
+#endif
         }
         if (!(sock.ssl = SSL_new(ssl_ctx))) {
             perf_log_fatal("SSL_new(): %s", ERR_error_string(ERR_get_error(), 0));
@@ -509,7 +514,7 @@ enum perf_net_mode perf_net_parsemode(const char* mode)
         return sock_udp;
     } else if (!strcmp(mode, "tcp")) {
         return sock_tcp;
-    } else if (!strcmp(mode, "tls")) {
+    } else if (!strcmp(mode, "tls") || !strcmp(mode, "dot")) {
         return sock_tls;
     }
 

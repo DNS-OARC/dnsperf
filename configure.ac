@@ -60,8 +60,8 @@ AC_CHECK_LIB([m], [sqrt])
 # Check for OpenSSL
 PKG_CHECK_MODULES([libssl], [libssl])
 PKG_CHECK_MODULES([libcrypto], [libcrypto])
-AC_CHECK_LIB([ssl], [TLS_client_method],
-  [AC_DEFINE([HAVE_TLS_CLIENT_METHOD], [1], [Define to 1 if you have the 'TLS_client_method' function])])
+AC_CHECK_LIB([ssl], [TLS_method],
+  [AC_DEFINE([HAVE_TLS_METHOD], [1], [Define to 1 if you have the 'TLS_method' function])])
 
 # Check for LDNS
 PKG_CHECK_MODULES([libldns], [libldns >= 1.7.0], [AC_DEFINE([HAVE_LDNS], [1], [Define to 1 if you have the LDNS library])], [
