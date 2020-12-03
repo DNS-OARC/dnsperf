@@ -1,0 +1,1 @@
+sonar.coverage.exclusions=src/gen-qtype.c.py
