@@ -53,7 +53,7 @@
 #define DEFAULT_SERVER_NAME "127.0.0.1"
 #define DEFAULT_SERVER_PORT 53
 #define DEFAULT_SERVER_TLS_PORT 853
-#define DEFAULT_SERVER_PORTS "udp/tcp 53 or tls 853"
+#define DEFAULT_SERVER_PORTS "udp/tcp 53 or dot/tls 853"
 #define DEFAULT_LOCAL_PORT 0
 #define DEFAULT_SOCKET_BUFFER 32
 #define DEFAULT_TIMEOUT 45
@@ -236,7 +236,7 @@ setup(int argc, char** argv)
     perf_opt_add('f', perf_opt_string, "family",
         "address family of DNS transport, inet or inet6", "any",
         &family);
-    perf_opt_add('M', perf_opt_string, "mode", "set transport mode: udp, tcp or tls", "udp", &_mode);
+    perf_opt_add('M', perf_opt_string, "mode", "set transport mode: udp, tcp or dot/tls", "udp", &_mode);
     perf_opt_add('s', perf_opt_string, "server_addr",
         "the server to query", DEFAULT_SERVER_NAME, &server_name);
     perf_opt_add('p', perf_opt_port, "port",
