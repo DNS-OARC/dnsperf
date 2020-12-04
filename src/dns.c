@@ -52,7 +52,8 @@ const char* perf_dns_rcode_strings[] = {
 
 perf_result_t perf_dname_fromstring(const char* str, size_t len, perf_buffer_t* target)
 {
-    size_t label_len;
+    size_t      label_len;
+    const char* orig_str = str;
 
     if (perf_buffer_availablelength(target) < len) {
         return PERF_R_NOSPACE;
@@ -66,6 +67,13 @@ perf_result_t perf_dname_fromstring(const char* str, size_t len, perf_buffer_t* 
         }
         if (!label_len) {
             // Just a dot
+            if (len > 1) {
+                // a dot but with labels after it
+                return PERF_R_FAILURE;
+            } else if (str != orig_str) {
+                // a dot but with labels before it
+                return PERF_R_FAILURE;
+            }
             perf_buffer_putuint8(target, 0);
             break;
         }

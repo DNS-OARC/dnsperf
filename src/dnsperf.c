@@ -436,8 +436,14 @@ setup(int argc, char** argv, config_t* config)
     perf_opt_add('v', perf_opt_boolean, NULL,
         "verbose: report each query and additional information to stdout",
         NULL, &config->verbose);
+    bool log_stdout = false;
+    perf_opt_add('W', perf_opt_boolean, NULL, "log warnings and errors to stdout instead of stderr", NULL, &log_stdout);
 
     perf_opt_parse(argc, argv);
+
+    if (log_stdout) {
+        perf_log_tostdout();
+    }
 
     if (mode != 0)
         config->mode = perf_net_parsemode(mode);
