@@ -24,18 +24,18 @@
 ! echo "" | ../dnsperf -y invalid:test:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8=
 ! echo "" | ../dnsperf -y test:invalid
 ! echo "" | ../dnsperf -y test
-! echo "" | ../dnsperf -y toooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooolongname:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8= \
+echo "" | ../dnsperf -W -y toooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooolongname:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8= \
   | grep "unable to setup TSIG, name too long"
-! echo "" | ../dnsperf -y test: | grep "unable to setup TSIG, secret empty"
+echo "" | ../dnsperf -W -y test: | grep "unable to setup TSIG, secret empty"
 
 ! ../dnsperf -e -E invalid
 ! ../dnsperf -e -E 9999999:invalid
 ! ../dnsperf -e -E 123:invalid
 ! ../dnsperf -e -E 123:fa0
-! ../dnsperf -E a: | grep "invalid EDNS Option, value is empty"
-! ../dnsperf -E a:a | grep "invalid EDNS Option, value must hex string (even number of characters)"
-! ../dnsperf -E a:aa | grep "invalid EDNS Option code 'a'"
-! ../dnsperf -E 1:xx | grep "invalid EDNS Option hex value 'xx'"
+../dnsperf -W -E a: | grep "invalid EDNS Option, value is empty"
+../dnsperf -W -E a:a | grep "invalid EDNS Option, value must hex string (even number of characters)"
+../dnsperf -W -E a:aa | grep "invalid EDNS Option code 'a'"
+../dnsperf -W -E 1:xx | grep "invalid EDNS Option hex value 'xx'"
 
 ! ../resperf -d does_not_exist
 ! ../resperf -r 0 -c 0

@@ -129,12 +129,6 @@ void perf_net_parseserver(int family, const char* name, unsigned int port, perf_
 {
     struct addrinfo* ai;
 
-    if (port == 0) {
-        fprintf(stderr, "server port cannot be 0\n");
-        perf_opt_usage();
-        exit(1);
-    }
-
     if (getaddrinfo(name, 0, 0, &ai) == 0) {
         struct addrinfo* a;
 

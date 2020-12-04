@@ -287,8 +287,14 @@ setup(int argc, char** argv)
     perf_opt_add('v', perf_opt_boolean, NULL,
         "verbose: report additional information to stdout",
         NULL, &verbose);
+    bool log_stdout = false;
+    perf_opt_add('W', perf_opt_boolean, NULL, "log warnings and errors to stdout instead of stderr", NULL, &log_stdout);
 
     perf_opt_parse(argc, argv);
+
+    if (log_stdout) {
+        perf_log_tostdout();
+    }
 
     if (_mode != 0)
         mode = perf_net_parsemode(_mode);
