@@ -126,7 +126,7 @@ static perf_result_t read_more(perf_datafile_t* dfile)
         dfile->at = 0;
     }
 
-    n = read(dfile->fd, &dfile->databuf[dfile->at], sizeof(dfile->databuf) - dfile->have - 1);
+    n = read(dfile->fd, &dfile->databuf[dfile->have], sizeof(dfile->databuf) - dfile->have - 1);
     if (n < 0) {
         return (PERF_R_FAILURE);
     }
