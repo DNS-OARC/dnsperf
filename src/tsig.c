@@ -237,7 +237,7 @@ perf_result_t perf_add_tsig(perf_buffer_t* packet, perf_tsigkey_t* tsigkey)
         perf_log_fatal("adding TSIG: OpenSSL HMAC update failed");
     }
 
-    // /* Digest the TSIG record */
+    /* Digest the TSIG record */
     perf_buffer_init(&tmp, tmpdata, sizeof tmpdata);
     switch ((result = perf_dname_fromstring(tsigkey->name, tsigkey->namelen, &tmp))) {
     case PERF_R_SUCCESS:
@@ -286,7 +286,7 @@ perf_result_t perf_add_tsig(perf_buffer_t* packet, perf_tsigkey_t* tsigkey)
 
     base = perf_buffer_base(packet);
 
-    // /* Add the TSIG record. */
+    /* Add the TSIG record. */
     switch ((result = perf_dname_fromstring(tsigkey->name, tsigkey->namelen, packet))) {
     case PERF_R_SUCCESS:
         break;

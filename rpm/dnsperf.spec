@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.3.4
+Version:        2.4.0
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -93,6 +93,57 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed Dec 09 2020 Jerry Lundström <lundstrom.jerry@gmail.com> 2.4.0-1
+- Release 2.4.0
+  * This release removes the dependency on BIND's internal development
+    libraries! This make building and packaging a lot easier and less
+    troublesome in the future.
+  * This software now depends only on OpenSSL (for TSIG feature) with an
+    optional depend on LDNS (for dynamic updates feature).
+  * New option:
+    - Transport mode option `-m`/`-M` now recognizes `dot` alongside `tls`
+      for encrypted DNS
+    - Added `-W` for outputting warnings and errors to stdout
+  * Other changes / bugfixes:
+    - Fix potential memory leak of query descriptions when using verbose
+    - Only use TLS v1.2 and above for DoT/TLS
+    - Add a lot of tests
+    - Add coverage testing
+  * Commits:
+    d17743b datafile
+    434bbf2 Checks, coverage, log, test IPv6
+    9fb305f Coverage
+    123ebf1 DOT, TLS version, Sonarcloud
+    26df0bd BIND dependency
+    ee660e7 Sonarcloud
+    c9ea0ab base64
+    4e9be82 TSIG
+    4275045 EDNS, https
+    7c3f51c BIND dependency
+    6e1be5d ISC dependencies
+    e36f19d Buffer
+    485cdd2 ISC mem, tests
+    663dc24 Namespace clash
+    2c44987 dynamic updates, edns, headers
+    5d109b2 Disable HMAC
+    79cae93 datafile, query desc
+    663d814 net
+    c867de6 isc_result_t
+    651ee5d opt
+    7d30804 isc_result_t
+    58ad313 ISC linked list
+    7b4da6d Info
+    8079ebc Tests
+    e3fb685 Tests
+    2bb603a Tests
+    297b23b Test
+    c4e244b Test
+    1caac35 Makefile
+    e9f2aaa Coverage
+    27af853 Fix typo in configure.ac
+    521faa6 Badges
+    8fa2ec4 LGTM
+    75c89e5 COPR
 * Fri May 15 2020 Jerry Lundström <lundstrom.jerry@gmail.com> 2.3.4-1
 - Release 2.3.4
   * This release adds a workaround, thanks to patch from Petr Menšík, for
