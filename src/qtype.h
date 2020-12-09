@@ -17,28 +17,16 @@
  * limitations under the License.
  */
 
-#include "net.h"
-#include "result.h"
+#ifndef PERF_QTYPE_H
+#define PERF_QTYPE_H 1
 
-#ifndef PERF_OS_H
-#define PERF_OS_H 1
+#include <stdint.h>
 
-#include <inttypes.h>
-#include <stdbool.h>
+typedef struct perf_qtype {
+    char*    type;
+    uint16_t value;
+} perf_qtype_t;
 
-void perf_os_blocksignal(int sig, bool block);
-
-void perf_os_handlesignal(int sig, void (*handler)(int));
-
-perf_result_t
-perf_os_waituntilreadable(struct perf_net_socket* sock, int pipe_fd, int64_t timeout);
-
-perf_result_t
-perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
-    int64_t timeout);
-
-perf_result_t
-perf_os_waituntilanywritable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
-    int64_t timeout);
+extern const perf_qtype_t qtype_table[];
 
 #endif

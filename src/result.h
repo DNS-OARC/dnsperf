@@ -17,28 +17,22 @@
  * limitations under the License.
  */
 
-#include "net.h"
-#include "result.h"
+#ifndef PERF_RESULT_H
+#define PERF_RESULT_H 1
 
-#ifndef PERF_OS_H
-#define PERF_OS_H 1
+#include <assert.h>
 
-#include <inttypes.h>
-#include <stdbool.h>
+typedef unsigned int perf_result_t;
 
-void perf_os_blocksignal(int sig, bool block);
+#define PERF_R_SUCCESS 0
+#define PERF_R_FAILURE 1
+#define PERF_R_CANCELED 2
+#define PERF_R_EOF 3
+#define PERF_R_INVALIDFILE 4
+#define PERF_R_NOMORE 5
+#define PERF_R_NOSPACE 6
+#define PERF_R_TIMEDOUT 7
 
-void perf_os_handlesignal(int sig, void (*handler)(int));
-
-perf_result_t
-perf_os_waituntilreadable(struct perf_net_socket* sock, int pipe_fd, int64_t timeout);
-
-perf_result_t
-perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
-    int64_t timeout);
-
-perf_result_t
-perf_os_waituntilanywritable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
-    int64_t timeout);
+#define PERF_R_INVALIDUPDATE 100
 
 #endif

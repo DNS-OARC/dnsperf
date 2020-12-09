@@ -17,29 +17,36 @@
  * limitations under the License.
  */
 
+#include "result.h"
+#include "buffer.h"
+
 #ifndef PERF_DATAFILE_H
 #define PERF_DATAFILE_H 1
 
+#include <pthread.h>
 #include <stdbool.h>
 
-#include <isc/types.h>
+typedef struct perf_datafile {
+    pthread_mutex_t lock;
+    int             pipe_fd;
+    int             fd;
+    bool            is_file;
+    size_t          size, at, have;
+    bool            cached;
+    char            databuf[(64 * 1024) + 1];
+    unsigned int    maxruns;
+    unsigned int    nruns;
+    bool            read_any;
+} perf_datafile_t;
 
-typedef struct perf_datafile perf_datafile_t;
-
-perf_datafile_t*
-perf_datafile_open(isc_mem_t* mctx, const char* filename);
+perf_datafile_t* perf_datafile_open(const char* filename);
 
 void perf_datafile_close(perf_datafile_t** dfilep);
-
 void perf_datafile_setmaxruns(perf_datafile_t* dfile, unsigned int maxruns);
-
 void perf_datafile_setpipefd(perf_datafile_t* dfile, int pipe_fd);
 
-isc_result_t
-perf_datafile_next(perf_datafile_t* dfile, isc_buffer_t* lines,
-    bool is_update);
+perf_result_t perf_datafile_next(perf_datafile_t* dfile, perf_buffer_t* lines, bool is_update);
 
-unsigned int
-perf_datafile_nruns(const perf_datafile_t* dfile);
+unsigned int perf_datafile_nruns(const perf_datafile_t* dfile);
 
 #endif

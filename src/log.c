@@ -17,26 +17,31 @@
  * limitations under the License.
  */
 
+#include "config.h"
+
+#include "log.h"
+
+#include "util.h"
+
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "log.h"
-#include "util.h"
+static bool log_err_stdout = false;
 
 pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void
 vlog(FILE* stream, const char* prefix, const char* fmt, va_list args)
 {
-    LOCK(&log_lock);
+    PERF_LOCK(&log_lock);
     fflush(stdout);
     if (prefix != NULL)
         fprintf(stream, "%s: ", prefix);
     vfprintf(stream, fmt, args);
     fprintf(stream, "\n");
-    UNLOCK(&log_lock);
+    PERF_UNLOCK(&log_lock);
 }
 
 void perf_log_printf(const char* fmt, ...)
@@ -50,7 +55,7 @@ void perf_log_fatal(const char* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    vlog(stderr, "Error", fmt, args);
+    vlog(log_err_stdout ? stdout : stderr, "Error", fmt, args);
     exit(1);
 }
 
@@ -58,5 +63,10 @@ void perf_log_warning(const char* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    vlog(stderr, "Warning", fmt, args);
+    vlog(log_err_stdout ? stdout : stderr, "Warning", fmt, args);
+}
+
+void perf_log_tostdout(void)
+{
+    log_err_stdout = true;
 }

@@ -1,4 +1,20 @@
-/*
+#!/usr/bin/python3
+
+import csv
+from urllib.request import Request, urlopen
+from io import StringIO
+
+qtype = {}
+
+for row in csv.reader(StringIO(urlopen(Request('https://www.iana.org/assignments/dns-parameters/dns-parameters-4.csv')).read().decode('utf-8'))):
+    if row[0] == 'TYPE':
+        continue
+    try:
+        qtype[row[0]] = int(row[1])
+    except Exception:
+        continue
+
+print("""/*
  * Copyright 2019-2020 OARC, Inc.
  * Copyright 2017-2018 Akamai Technologies
  * Copyright 2006-2016 Nominum, Inc.
@@ -17,28 +33,14 @@
  * limitations under the License.
  */
 
-#include "net.h"
-#include "result.h"
+#include "config.h"
 
-#ifndef PERF_OS_H
-#define PERF_OS_H 1
+#include "qtype.h"
 
-#include <inttypes.h>
-#include <stdbool.h>
+const perf_qtype_t qtype_table[] = {""")
 
-void perf_os_blocksignal(int sig, bool block);
+for k, v in qtype.items():
+    print("    { \"%s\", %d }," % (k, v))
 
-void perf_os_handlesignal(int sig, void (*handler)(int));
-
-perf_result_t
-perf_os_waituntilreadable(struct perf_net_socket* sock, int pipe_fd, int64_t timeout);
-
-perf_result_t
-perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
-    int64_t timeout);
-
-perf_result_t
-perf_os_waituntilanywritable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
-    int64_t timeout);
-
-#endif
+print("""    { 0, 0 }
+};""")

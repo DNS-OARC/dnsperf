@@ -1,6 +1,6 @@
 # dnsperf
 
-[https://github.com/DNS-OARC/dnsperf](https://github.com/DNS-OARC/dnsperf)
+[![Build Status](https://travis-ci.com/DNS-OARC/dnsperf.svg?branch=develop)](https://travis-ci.com/DNS-OARC/dnsperf) [![Total alerts](https://img.shields.io/lgtm/alerts/g/DNS-OARC/dnsperf.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/DNS-OARC/dnsperf/alerts/) [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=dns-oarc%3Adnsperf&metric=bugs)](https://sonarcloud.io/dashboard?id=dns-oarc%3Adnsperf) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=dns-oarc%3Adnsperf&metric=security_rating)](https://sonarcloud.io/dashboard?id=dns-oarc%3Adnsperf)
 
 `dnsperf` and `resperf` are free tools developed by Nominum/Akamai (2006-2018)
 and DNS-OARC (since 2019) that make it simple to gather accurate latency and
@@ -22,7 +22,16 @@ of the data.
 `resperf` systematically increases the query rate and monitors the response
 rate to simulate caching DNS services.
 
-For more information, see the `dnsperf(1)` and `resperf(1)` man pages.
+See also the `dnsperf(1)` and `resperf(1)` man pages.
+
+More information may be found here:
+- https://www.dns-oarc.net/tools/dnsperf
+
+Issues should be reported here:
+- https://github.com/DNS-OARC/dnsperf/issues
+
+General support and discussion:
+- Mattermost: https://chat.dns-oarc.net/community/channels/oarc-software
 
 ## Usage
 
@@ -34,33 +43,27 @@ those queries to DNS servers to measure performance.
 `dnsperf` requires a couple of libraries beside a normal C compiling
 environment with autoconf, automake, libtool and pkgconfig.
 
-`dnsperf` has a non-optional dependency on the BIND library and development
-files along with all dependencies it requires.
+- [OpenSSL](https://www.openssl.org/) - for TSIG support
+- [LDNS](https://nlnetlabs.nl/projects/ldns/about/) - optional for dynamic update support
 
 To install the dependencies under Debian/Ubuntu:
 ```
-apt-get install -y libbind-dev libkrb5-dev libssl-dev libcap-dev libxml2-dev libjson-c-dev libgeoip-dev
-```
-
-Depending on how BIND is compiled on Debian and Ubuntu you might need these
-dependencies also:
-```
-apt-get install -y libprotobuf-c-dev libfstrm-dev liblmdb-dev libssl-dev
+apt-get install -y libssl-dev libldns-dev
 ```
 
 To install the dependencies under CentOS (with EPEL enabled):
 ```
-yum install -y bind-devel krb5-devel openssl-devel libcap-devel libxml2-devel json-c-devel GeoIP-devel
+yum install -y openssl-devel ldns-devel
 ```
 
 To install the dependencies under FreeBSD 12+ using `pkg`:
 ```
-pkg install -y bind913-9.13.5 openssl-devel GeoIP
+pkg install -y openssl ldns
 ```
 
 To install the dependencies under OpenBSD 6+ using `pkg_add`:
 ```
-pkg_add isc-bind-9.11.4pl2 GeoIP
+pkg_add libldns
 ```
 
 ## Building from source tarball

@@ -17,28 +17,25 @@
  * limitations under the License.
  */
 
-#include "net.h"
 #include "result.h"
+#include "buffer.h"
 
-#ifndef PERF_OS_H
-#define PERF_OS_H 1
+#ifndef PERF_EDNS_H
+#define PERF_EDNS_H 1
 
-#include <inttypes.h>
 #include <stdbool.h>
 
-void perf_os_blocksignal(int sig, bool block);
+#define MAX_EDNS_PACKET 4096
 
-void perf_os_handlesignal(int sig, void (*handler)(int));
+typedef struct perf_ednsoption {
+    perf_buffer_t buffer;
+    char          data[];
+} perf_ednsoption_t;
 
-perf_result_t
-perf_os_waituntilreadable(struct perf_net_socket* sock, int pipe_fd, int64_t timeout);
+perf_ednsoption_t* perf_edns_parseoption(const char* arg);
 
-perf_result_t
-perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
-    int64_t timeout);
+void perf_edns_destroyoption(perf_ednsoption_t** optionp);
 
-perf_result_t
-perf_os_waituntilanywritable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
-    int64_t timeout);
+perf_result_t perf_add_edns(perf_buffer_t* packet, bool dnssec, perf_ednsoption_t* option);
 
 #endif

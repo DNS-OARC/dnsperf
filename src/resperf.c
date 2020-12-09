@@ -23,6 +23,17 @@
 
 #include "config.h"
 
+#include "datafile.h"
+#include "dns.h"
+#include "log.h"
+#include "net.h"
+#include "opt.h"
+#include "util.h"
+#include "os.h"
+#include "list.h"
+#include "result.h"
+#include "buffer.h"
+
 #include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -35,26 +46,6 @@
 #include <openssl/err.h>
 #include <signal.h>
 
-#include <isc/buffer.h>
-#include <isc/file.h>
-#include <isc/list.h>
-#include <isc/mem.h>
-#include <isc/print.h>
-#include <isc/region.h>
-#include <isc/result.h>
-#include <isc/sockaddr.h>
-#include <isc/types.h>
-
-#include <dns/result.h>
-
-#include "datafile.h"
-#include "dns.h"
-#include "log.h"
-#include "net.h"
-#include "opt.h"
-#include "util.h"
-#include "os.h"
-
 /*
  * Global stuff
  */
@@ -62,7 +53,7 @@
 #define DEFAULT_SERVER_NAME "127.0.0.1"
 #define DEFAULT_SERVER_PORT 53
 #define DEFAULT_SERVER_TLS_PORT 853
-#define DEFAULT_SERVER_PORTS "udp/tcp 53 or tls 853"
+#define DEFAULT_SERVER_PORTS "udp/tcp 53 or dot/tls 853"
 #define DEFAULT_LOCAL_PORT 0
 #define DEFAULT_SOCKET_BUFFER 32
 #define DEFAULT_TIMEOUT 45
@@ -72,9 +63,12 @@
 
 #define TIMEOUT_CHECK_TIME 5000000
 
+#define DNS_RCODE_NOERROR 0
+#define DNS_RCODE_NXDOMAIN 3
+
 struct query_info;
 
-typedef ISC_LIST(struct query_info) query_list;
+typedef perf_list(struct query_info) query_list;
 
 typedef struct query_info {
     uint64_t sent_timestamp;
@@ -82,8 +76,7 @@ typedef struct query_info {
      * This link links the query into the list of outstanding
      * queries or the list of available query IDs.
      */
-    ISC_LINK(struct query_info)
-    link;
+    perf_link(struct query_info);
     /*
      * The list this query is on.
      */
@@ -95,10 +88,8 @@ static query_list instanding_list;
 
 static query_info* queries;
 
-static isc_mem_t* mctx;
-
-static isc_sockaddr_t          server_addr;
-static isc_sockaddr_t          local_addr;
+static perf_sockaddr_t         server_addr;
+static perf_sockaddr_t         local_addr;
 static unsigned int            nsocks;
 static struct perf_net_socket* socks;
 static enum perf_net_mode      mode;
@@ -199,9 +190,11 @@ static enum phase phase = PHASE_RAMP;
 /* The time when the sustain/wait phase began */
 static uint64_t sustain_phase_began, wait_phase_began;
 
-static perf_dnstsigkey_t* tsigkey;
+static perf_tsigkey_t* tsigkey;
 
 static bool verbose;
+
+const char* progname = "resperf";
 
 static char*
 stringify(double value, int precision)
@@ -227,17 +220,6 @@ setup(int argc, char** argv)
     unsigned int i;
     const char*  _mode = 0;
 
-#ifdef HAVE_ISC_MEM_CREATE_RESULT
-    isc_result_t result = isc_mem_create(0, 0, &mctx);
-    if (result != ISC_R_SUCCESS)
-        perf_log_fatal("creating memory context: %s",
-            isc_result_totext(result));
-#else
-    isc_mem_create(&mctx);
-#endif
-
-    dns_result_register();
-
     sock_family     = AF_UNSPEC;
     server_port     = 0;
     local_port      = DEFAULT_LOCAL_PORT;
@@ -254,7 +236,7 @@ setup(int argc, char** argv)
     perf_opt_add('f', perf_opt_string, "family",
         "address family of DNS transport, inet or inet6", "any",
         &family);
-    perf_opt_add('M', perf_opt_string, "mode", "set transport mode: udp, tcp or tls", "udp", &_mode);
+    perf_opt_add('M', perf_opt_string, "mode", "set transport mode: udp, tcp or dot/tls", "udp", &_mode);
     perf_opt_add('s', perf_opt_string, "server_addr",
         "the server to query", DEFAULT_SERVER_NAME, &server_name);
     perf_opt_add('p', perf_opt_port, "port",
@@ -305,8 +287,14 @@ setup(int argc, char** argv)
     perf_opt_add('v', perf_opt_boolean, NULL,
         "verbose: report additional information to stdout",
         NULL, &verbose);
+    bool log_stdout = false;
+    perf_opt_add('W', perf_opt_boolean, NULL, "log warnings and errors to stdout instead of stderr", NULL, &log_stdout);
 
     perf_opt_parse(argc, argv);
+
+    if (log_stdout) {
+        perf_log_tostdout();
+    }
 
     if (_mode != 0)
         mode = perf_net_parsemode(_mode);
@@ -324,34 +312,34 @@ setup(int argc, char** argv)
         perf_log_fatal("rampup_time and constant_traffic_time must not "
                        "both be 0");
 
-    ISC_LIST_INIT(outstanding_list);
-    ISC_LIST_INIT(instanding_list);
-    queries = isc_mem_get(mctx, max_outstanding * sizeof(query_info));
-    if (queries == NULL)
+    perf_list_init(outstanding_list);
+    perf_list_init(instanding_list);
+    if (!(queries = calloc(max_outstanding, sizeof(query_info)))) {
         perf_log_fatal("out of memory");
+    }
     for (i = 0; i < max_outstanding; i++) {
-        ISC_LINK_INIT(&queries[i], link);
-        ISC_LIST_APPEND(instanding_list, &queries[i], link);
+        perf_link_init(&queries[i]);
+        perf_list_append(instanding_list, &queries[i]);
         queries[i].list = &instanding_list;
     }
 
     if (family != NULL)
         sock_family = perf_net_parsefamily(family);
     perf_net_parseserver(sock_family, server_name, server_port, &server_addr);
-    perf_net_parselocal(isc_sockaddr_pf(&server_addr), local_name,
+    perf_net_parselocal(server_addr.sa.sa.sa_family, local_name,
         local_port, &local_addr);
 
-    input = perf_datafile_open(mctx, filename);
+    input = perf_datafile_open(filename);
 
     if (dnssec)
         edns = true;
 
     if (tsigkey_str != NULL)
-        tsigkey = perf_dns_parsetsigkey(tsigkey_str, mctx);
+        tsigkey = perf_tsig_parsekey(tsigkey_str);
 
-    socks = isc_mem_get(mctx, nsocks * sizeof(*socks));
-    if (socks == NULL)
+    if (!(socks = calloc(nsocks, sizeof(*socks)))) {
         perf_log_fatal("out of memory");
+    }
     for (i = 0; i < nsocks; i++)
         socks[i] = perf_net_opensocket(mode, &server_addr, &local_addr, i, bufsize);
 }
@@ -364,10 +352,6 @@ cleanup(void)
     perf_datafile_close(&input);
     for (i = 0; i < nsocks; i++)
         (void)perf_net_close(&socks[i]);
-    isc_mem_put(mctx, socks, nsocks * sizeof(*socks));
-    isc_mem_put(mctx, queries, max_outstanding * sizeof(query_info));
-    isc_mem_put(mctx, buckets, n_buckets * sizeof(ramp_bucket));
-    isc_mem_destroy(&mctx);
     close(dummypipe[0]);
     close(dummypipe[1]);
 }
@@ -454,9 +438,10 @@ init_buckets(int n)
     ramp_bucket* p;
     int          i;
 
-    p = isc_mem_get(mctx, n * sizeof(*p));
-    if (p == NULL)
+    if (!(p = calloc(n, sizeof(*p)))) {
         perf_log_fatal("out of memory");
+        return 0; // fix clang scan-build
+    }
     for (i = 0; i < n; i++) {
         p[i].queries = p[i].responses = p[i].failures = 0;
         p[i].latency_sum                              = 0.0;
@@ -466,28 +451,28 @@ init_buckets(int n)
 
 /*
  * Send a query based on a line of input.
- * Return ISC_R_NOMORE if we ran out of query IDs.
+ * Return PERF_R_NOMORE if we ran out of query IDs.
  */
-static isc_result_t
-do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
+static perf_result_t
+do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
 {
     query_info*    q;
     unsigned int   qid;
     unsigned int   sock;
-    isc_region_t   used;
+    perf_region_t  used;
     unsigned char* base;
     unsigned int   length;
-    isc_result_t   result;
+    perf_result_t  result;
 
-    isc_buffer_clear(lines);
+    perf_buffer_clear(lines);
     result = perf_datafile_next(input, lines, false);
-    if (result != ISC_R_SUCCESS)
+    if (result != PERF_R_SUCCESS)
         perf_log_fatal("ran out of query data");
-    isc_buffer_usedregion(lines, &used);
+    perf_buffer_usedregion(lines, &used);
 
-    q = ISC_LIST_HEAD(instanding_list);
+    q = perf_list_head(instanding_list);
     if (!q)
-        return (ISC_R_NOMORE);
+        return (PERF_R_NOMORE);
     qid  = (q - queries) / nsocks;
     sock = (q - queries) % nsocks;
 
@@ -503,27 +488,29 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
                     perf_log_warning("failed to send packet: %s", perf_strerror_r(errno, __s, sizeof(__s)));
                 }
             }
-            return (ISC_R_FAILURE);
+            return (PERF_R_FAILURE);
         }
 
-        ISC_LIST_UNLINK(instanding_list, q, link);
-        ISC_LIST_PREPEND(outstanding_list, q, link);
+        perf_list_unlink(instanding_list, q);
+        perf_list_prepend(outstanding_list, q);
         q->list = &outstanding_list;
 
         num_queries_sent++;
         num_queries_outstanding++;
 
-        q = ISC_LIST_HEAD(instanding_list);
+        q = perf_list_head(instanding_list);
         if (!q)
-            return (ISC_R_NOMORE);
+            return (PERF_R_NOMORE);
         qid  = (q - queries) / nsocks;
         sock = (q - queries) % nsocks;
     }
 
-    isc_buffer_clear(msg);
-    result = perf_dns_buildrequest(NULL, (isc_textregion_t*)&used,
-        qid, edns, dnssec, tsigkey, NULL, msg);
-    if (result != ISC_R_SUCCESS)
+    perf_buffer_clear(msg);
+    result = perf_dns_buildrequest(&used, qid,
+        edns, dnssec, false,
+        tsigkey, 0,
+        msg);
+    if (result != PERF_R_SUCCESS)
         return (result);
 
     q->sent_timestamp = time_now;
@@ -533,18 +520,18 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
         if (verbose) {
             perf_log_warning("failed to send packet: socket %d not ready", sock);
         }
-        return (ISC_R_FAILURE);
+        return (PERF_R_FAILURE);
     case -1:
         perf_log_warning("failed to send packet: socket %d readiness check timed out", sock);
-        return (ISC_R_FAILURE);
+        return (PERF_R_FAILURE);
     default:
         break;
     }
 
-    base   = isc_buffer_base(msg);
-    length = isc_buffer_usedlength(msg);
+    base   = perf_buffer_base(msg);
+    length = perf_buffer_usedlength(msg);
     if (perf_net_sendto(&socks[sock], base, length, 0,
-            &server_addr.type.sa, server_addr.length)
+            &server_addr.sa.sa, server_addr.length)
         < 1) {
         if (errno == EINPROGRESS) {
             if (verbose) {
@@ -556,17 +543,17 @@ do_one_line(isc_buffer_t* lines, isc_buffer_t* msg)
                 perf_log_warning("failed to send packet: %s", perf_strerror_r(errno, __s, sizeof(__s)));
             }
         }
-        return (ISC_R_FAILURE);
+        return (PERF_R_FAILURE);
     }
 
-    ISC_LIST_UNLINK(instanding_list, q, link);
-    ISC_LIST_PREPEND(outstanding_list, q, link);
+    perf_list_unlink(instanding_list, q);
+    perf_list_prepend(outstanding_list, q);
     q->list = &outstanding_list;
 
     num_queries_sent++;
     num_queries_outstanding++;
 
-    return ISC_R_SUCCESS;
+    return PERF_R_SUCCESS;
 }
 
 static void
@@ -630,8 +617,8 @@ try_process_response(unsigned int sockindex)
         return;
     }
 
-    ISC_LIST_UNLINK(outstanding_list, q, link);
-    ISC_LIST_APPEND(instanding_list, q, link);
+    perf_list_unlink(outstanding_list, q);
+    perf_list_append(instanding_list, q);
     q->list = &instanding_list;
 
     num_queries_outstanding--;
@@ -639,7 +626,7 @@ try_process_response(unsigned int sockindex)
     latency = (time_now - q->sent_timestamp) / (double)MILLION;
     b       = find_bucket(q->sent_timestamp);
     b->responses++;
-    if (!(rcode == dns_rcode_noerror || rcode == dns_rcode_nxdomain))
+    if (!(rcode == DNS_RCODE_NOERROR || rcode == DNS_RCODE_NXDOMAIN))
         b->failures++;
     b->latency_sum += latency;
     num_responses_received++;
@@ -652,11 +639,11 @@ retire_old_queries(void)
     query_info* q;
 
     while (true) {
-        q = ISC_LIST_TAIL(outstanding_list);
+        q = perf_list_tail(outstanding_list);
         if (q == NULL || (time_now - q->sent_timestamp) < query_timeout)
             break;
-        ISC_LIST_UNLINK(outstanding_list, q, link);
-        ISC_LIST_APPEND(instanding_list, q, link);
+        perf_list_unlink(outstanding_list, q);
+        perf_list_append(instanding_list, q);
         q->list = &instanding_list;
 
         num_queries_outstanding--;
@@ -693,12 +680,12 @@ int main(int argc, char** argv)
 {
     int           i;
     FILE*         plotf;
-    isc_buffer_t  lines, msg;
+    perf_buffer_t lines, msg;
     char          input_data[MAX_INPUT_DATA];
     unsigned char outpacket_buffer[MAX_EDNS_PACKET];
     unsigned int  max_packet_size;
     unsigned int  current_sock;
-    isc_result_t  result;
+    perf_result_t result;
 
     printf("DNS Resolution Performance Testing Tool\n"
            "Version " PACKAGE_VERSION "\n\n");
@@ -716,10 +703,10 @@ int main(int argc, char** argv)
 
     perf_os_handlesignal(SIGPIPE, handle_sigpipe);
 
-    isc_buffer_init(&lines, input_data, sizeof(input_data));
+    perf_buffer_init(&lines, input_data, sizeof(input_data));
 
     max_packet_size = edns ? MAX_EDNS_PACKET : MAX_UDP_PACKET;
-    isc_buffer_init(&msg, outpacket_buffer, max_packet_size);
+    perf_buffer_init(&msg, outpacket_buffer, max_packet_size);
 
     traffic_time = ramp_time + sustain_time;
     end_time     = traffic_time + wait_time;
@@ -727,10 +714,10 @@ int main(int argc, char** argv)
     n_buckets = (traffic_time + bucket_interval - 1) / bucket_interval;
     buckets   = init_buckets(n_buckets);
 
-    time_now              = get_time();
+    time_now              = perf_get_time();
     time_of_program_start = time_now;
 
-    printf("[Status] Command line: %s", isc_file_basename(argv[0]));
+    printf("[Status] Command line: %s", progname);
     for (i = 1; i < argc; i++) {
         printf(" %s", argv[i]);
     }
@@ -752,7 +739,7 @@ int main(int argc, char** argv)
                 enter_wait_phase();
             break;
         case PHASE_WAIT:
-            if (time_since_start >= end_time || ISC_LIST_EMPTY(outstanding_list))
+            if (time_since_start >= end_time || perf_list_empty(outstanding_list))
                 goto end_loop;
             break;
         }
@@ -766,9 +753,9 @@ int main(int argc, char** argv)
             }
             if (should_send > 0) {
                 result = do_one_line(&lines, &msg);
-                if (result == ISC_R_SUCCESS)
+                if (result == PERF_R_SUCCESS)
                     find_bucket(time_now)->queries++;
-                if (result == ISC_R_NOMORE) {
+                if (result == PERF_R_NOMORE) {
                     printf("[Status] Reached %u outstanding queries\n",
                         max_outstanding);
                     enter_wait_phase();
@@ -778,10 +765,10 @@ int main(int argc, char** argv)
         try_process_response(current_sock++);
         current_sock = current_sock % nsocks;
         retire_old_queries();
-        time_now = get_time();
+        time_now = perf_get_time();
     }
 end_loop:
-    time_now           = get_time();
+    time_now           = perf_get_time();
     time_of_end_of_run = time_now;
 
     printf("[Status] Testing complete\n");

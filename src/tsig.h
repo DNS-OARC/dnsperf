@@ -17,28 +17,25 @@
  * limitations under the License.
  */
 
-#include "net.h"
 #include "result.h"
+#include "buffer.h"
 
-#ifndef PERF_OS_H
-#define PERF_OS_H 1
+#ifndef PERF_TSIG_H
+#define PERF_TSIG_H 1
 
-#include <inttypes.h>
-#include <stdbool.h>
+#include <openssl/hmac.h>
 
-void perf_os_blocksignal(int sig, bool block);
+typedef struct perf_tsigkey {
+    char        name[256];
+    size_t      namelen, alglen;
+    const char* alg;
+    HMAC_CTX*   hmac;
+} perf_tsigkey_t;
 
-void perf_os_handlesignal(int sig, void (*handler)(int));
+perf_tsigkey_t* perf_tsig_parsekey(const char* arg);
 
-perf_result_t
-perf_os_waituntilreadable(struct perf_net_socket* sock, int pipe_fd, int64_t timeout);
+void perf_tsig_destroykey(perf_tsigkey_t** tsigkeyp);
 
-perf_result_t
-perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
-    int64_t timeout);
-
-perf_result_t
-perf_os_waituntilanywritable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
-    int64_t timeout);
+perf_result_t perf_add_tsig(perf_buffer_t* packet, perf_tsigkey_t* tsigkey);
 
 #endif

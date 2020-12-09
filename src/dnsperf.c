@@ -23,6 +23,16 @@
 
 #include "config.h"
 
+#include "net.h"
+#include "datafile.h"
+#include "dns.h"
+#include "log.h"
+#include "opt.h"
+#include "os.h"
+#include "util.h"
+#include "list.h"
+#include "buffer.h"
+
 #include <inttypes.h>
 #include <errno.h>
 #include <math.h>
@@ -39,39 +49,10 @@
 #include <openssl/conf.h>
 #include <openssl/err.h>
 
-#define ISC_BUFFER_USEINLINE
-
-#include <isc/buffer.h>
-#include <isc/file.h>
-#include <isc/list.h>
-#include <isc/mem.h>
-#include <isc/netaddr.h>
-#include <isc/print.h>
-#include <isc/region.h>
-#include <isc/result.h>
-#include <isc/sockaddr.h>
-#include <isc/types.h>
-
-#include <dns/rcode.h>
-#include <dns/result.h>
-
-#include "net.h"
-#include "datafile.h"
-#include "dns.h"
-#include "log.h"
-#include "opt.h"
-#include "os.h"
-#include "util.h"
-
-#ifndef ISC_UINT64_MAX
-#include <stdint.h>
-#define ISC_UINT64_MAX UINT64_MAX
-#endif
-
 #define DEFAULT_SERVER_NAME "127.0.0.1"
 #define DEFAULT_SERVER_PORT 53
 #define DEFAULT_SERVER_TLS_PORT 853
-#define DEFAULT_SERVER_PORTS "udp/tcp 53 or tls 853"
+#define DEFAULT_SERVER_PORTS "udp/tcp 53 or dot/tls 853"
 #define DEFAULT_LOCAL_PORT 0
 #define DEFAULT_MAX_OUTSTANDING 100
 #define DEFAULT_TIMEOUT 5
@@ -85,27 +66,27 @@
 #define RECV_BATCH_SIZE 16
 
 typedef struct {
-    int                   argc;
-    char**                argv;
-    int                   family;
-    uint32_t              clients;
-    uint32_t              threads;
-    uint32_t              maxruns;
-    uint64_t              timelimit;
-    isc_sockaddr_t        server_addr;
-    isc_sockaddr_t        local_addr;
-    uint64_t              timeout;
-    uint32_t              bufsize;
-    bool                  edns;
-    bool                  dnssec;
-    perf_dnstsigkey_t*    tsigkey;
-    perf_dnsednsoption_t* edns_option;
-    uint32_t              max_outstanding;
-    uint32_t              max_qps;
-    uint64_t              stats_interval;
-    bool                  updates;
-    bool                  verbose;
-    enum perf_net_mode    mode;
+    int                argc;
+    char**             argv;
+    int                family;
+    uint32_t           clients;
+    uint32_t           threads;
+    uint32_t           maxruns;
+    uint64_t           timelimit;
+    perf_sockaddr_t    server_addr;
+    perf_sockaddr_t    local_addr;
+    uint64_t           timeout;
+    uint32_t           bufsize;
+    bool               edns;
+    bool               dnssec;
+    perf_tsigkey_t*    tsigkey;
+    perf_ednsoption_t* edns_option;
+    uint32_t           max_outstanding;
+    uint32_t           max_qps;
+    uint64_t           stats_interval;
+    bool               updates;
+    bool               verbose;
+    enum perf_net_mode mode;
 } config_t;
 
 typedef struct {
@@ -132,7 +113,7 @@ typedef struct {
     uint64_t latency_max;
 } stats_t;
 
-typedef ISC_LIST(struct query_info) query_list;
+typedef perf_list(struct query_info) query_list;
 
 typedef struct query_info {
     uint64_t                timestamp;
@@ -143,8 +124,7 @@ typedef struct query_info {
      * This link links the query into the list of outstanding
      * queries or the list of available query IDs.
      */
-    ISC_LINK(struct query_info)
-    link;
+    perf_link(struct query_info);
 } query_info;
 
 #define NQIDS 65536
@@ -163,8 +143,6 @@ typedef struct {
     unsigned int            nsocks;
     int                     current_sock;
     struct perf_net_socket* socks;
-
-    perf_dnsctx_t* dnsctx;
 
     bool     done_sending;
     uint64_t done_send_time;
@@ -191,9 +169,9 @@ static int threadpipe[2];
 static int mainpipe[2];
 static int intrpipe[2];
 
-static isc_mem_t* mctx;
-
 static perf_datafile_t* input;
+
+const char* progname = "dnsperf";
 
 static void
 handle_sigint(int sig)
@@ -206,23 +184,21 @@ handle_sigint(int sig)
 static void
 print_initial_status(const config_t* config)
 {
-    time_t        now;
-    isc_netaddr_t addr;
-    char          buf[ISC_NETADDR_FORMATSIZE];
-    int           i;
+    time_t now;
+    char   buf[255], ct[32];
+    int    i;
 
-    printf("[Status] Command line: %s", isc_file_basename(config->argv[0]));
+    printf("[Status] Command line: %s", progname);
     for (i = 1; i < config->argc; i++)
         printf(" %s", config->argv[i]);
     printf("\n");
 
-    isc_netaddr_fromsockaddr(&addr, &config->server_addr);
-    isc_netaddr_format(&addr, buf, sizeof(buf));
+    perf_sockaddr_format(&config->server_addr, buf, sizeof(buf));
     printf("[Status] Sending %s (to %s)\n",
         config->updates ? "updates" : "queries", buf);
 
     now = time(NULL);
-    printf("[Status] Started at: %s", ctime(&now));
+    printf("[Status] Started at: %s", ctime_r(&now, ct));
 
     printf("[Status] Stopping after ");
     if (config->timelimit)
@@ -281,14 +257,14 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats)
         units, stats->num_sent);
     printf("  %s completed:    %" PRIu64 " (%.2lf%%)\n",
         units, stats->num_completed,
-        SAFE_DIV(100.0 * stats->num_completed, stats->num_sent));
+        PERF_SAFE_DIV(100.0 * stats->num_completed, stats->num_sent));
     printf("  %s lost:         %" PRIu64 " (%.2lf%%)\n",
         units, stats->num_timedout,
-        SAFE_DIV(100.0 * stats->num_timedout, stats->num_sent));
+        PERF_SAFE_DIV(100.0 * stats->num_timedout, stats->num_sent));
     if (stats->num_interrupted > 0)
         printf("  %s interrupted:  %" PRIu64 " (%.2lf%%)\n",
             units, stats->num_interrupted,
-            SAFE_DIV(100.0 * stats->num_interrupted, stats->num_sent));
+            PERF_SAFE_DIV(100.0 * stats->num_interrupted, stats->num_sent));
     printf("\n");
 
     printf("  Response codes:       ");
@@ -307,18 +283,18 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats)
     printf("\n");
 
     printf("  Average packet size:  request %u, response %u\n",
-        (unsigned int)SAFE_DIV(stats->total_request_size, stats->num_sent),
-        (unsigned int)SAFE_DIV(stats->total_response_size,
+        (unsigned int)PERF_SAFE_DIV(stats->total_request_size, stats->num_sent),
+        (unsigned int)PERF_SAFE_DIV(stats->total_response_size,
             stats->num_completed));
     printf("  Run time (s):         %u.%06u\n",
         (unsigned int)(run_time / MILLION),
         (unsigned int)(run_time % MILLION));
     printf("  %s per second:   %.6lf\n", units,
-        SAFE_DIV(stats->num_completed, (((double)run_time) / MILLION)));
+        PERF_SAFE_DIV(stats->num_completed, (((double)run_time) / MILLION)));
 
     printf("\n");
 
-    latency_avg = SAFE_DIV(stats->latency_sum, stats->num_completed);
+    latency_avg = PERF_SAFE_DIV(stats->latency_sum, stats->num_completed);
     printf("  Average Latency (s):  %u.%06u (min %u.%06u, max %u.%06u)\n",
         (unsigned int)(latency_avg / MILLION),
         (unsigned int)(latency_avg % MILLION),
@@ -388,17 +364,6 @@ setup(int argc, char** argv, config_t* config)
     const char* tsigkey     = NULL;
     const char* mode        = 0;
 
-#ifdef HAVE_ISC_MEM_CREATE_RESULT
-    isc_result_t result = isc_mem_create(0, 0, &mctx);
-    if (result != ISC_R_SUCCESS)
-        perf_log_fatal("creating memory context: %s",
-            isc_result_totext(result));
-#else
-    isc_mem_create(&mctx);
-#endif
-
-    dns_result_register();
-
     memset(config, 0, sizeof(*config));
     config->argc = argc;
     config->argv = argv;
@@ -413,7 +378,7 @@ setup(int argc, char** argv, config_t* config)
     perf_opt_add('f', perf_opt_string, "family",
         "address family of DNS transport, inet or inet6", "any",
         &family);
-    perf_opt_add('m', perf_opt_string, "mode", "set transport mode: udp, tcp or tls", "udp", &mode);
+    perf_opt_add('m', perf_opt_string, "mode", "set transport mode: udp, tcp or dot/tls", "udp", &mode);
     perf_opt_add('s', perf_opt_string, "server_addr",
         "the server to query", DEFAULT_SERVER_NAME, &server_name);
     perf_opt_add('p', perf_opt_port, "port",
@@ -453,7 +418,7 @@ setup(int argc, char** argv, config_t* config)
         "set the DNSSEC OK bit (implies EDNS)", NULL,
         &config->dnssec);
     perf_opt_add('y', perf_opt_string, "[alg:]name:secret",
-        "the TSIG algorithm, name and secret", NULL,
+        "the TSIG algorithm, name and secret (base64)", NULL,
         &tsigkey);
     perf_opt_add('q', perf_opt_uint, "num_queries",
         "the maximum number of queries outstanding",
@@ -471,8 +436,14 @@ setup(int argc, char** argv, config_t* config)
     perf_opt_add('v', perf_opt_boolean, NULL,
         "verbose: report each query and additional information to stdout",
         NULL, &config->verbose);
+    bool log_stdout = false;
+    perf_opt_add('W', perf_opt_boolean, NULL, "log warnings and errors to stdout instead of stderr", NULL, &log_stdout);
 
     perf_opt_parse(argc, argv);
+
+    if (log_stdout) {
+        perf_log_tostdout();
+    }
 
     if (mode != 0)
         config->mode = perf_net_parsemode(mode);
@@ -485,10 +456,10 @@ setup(int argc, char** argv, config_t* config)
         config->family = perf_net_parsefamily(family);
     perf_net_parseserver(config->family, server_name, server_port,
         &config->server_addr);
-    perf_net_parselocal(isc_sockaddr_pf(&config->server_addr),
+    perf_net_parselocal(config->server_addr.sa.sa.sa_family,
         local_name, local_port, &config->local_addr);
 
-    input = perf_datafile_open(mctx, filename);
+    input = perf_datafile_open(filename);
 
     if (config->maxruns == 0 && config->timelimit == 0)
         config->maxruns = 1;
@@ -498,10 +469,10 @@ setup(int argc, char** argv, config_t* config)
         config->edns = true;
 
     if (tsigkey != NULL)
-        config->tsigkey = perf_dns_parsetsigkey(tsigkey, mctx);
+        config->tsigkey = perf_tsig_parsekey(tsigkey);
 
     if (edns_option != NULL)
-        config->edns_option = perf_dns_parseednsoption(edns_option, mctx);
+        config->edns_option = perf_edns_parseoption(edns_option);
 
     /*
      * If we run more threads than max-qps, some threads will have
@@ -515,6 +486,12 @@ setup(int argc, char** argv, config_t* config)
      */
     if (config->threads > config->clients)
         config->threads = config->clients;
+
+#ifndef HAVE_LDNS
+    if (config->updates) {
+        perf_log_fatal("Unable to dynamic update, support not built in");
+    }
+#endif
 }
 
 static void
@@ -529,10 +506,9 @@ cleanup(config_t* config)
         close(intrpipe[i]);
     }
     if (config->tsigkey != NULL)
-        perf_dns_destroytsigkey(&config->tsigkey);
+        perf_tsig_destroykey(&config->tsigkey);
     if (config->edns_option != NULL)
-        perf_dns_destroyednsoption(&config->edns_option);
-    isc_mem_destroy(&mctx);
+        perf_edns_destroyoption(&config->edns_option);
 }
 
 typedef enum {
@@ -544,19 +520,19 @@ typedef enum {
 static inline void
 query_move(threadinfo_t* tinfo, query_info* q, query_move_op op)
 {
-    ISC_LIST_UNLINK(*q->list, q, link);
+    perf_list_unlink(*q->list, q);
     switch (op) {
     case prepend_unused:
         q->list = &tinfo->unused_queries;
-        ISC_LIST_PREPEND(tinfo->unused_queries, q, link);
+        perf_list_prepend(tinfo->unused_queries, q);
         break;
     case append_unused:
         q->list = &tinfo->unused_queries;
-        ISC_LIST_APPEND(tinfo->unused_queries, q, link);
+        perf_list_append(tinfo->unused_queries, q);
         break;
     case prepend_outstanding:
         q->list = &tinfo->outstanding_queries;
-        ISC_LIST_PREPEND(tinfo->outstanding_queries, q, link);
+        perf_list_prepend(tinfo->outstanding_queries, q);
         break;
     }
 }
@@ -570,10 +546,10 @@ num_outstanding(const stats_t* stats)
 static void
 wait_for_start(void)
 {
-    LOCK(&start_lock);
+    PERF_LOCK(&start_lock);
     while (!started)
-        WAIT(&start_cond, &start_lock);
-    UNLOCK(&start_lock);
+        PERF_WAIT(&start_cond, &start_lock);
+    PERF_UNLOCK(&start_lock);
 }
 
 static void*
@@ -584,29 +560,29 @@ do_send(void* arg)
     const times_t*  times;
     stats_t*        stats;
     unsigned int    max_packet_size;
-    isc_buffer_t    msg;
+    perf_buffer_t   msg;
     uint64_t        now, run_time, req_time;
     char            input_data[MAX_INPUT_DATA];
-    isc_buffer_t    lines;
-    isc_region_t    used;
+    perf_buffer_t   lines;
+    perf_region_t   used;
     query_info*     q;
     int             qid;
     unsigned char   packet_buffer[MAX_EDNS_PACKET];
     unsigned char*  base;
     unsigned int    length;
     int             n, i, any_inprogress = 0;
-    isc_result_t    result;
+    perf_result_t   result;
 
     tinfo           = (threadinfo_t*)arg;
     config          = tinfo->config;
     times           = tinfo->times;
     stats           = &tinfo->stats;
     max_packet_size = config->edns ? MAX_EDNS_PACKET : MAX_UDP_PACKET;
-    isc_buffer_init(&msg, packet_buffer, max_packet_size);
-    isc_buffer_init(&lines, input_data, sizeof(input_data));
+    perf_buffer_init(&msg, packet_buffer, max_packet_size);
+    perf_buffer_init(&lines, input_data, sizeof(input_data));
 
     wait_for_start();
-    now = get_time();
+    now = perf_get_time();
     while (!interrupted && now < times->stop_time) {
         /* Avoid flooding the network too quickly. */
         if (stats->num_sent < tinfo->max_outstanding && stats->num_sent % 2 == 1) {
@@ -614,7 +590,7 @@ do_send(void* arg)
                 usleep(1000);
             else
                 sleep(0);
-            now = get_time();
+            now = perf_get_time();
         }
 
         /* Rate limiting */
@@ -623,24 +599,24 @@ do_send(void* arg)
             req_time = (MILLION * stats->num_sent) / tinfo->max_qps;
             if (req_time > run_time) {
                 usleep(req_time - run_time);
-                now = get_time();
+                now = perf_get_time();
                 continue;
             }
         }
 
-        LOCK(&tinfo->lock);
+        PERF_LOCK(&tinfo->lock);
 
         /* Limit in-flight queries */
         if (num_outstanding(stats) >= tinfo->max_outstanding) {
-            TIMEDWAIT(&tinfo->cond, &tinfo->lock, &times->stop_time_ns, NULL);
-            UNLOCK(&tinfo->lock);
-            now = get_time();
+            PERF_TIMEDWAIT(&tinfo->cond, &tinfo->lock, &times->stop_time_ns, NULL);
+            PERF_UNLOCK(&tinfo->lock);
+            now = perf_get_time();
             continue;
         }
 
-        q = ISC_LIST_HEAD(tinfo->unused_queries);
+        q = perf_list_head(tinfo->unused_queries);
         query_move(tinfo, q, prepend_outstanding);
-        q->timestamp = ISC_UINT64_MAX;
+        q->timestamp = UINT64_MAX;
 
         i = tinfo->nsocks * 2;
         while (i--) {
@@ -669,48 +645,48 @@ do_send(void* arg)
 
         if (!q->sock) {
             query_move(tinfo, q, prepend_unused);
-            UNLOCK(&tinfo->lock);
-            now = get_time();
+            PERF_UNLOCK(&tinfo->lock);
+            now = perf_get_time();
             continue;
         }
-        UNLOCK(&tinfo->lock);
+        PERF_UNLOCK(&tinfo->lock);
 
-        isc_buffer_clear(&lines);
+        perf_buffer_clear(&lines);
         result = perf_datafile_next(input, &lines, config->updates);
-        if (result != ISC_R_SUCCESS) {
-            if (result == ISC_R_INVALIDFILE)
+        if (result != PERF_R_SUCCESS) {
+            if (result == PERF_R_INVALIDFILE)
                 perf_log_fatal("input file contains no data");
             break;
         }
 
         qid = q - tinfo->queries;
-        isc_buffer_usedregion(&lines, &used);
-        isc_buffer_clear(&msg);
-        result = perf_dns_buildrequest(tinfo->dnsctx,
-            (isc_textregion_t*)&used,
-            qid, config->edns,
-            config->dnssec, config->tsigkey,
-            config->edns_option, &msg);
-        if (result != ISC_R_SUCCESS) {
-            LOCK(&tinfo->lock);
+        perf_buffer_usedregion(&lines, &used);
+        perf_buffer_clear(&msg);
+        result = perf_dns_buildrequest(&used, qid,
+            config->edns, config->dnssec, config->updates,
+            config->tsigkey, config->edns_option,
+            &msg);
+        if (result != PERF_R_SUCCESS) {
+            PERF_LOCK(&tinfo->lock);
             query_move(tinfo, q, prepend_unused);
-            UNLOCK(&tinfo->lock);
-            now = get_time();
+            PERF_UNLOCK(&tinfo->lock);
+            now = perf_get_time();
             continue;
         }
 
-        base   = isc_buffer_base(&msg);
-        length = isc_buffer_usedlength(&msg);
+        base   = perf_buffer_base(&msg);
+        length = perf_buffer_usedlength(&msg);
 
-        now = get_time();
+        now = perf_get_time();
         if (config->verbose) {
+            free(q->desc);
             q->desc = strdup(lines.base);
             if (q->desc == NULL)
                 perf_log_fatal("out of memory");
         }
         q->timestamp = now;
 
-        n = perf_net_sendto(q->sock, base, length, 0, &config->server_addr.type.sa,
+        n = perf_net_sendto(q->sock, base, length, 0, &config->server_addr.sa.sa,
             config->server_addr.length);
         if (n < 0) {
             if (errno == EINPROGRESS) {
@@ -723,16 +699,16 @@ do_send(void* arg)
                     char __s[256];
                     perf_log_warning("failed to send packet: %s", perf_strerror_r(errno, __s, sizeof(__s)));
                 }
-                LOCK(&tinfo->lock);
+                PERF_LOCK(&tinfo->lock);
                 query_move(tinfo, q, prepend_unused);
-                UNLOCK(&tinfo->lock);
+                PERF_UNLOCK(&tinfo->lock);
                 continue;
             }
         } else if ((unsigned int)n != length) {
             perf_log_warning("failed to send full packet: only sent %d of %u", n, length);
-            LOCK(&tinfo->lock);
+            PERF_LOCK(&tinfo->lock);
             query_move(tinfo, q, prepend_unused);
-            UNLOCK(&tinfo->lock);
+            PERF_UNLOCK(&tinfo->lock);
             continue;
         }
         stats->num_sent++;
@@ -749,7 +725,7 @@ do_send(void* arg)
         }
     }
 
-    tinfo->done_send_time = get_time();
+    tinfo->done_send_time = perf_get_time();
     tinfo->done_sending   = true;
     if (write(mainpipe[1], "", 1)) { // lgtm [cpp/empty-block]
     }
@@ -765,11 +741,11 @@ process_timeouts(threadinfo_t* tinfo, uint64_t now)
     config = tinfo->config;
 
     /* Avoid locking unless we need to. */
-    q = ISC_LIST_TAIL(tinfo->outstanding_queries);
+    q = perf_list_tail(tinfo->outstanding_queries);
     if (q == NULL || q->timestamp > now || now - q->timestamp < config->timeout)
         return;
 
-    LOCK(&tinfo->lock);
+    PERF_LOCK(&tinfo->lock);
 
     do {
         query_move(tinfo, q, append_unused);
@@ -783,10 +759,10 @@ process_timeouts(threadinfo_t* tinfo, uint64_t now)
                 config->updates ? "Update" : "Query",
                 (unsigned int)(q - tinfo->queries));
         }
-        q = ISC_LIST_TAIL(tinfo->outstanding_queries);
+        q = perf_list_tail(tinfo->outstanding_queries);
     } while (q != NULL && q->timestamp < now && now - q->timestamp >= config->timeout);
 
-    UNLOCK(&tinfo->lock);
+    PERF_UNLOCK(&tinfo->lock);
 }
 
 typedef struct {
@@ -813,7 +789,7 @@ recv_one(threadinfo_t* tinfo, int which_sock,
     packet_header = (uint16_t*)packet_buffer;
 
     n   = perf_net_recv(&tinfo->socks[which_sock], packet_buffer, packet_size, 0);
-    now = get_time();
+    now = perf_get_time();
     if (n < 0) {
         *saved_errnop = errno;
         return false;
@@ -877,7 +853,7 @@ do_recv(void* arg)
     stats = &tinfo->stats;
 
     wait_for_start();
-    now         = get_time();
+    now         = perf_get_time();
     last_socket = 0;
     while (!interrupted) {
         process_timeouts(tinfo, now);
@@ -915,13 +891,13 @@ do_recv(void* arg)
         nrecvd = i;
 
         /* Do all of the processing that requires the lock */
-        LOCK(&tinfo->lock);
+        PERF_LOCK(&tinfo->lock);
         for (i = 0; i < nrecvd; i++) {
             if (recvd[i].short_response)
                 continue;
 
             q = &tinfo->queries[recvd[i].qid];
-            if (q->list != &tinfo->outstanding_queries || q->timestamp == ISC_UINT64_MAX || !perf_net_sockeq(q->sock, recvd[i].sock)) {
+            if (q->list != &tinfo->outstanding_queries || q->timestamp == UINT64_MAX || !perf_net_sockeq(q->sock, recvd[i].sock)) {
                 recvd[i].unexpected = true;
                 continue;
             }
@@ -930,8 +906,8 @@ do_recv(void* arg)
             recvd[i].desc = q->desc;
             q->desc       = NULL;
         }
-        SIGNAL(&tinfo->cond);
-        UNLOCK(&tinfo->lock);
+        PERF_SIGNAL(&tinfo->cond);
+        PERF_UNLOCK(&tinfo->lock);
 
         /* Now do the rest of the processing unlocked */
         for (i = 0; i < nrecvd; i++) {
@@ -981,7 +957,7 @@ do_recv(void* arg)
             } else if (saved_errno == EAGAIN) {
                 perf_os_waituntilanyreadable(tinfo->socks, tinfo->nsocks,
                     threadpipe[0], TIMEOUT_CHECK_TIME);
-                now = get_time();
+                now = perf_get_time();
                 continue;
             } else {
                 char __s[256];
@@ -1013,8 +989,8 @@ do_interval_stats(void* arg)
     wait_for_start();
     while (perf_os_waituntilreadable(&sock, threadpipe[0],
                tinfo->config->stats_interval)
-           == ISC_R_TIMEDOUT) {
-        now = get_time();
+           == PERF_R_TIMEDOUT) {
+        now = perf_get_time();
         sum_stats(tinfo->config, &total);
         interval_time = now - last_interval_time;
         num_completed = total.num_completed - last_completed;
@@ -1035,12 +1011,12 @@ cancel_queries(threadinfo_t* tinfo)
     struct query_info* q;
 
     while (true) {
-        q = ISC_LIST_TAIL(tinfo->outstanding_queries);
+        q = perf_list_tail(tinfo->outstanding_queries);
         if (q == NULL)
             break;
         query_move(tinfo, q, append_unused);
 
-        if (q->timestamp == ISC_UINT64_MAX)
+        if (q->timestamp == UINT64_MAX)
             continue;
 
         tinfo->stats.num_interrupted++;
@@ -1076,20 +1052,18 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
     unsigned int offset, socket_offset, i;
 
     memset(tinfo, 0, sizeof(*tinfo));
-    MUTEX_INIT(&tinfo->lock);
-    COND_INIT(&tinfo->cond);
+    PERF_MUTEX_INIT(&tinfo->lock);
+    PERF_COND_INIT(&tinfo->cond);
 
-    ISC_LIST_INIT(tinfo->outstanding_queries);
-    ISC_LIST_INIT(tinfo->unused_queries);
+    perf_list_init(tinfo->outstanding_queries);
+    perf_list_init(tinfo->unused_queries);
     for (i = 0; i < NQIDS; i++) {
-        ISC_LINK_INIT(&tinfo->queries[i], link);
-        ISC_LIST_APPEND(tinfo->unused_queries, &tinfo->queries[i], link);
+        perf_link_init(&tinfo->queries[i]);
+        perf_list_append(tinfo->unused_queries, &tinfo->queries[i]);
         tinfo->queries[i].list = &tinfo->unused_queries;
     }
 
     offset = tinfo - threads;
-
-    tinfo->dnsctx = perf_dns_createctx(config->updates);
 
     tinfo->config = config;
     tinfo->times  = times;
@@ -1111,9 +1085,9 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
     if (tinfo->nsocks > MAX_SOCKETS)
         tinfo->nsocks = MAX_SOCKETS;
 
-    tinfo->socks = isc_mem_get(mctx, tinfo->nsocks * sizeof(*tinfo->socks));
-    if (tinfo->socks == NULL)
+    if (!(tinfo->socks = calloc(tinfo->nsocks, sizeof(*tinfo->socks)))) {
         perf_log_fatal("out of memory");
+    }
     socket_offset = 0;
     for (i = 0; i < offset; i++)
         socket_offset += threads[i].nsocks;
@@ -1124,16 +1098,16 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
             config->bufsize);
     tinfo->current_sock = 0;
 
-    THREAD(&tinfo->receiver, do_recv, tinfo);
-    THREAD(&tinfo->sender, do_send, tinfo);
+    PERF_THREAD(&tinfo->receiver, do_recv, tinfo);
+    PERF_THREAD(&tinfo->sender, do_send, tinfo);
 }
 
 static void
 threadinfo_stop(threadinfo_t* tinfo)
 {
-    SIGNAL(&tinfo->cond);
-    JOIN(tinfo->sender, NULL);
-    JOIN(tinfo->receiver, NULL);
+    PERF_SIGNAL(&tinfo->cond);
+    PERF_JOIN(tinfo->sender, NULL);
+    PERF_JOIN(tinfo->receiver, NULL);
 }
 
 static void
@@ -1145,8 +1119,6 @@ threadinfo_cleanup(threadinfo_t* tinfo, times_t* times)
         cancel_queries(tinfo);
     for (i = 0; i < tinfo->nsocks; i++)
         perf_net_close(&tinfo->socks[i]);
-    isc_mem_put(mctx, tinfo->socks, tinfo->nsocks * sizeof(*tinfo->socks));
-    perf_dns_destroyctx(&tinfo->dnsctx);
     if (tinfo->last_recv > times->end_time)
         times->end_time = tinfo->last_recv;
 }
@@ -1158,7 +1130,7 @@ int main(int argc, char** argv)
     stats_t                total_stats;
     threadinfo_t           stats_thread;
     unsigned int           i;
-    isc_result_t           result;
+    perf_result_t          result;
     struct perf_net_socket sock = { .mode = sock_pipe };
 
     printf("DNS Performance Testing Tool\n"
@@ -1190,46 +1162,46 @@ int main(int argc, char** argv)
 
     print_initial_status(&config);
 
-    threads = isc_mem_get(mctx, config.threads * sizeof(threadinfo_t));
-    if (threads == NULL)
+    if (!(threads = calloc(config.threads, sizeof(threadinfo_t)))) {
         perf_log_fatal("out of memory");
+    }
     for (i = 0; i < config.threads; i++)
         threadinfo_init(&threads[i], &config, &times);
     if (config.stats_interval > 0) {
         stats_thread.config = &config;
         stats_thread.times  = &times;
-        THREAD(&stats_thread.sender, do_interval_stats, &stats_thread);
+        PERF_THREAD(&stats_thread.sender, do_interval_stats, &stats_thread);
     }
 
-    times.start_time = get_time();
+    times.start_time = perf_get_time();
     if (config.timelimit > 0)
         times.stop_time = times.start_time + config.timelimit;
     else
-        times.stop_time = ISC_UINT64_MAX;
+        times.stop_time = UINT64_MAX;
     times.stop_time_ns.tv_sec  = times.stop_time / MILLION;
     times.stop_time_ns.tv_nsec = (times.stop_time % MILLION) * 1000;
 
-    LOCK(&start_lock);
+    PERF_LOCK(&start_lock);
     started = true;
-    BROADCAST(&start_cond);
-    UNLOCK(&start_lock);
+    PERF_BROADCAST(&start_cond);
+    PERF_UNLOCK(&start_lock);
 
     perf_os_handlesignal(SIGINT, handle_sigint);
     perf_os_blocksignal(SIGINT, false);
     sock.fd = mainpipe[0];
     result  = perf_os_waituntilreadable(&sock, intrpipe[0],
         times.stop_time - times.start_time);
-    if (result == ISC_R_CANCELED)
+    if (result == PERF_R_CANCELED)
         interrupted = true;
 
-    times.end_time = get_time();
+    times.end_time = perf_get_time();
 
     if (write(threadpipe[1], "", 1)) { // lgtm [cpp/empty-block]
     }
     for (i = 0; i < config.threads; i++)
         threadinfo_stop(&threads[i]);
     if (config.stats_interval > 0)
-        JOIN(stats_thread.sender, NULL);
+        PERF_JOIN(stats_thread.sender, NULL);
 
     for (i = 0; i < config.threads; i++)
         threadinfo_cleanup(&threads[i], &times);
@@ -1239,7 +1211,6 @@ int main(int argc, char** argv)
     sum_stats(&config, &total_stats);
     print_statistics(&config, &times, &total_stats);
 
-    isc_mem_put(mctx, threads, config.threads * sizeof(threadinfo_t));
     cleanup(&config);
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
     ERR_free_strings();

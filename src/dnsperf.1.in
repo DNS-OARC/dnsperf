@@ -247,7 +247,7 @@ the file may be read fewer times.
 .br
 .RS
 Sets the port on which the DNS packets are sent. If not specified, the
-standard DNS port (udp/tcp 53, tls 853) is used.
+standard DNS port (udp/tcp 53, dot/tls 853) is used.
 .RE
 
 \fB-q \fInum_queries\fB\fR
@@ -267,7 +267,8 @@ Limits the number of requests per second. There is no default limit.
 \fB-m \fImode\fB\fR
 .br
 .RS
-Specifies the transport mode to use, "udp", "tcp" or "tls". Default is "udp".
+Specifies the transport mode to use, "udp", "tcp" or "dot"/"tls".
+Default is "udp".
 .RE
 
 \fB-s \fIserver_addr\fB\fR
@@ -336,6 +337,8 @@ use a range of ports starting with the specified one.
 Add a TSIG record [RFC2845] to all packets sent, using the specified TSIG
 key algorithm, name and secret, where the algorithm defaults to hmac-md5 and
 the secret is expressed as a base-64 encoded string.
+Available algorithms are: hmac-md5, hmac-sha1, hmac-sha224, hmac-sha256,
+hmac-sha384 and hmac-sha512.
 .RE
 .SH "SEE ALSO"
 \fBresperf\fR(1)

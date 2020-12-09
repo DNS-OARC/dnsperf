@@ -24,6 +24,17 @@
 #include <sys/socket.h>
 #include <openssl/ssl.h>
 #include <pthread.h>
+#include <netinet/in.h>
+
+struct perf_sockaddr {
+    union {
+        struct sockaddr     sa;
+        struct sockaddr_in  sin;
+        struct sockaddr_in6 sin6;
+    } sa;
+    socklen_t length;
+};
+typedef struct perf_sockaddr perf_sockaddr_t;
 
 enum perf_net_mode {
     sock_none,
@@ -46,6 +57,12 @@ struct perf_net_socket {
     pthread_mutex_t         lock;
 };
 
+void      perf_sockaddr_fromin(perf_sockaddr_t* sockaddr, const struct in_addr* in, in_port_t port);
+void      perf_sockaddr_fromin6(perf_sockaddr_t* sockaddr, const struct in6_addr* in, in_port_t port);
+in_port_t perf_sockaddr_port(const perf_sockaddr_t* sockaddr);
+void      perf_sockaddr_setport(perf_sockaddr_t* sockaddr, in_port_t port);
+void      perf_sockaddr_format(const perf_sockaddr_t* sockaddr, char* buf, size_t len);
+
 ssize_t perf_net_recv(struct perf_net_socket* sock, void* buf, size_t len, int flags);
 ssize_t perf_net_sendto(struct perf_net_socket* sock, const void* buf, size_t len, int flags,
     const struct sockaddr* dest_addr, socklen_t addrlen);
@@ -55,14 +72,10 @@ int perf_net_sockeq(struct perf_net_socket* sock_a, struct perf_net_socket* sock
 
 int perf_net_parsefamily(const char* family);
 
-void perf_net_parseserver(int family, const char* name, unsigned int port,
-    isc_sockaddr_t* addr);
+void perf_net_parseserver(int family, const char* name, unsigned int port, perf_sockaddr_t* addr);
+void perf_net_parselocal(int family, const char* name, unsigned int port, perf_sockaddr_t* addr);
 
-void perf_net_parselocal(int family, const char* name, unsigned int port,
-    isc_sockaddr_t* addr);
-
-struct perf_net_socket perf_net_opensocket(enum perf_net_mode mode, const isc_sockaddr_t* server, const isc_sockaddr_t* local,
-    unsigned int offset, int bufsize);
+struct perf_net_socket perf_net_opensocket(enum perf_net_mode mode, const perf_sockaddr_t* server, const perf_sockaddr_t* local, unsigned int offset, int bufsize);
 
 enum perf_net_mode perf_net_parsemode(const char* mode);
 

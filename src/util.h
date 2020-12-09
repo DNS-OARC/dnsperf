@@ -17,24 +17,21 @@
  * limitations under the License.
  */
 
-#include <pthread.h>
-#include <inttypes.h>
-#include <stdbool.h>
-#include <string.h>
-
-#include <sys/time.h>
-
-#include <isc/types.h>
-
 #include "log.h"
 #include "strerror.h"
 
 #ifndef PERF_UTIL_H
 #define PERF_UTIL_H 1
 
+#include <pthread.h>
+#include <inttypes.h>
+#include <stdbool.h>
+#include <string.h>
+#include <sys/time.h>
+
 #define MILLION ((uint64_t)1000000)
 
-#define THREAD(thread, start, arg)                                                               \
+#define PERF_THREAD(thread, start, arg)                                                          \
     do {                                                                                         \
         int __n = pthread_create((thread), NULL, (start), (arg));                                \
         if (__n != 0) {                                                                          \
@@ -43,7 +40,7 @@
         }                                                                                        \
     } while (0)
 
-#define JOIN(thread, valuep)                                                                   \
+#define PERF_JOIN(thread, valuep)                                                              \
     do {                                                                                       \
         int __n = pthread_join((thread), (valuep));                                            \
         if (__n != 0) {                                                                        \
@@ -52,7 +49,7 @@
         }                                                                                      \
     } while (0)
 
-#define MUTEX_INIT(mutex)                                                                            \
+#define PERF_MUTEX_INIT(mutex)                                                                       \
     do {                                                                                             \
         int __n = pthread_mutex_init((mutex), NULL);                                                 \
         if (__n != 0) {                                                                              \
@@ -61,7 +58,7 @@
         }                                                                                            \
     } while (0)
 
-#define MUTEX_DESTROY(mutex)                                                                            \
+#define PERF_MUTEX_DESTROY(mutex)                                                                       \
     do {                                                                                                \
         int __n = pthread_mutex_destroy((mutex));                                                       \
         if (__n != 0) {                                                                                 \
@@ -70,7 +67,7 @@
         }                                                                                               \
     } while (0)
 
-#define LOCK(mutex)                                                                                  \
+#define PERF_LOCK(mutex)                                                                             \
     do {                                                                                             \
         int __n = pthread_mutex_lock((mutex));                                                       \
         if (__n != 0) {                                                                              \
@@ -79,7 +76,7 @@
         }                                                                                            \
     } while (0)
 
-#define UNLOCK(mutex)                                                                                  \
+#define PERF_UNLOCK(mutex)                                                                             \
     do {                                                                                               \
         int __n = pthread_mutex_unlock((mutex));                                                       \
         if (__n != 0) {                                                                                \
@@ -88,7 +85,7 @@
         }                                                                                              \
     } while (0)
 
-#define COND_INIT(cond)                                                                             \
+#define PERF_COND_INIT(cond)                                                                        \
     do {                                                                                            \
         int __n = pthread_cond_init((cond), NULL);                                                  \
         if (__n != 0) {                                                                             \
@@ -97,7 +94,7 @@
         }                                                                                           \
     } while (0)
 
-#define SIGNAL(cond)                                                                                  \
+#define PERF_SIGNAL(cond)                                                                             \
     do {                                                                                              \
         int __n = pthread_cond_signal((cond));                                                        \
         if (__n != 0) {                                                                               \
@@ -106,7 +103,7 @@
         }                                                                                             \
     } while (0)
 
-#define BROADCAST(cond)                                                                                  \
+#define PERF_BROADCAST(cond)                                                                             \
     do {                                                                                                 \
         int __n = pthread_cond_broadcast((cond));                                                        \
         if (__n != 0) {                                                                                  \
@@ -115,7 +112,7 @@
         }                                                                                                \
     } while (0)
 
-#define WAIT(cond, mutex)                                                                           \
+#define PERF_WAIT(cond, mutex)                                                                      \
     do {                                                                                            \
         int __n = pthread_cond_wait((cond), (mutex));                                               \
         if (__n != 0) {                                                                             \
@@ -124,7 +121,7 @@
         }                                                                                           \
     } while (0)
 
-#define TIMEDWAIT(cond, mutex, when, timedout)                                                           \
+#define PERF_TIMEDWAIT(cond, mutex, when, timedout)                                                      \
     do {                                                                                                 \
         int   __n = pthread_cond_timedwait((cond), (mutex), (when));                                     \
         bool* res = (timedout);                                                                          \
@@ -137,14 +134,13 @@
         }                                                                                                \
     } while (0)
 
-static __inline__ uint64_t
-get_time(void)
+static __inline__ uint64_t perf_get_time(void)
 {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return tv.tv_sec * MILLION + tv.tv_usec;
 }
 
-#define SAFE_DIV(n, d) ((d) == 0 ? 0 : (n) / (d))
+#define PERF_SAFE_DIV(n, d) ((d) == 0 ? 0 : (n) / (d))
 
 #endif

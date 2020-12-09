@@ -3,9 +3,7 @@ Section: net
 Priority: optional
 Maintainer: Jerry Lundström <lundstrom.jerry@gmail.com>
 Build-Depends: debhelper (>= 8.0.0), build-essential, automake, autoconf,
- libtool, libbind-dev, libkrb5-dev, libssl-dev, libcap-dev, libxml2-dev,
- libjson-c-dev, libgeoip-dev, libprotobuf-c-dev, libfstrm-dev, liblmdb-dev,
- pkg-config
+ libtool, libssl-dev, pkg-config, libldns-dev
 Standards-Version: 3.9.4
 Homepage: https://www.dns-oarc.net/tools/dnsperf
 Vcs-Git: https://github.com/DNS-OARC/dnsperf.git

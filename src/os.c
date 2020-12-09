@@ -17,21 +17,20 @@
  * limitations under the License.
  */
 
+#include "config.h"
+
+#include "os.h"
+
+#include "log.h"
+#include "util.h"
+
 #include <errno.h>
 #include <signal.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include <sys/select.h>
-
-#include <isc/result.h>
-#include <isc/types.h>
-
-#include "log.h"
-#include "os.h"
-#include "util.h"
 
 void perf_os_blocksignal(int sig, bool block)
 {
@@ -59,13 +58,13 @@ void perf_os_handlesignal(int sig, void (*handler)(int))
     }
 }
 
-isc_result_t
+perf_result_t
 perf_os_waituntilreadable(struct perf_net_socket* sock, int pipe_fd, int64_t timeout)
 {
     return perf_os_waituntilanyreadable(sock, 1, pipe_fd, timeout);
 }
 
-isc_result_t
+perf_result_t
 perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
     int64_t timeout)
 {
@@ -79,7 +78,7 @@ perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, i
     maxfd = 0;
     for (i = 0; i < nfds; i++) {
         if (socks[i].have_more)
-            return (ISC_R_SUCCESS);
+            return (PERF_R_SUCCESS);
         FD_SET(socks[i].fd, &read_fds);
         if (socks[i].fd > maxfd)
             maxfd = socks[i].fd;
@@ -101,17 +100,17 @@ perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, i
             char __s[256];
             perf_log_fatal("select(): %s", perf_strerror_r(errno, __s, sizeof(__s)));
         }
-        return (ISC_R_CANCELED);
+        return (PERF_R_CANCELED);
     } else if (n == 0) {
-        return (ISC_R_TIMEDOUT);
+        return (PERF_R_TIMEDOUT);
     } else if (FD_ISSET(pipe_fd, &read_fds)) {
-        return (ISC_R_CANCELED);
+        return (PERF_R_CANCELED);
     } else {
-        return (ISC_R_SUCCESS);
+        return (PERF_R_SUCCESS);
     }
 }
 
-isc_result_t
+perf_result_t
 perf_os_waituntilanywritable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
     int64_t timeout)
 {
@@ -146,12 +145,12 @@ perf_os_waituntilanywritable(struct perf_net_socket* socks, unsigned int nfds, i
             char __s[256];
             perf_log_fatal("select(): %s", perf_strerror_r(errno, __s, sizeof(__s)));
         }
-        return (ISC_R_CANCELED);
+        return (PERF_R_CANCELED);
     } else if (n == 0) {
-        return (ISC_R_TIMEDOUT);
+        return (PERF_R_TIMEDOUT);
     } else if (FD_ISSET(pipe_fd, &read_fds)) {
-        return (ISC_R_CANCELED);
+        return (PERF_R_CANCELED);
     } else {
-        return (ISC_R_SUCCESS);
+        return (PERF_R_SUCCESS);
     }
 }

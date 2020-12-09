@@ -7,13 +7,8 @@ extraction:
         - autoconf
         - libtool
         - pkg-config
-        - libbind-dev
-        - libkrb5-dev
         - libssl-dev
-        - libcap-dev
-        - libxml2-dev
-        - libjson-c-dev
-        - libgeoip-dev
+        - libldns-dev
     configure:
       command:
         - ./autogen.sh
