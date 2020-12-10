@@ -64,9 +64,9 @@ grep -q "Queries sent: *2" test2.out
 cat test2.out
 grep -q "Queries sent: *2" test2.out
 # Disabled until https://github.com/DNS-OARC/dnsperf/issues/92 is fixed
-#../resperf -s $ip -m 1 -d "$srcdir/datafile2" -r 2 -c 2 -M udp -y hmac-sha256:test:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8= >test2.out
-#cat test2.out
-#grep -q "Queries sent: *2" test2.out
+../resperf -s $ip -m 1 -d "$srcdir/datafile2" -r 2 -c 2 -M udp -y hmac-sha256:test:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8= >test2.out
+cat test2.out
+grep -q "Queries sent: *2" test2.out
 
 # Ignore failure until https://github.com/DNS-OARC/dnsperf/issues/88 is fixed
 # May work on slower systems
