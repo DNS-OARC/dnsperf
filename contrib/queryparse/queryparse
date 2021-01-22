@@ -121,7 +121,7 @@ def main(argv):
         outfile.close()
     sum = 0
     print("Statistics:")
-    qtypes = qtypecount.keys()
+    qtypes = list(qtypecount.keys())
     qtypes.sort()
     for qtype in qtypes:
         qtype_str = dns.rdatatype.to_text(qtype)
