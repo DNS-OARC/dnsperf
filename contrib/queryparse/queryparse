@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright 2019-2020 OARC, Inc.
+# Copyright 2019-2021 OARC, Inc.
 # Copyright 2017-2018 Akamai Technologies
 # Copyright 2006-2016 Nominum, Inc.
 # All rights reserved.
@@ -73,7 +73,7 @@ def main(argv):
     while True:
         try:
             packet = pcap.next()
-        except: # lgtm [py/catch-base-exception]
+        except Exception:
             break
 
         if packet[0] is None:
@@ -101,7 +101,7 @@ def main(argv):
 
         try:
             msg = dns.message.from_wire(packet)
-        except: # lgtm [py/catch-base-exception]
+        except Exception:
             continue
         if not opts.recurse and not dns.flags.RD:
             continue
@@ -121,7 +121,7 @@ def main(argv):
         outfile.close()
     sum = 0
     print("Statistics:")
-    qtypes = qtypecount.keys()
+    qtypes = list(qtypecount.keys())
     qtypes.sort()
     for qtype in qtypes:
         qtype_str = dns.rdatatype.to_text(qtype)
