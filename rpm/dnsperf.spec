@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.4.0
+Version:        2.4.1
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -93,6 +93,19 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Feb 09 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.4.1-1
+- Release 2.4.1
+  * This release fixes an issue with the socket readiness function that
+    could cause a buffer overflow (`-T 10 -c 2000`) due to `select()` being
+    limited to check 1023 sockets. `poll()` is now used which has no limit.
+  * There has also been a few fixes to the contrib script `queryparse` that
+    has to do with python v2 and v3 compatibility and better exception
+    handling.
+  * Commits:
+    24e5bee poll
+    7dceca7 Handle only common exceptions
+    5603294 Fix error on python3
+    48fa517 TSIG
 * Wed Dec 09 2020 Jerry Lundström <lundstrom.jerry@gmail.com> 2.4.0-1
 - Release 2.4.0
   * This release removes the dependency on BIND's internal development

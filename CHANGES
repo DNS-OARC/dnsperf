@@ -1,3 +1,20 @@
+2021-02-09 Jerry Lundström
+
+    Release 2.4.1
+
+    This release fixes an issue with the socket readiness function that
+    could cause a buffer overflow (`-T 10 -c 2000`) due to `select()` being
+    limited to check 1023 sockets. `poll()` is now used which has no limit.
+
+    There has also been a few fixes to the contrib script `queryparse` that
+    has to do with python v2 and v3 compatibility and better exception
+    handling.
+
+    24e5bee poll
+    7dceca7 Handle only common exceptions
+    5603294 Fix error on python3
+    48fa517 TSIG
+
 2020-12-09 Jerry Lundström
 
     Release 2.4.0
