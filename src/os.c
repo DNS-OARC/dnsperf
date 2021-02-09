@@ -30,7 +30,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/select.h>
+#include <poll.h>
 
 void perf_os_blocksignal(int sig, bool block)
 {
@@ -68,33 +68,31 @@ perf_result_t
 perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
     int64_t timeout)
 {
-    fd_set         read_fds;
-    unsigned int   i;
-    int            maxfd;
-    struct timeval tv, *tvp;
-    int            n;
+    struct pollfd fds[nfds + 1];
+    size_t        i;
+    int           to, n;
 
-    FD_ZERO(&read_fds);
-    maxfd = 0;
     for (i = 0; i < nfds; i++) {
         if (socks[i].have_more)
             return (PERF_R_SUCCESS);
-        FD_SET(socks[i].fd, &read_fds);
-        if (socks[i].fd > maxfd)
-            maxfd = socks[i].fd;
+
+        fds[i].fd     = socks[i].fd;
+        fds[i].events = POLLIN;
     }
-    FD_SET(pipe_fd, &read_fds);
-    if (pipe_fd > maxfd)
-        maxfd = pipe_fd;
+
+    fds[nfds].fd     = pipe_fd;
+    fds[nfds].events = POLLIN;
 
     if (timeout < 0) {
-        tvp = NULL;
+        to = -1;
     } else {
-        tv.tv_sec  = timeout / MILLION;
-        tv.tv_usec = timeout % MILLION;
-        tvp        = &tv;
+        to = timeout / 1000;
+        if (timeout && !to) {
+            to = 1;
+        }
     }
-    n = select(maxfd + 1, &read_fds, NULL, NULL, tvp);
+
+    n = poll(fds, nfds + 1, to);
     if (n < 0) {
         if (errno != EINTR) {
             char __s[256];
@@ -103,7 +101,7 @@ perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, i
         return (PERF_R_CANCELED);
     } else if (n == 0) {
         return (PERF_R_TIMEDOUT);
-    } else if (FD_ISSET(pipe_fd, &read_fds)) {
+    } else if (fds[nfds].revents & POLLIN) {
         return (PERF_R_CANCELED);
     } else {
         return (PERF_R_SUCCESS);
@@ -114,32 +112,28 @@ perf_result_t
 perf_os_waituntilanywritable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
     int64_t timeout)
 {
-    fd_set         write_fds, read_fds;
-    unsigned int   i;
-    int            maxfd;
-    struct timeval tv, *tvp;
-    int            n;
+    struct pollfd fds[nfds + 1];
+    size_t        i;
+    int           to, n;
 
-    FD_ZERO(&read_fds);
-    FD_ZERO(&write_fds);
-    maxfd = 0;
     for (i = 0; i < nfds; i++) {
-        FD_SET(socks[i].fd, &write_fds);
-        if (socks[i].fd > maxfd)
-            maxfd = socks[i].fd;
+        fds[i].fd     = socks[i].fd;
+        fds[i].events = POLLOUT;
     }
-    FD_SET(pipe_fd, &read_fds);
-    if (pipe_fd > maxfd)
-        maxfd = pipe_fd;
+
+    fds[nfds].fd     = pipe_fd;
+    fds[nfds].events = POLLIN;
 
     if (timeout < 0) {
-        tvp = NULL;
+        to = -1;
     } else {
-        tv.tv_sec  = timeout / MILLION;
-        tv.tv_usec = timeout % MILLION;
-        tvp        = &tv;
+        to = timeout / 1000;
+        if (timeout && !to) {
+            to = 1;
+        }
     }
-    n = select(maxfd + 1, &read_fds, &write_fds, NULL, tvp);
+
+    n = poll(fds, nfds + 1, to);
     if (n < 0) {
         if (errno != EINTR) {
             char __s[256];
@@ -148,7 +142,7 @@ perf_os_waituntilanywritable(struct perf_net_socket* socks, unsigned int nfds, i
         return (PERF_R_CANCELED);
     } else if (n == 0) {
         return (PERF_R_TIMEDOUT);
-    } else if (FD_ISSET(pipe_fd, &read_fds)) {
+    } else if (fds[nfds].revents & POLLIN) {
         return (PERF_R_CANCELED);
     } else {
         return (PERF_R_SUCCESS);
