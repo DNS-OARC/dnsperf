@@ -59,7 +59,7 @@
 #define DEFAULT_TIMEOUT 45
 #define DEFAULT_MAX_OUTSTANDING (64 * 1024)
 
-#define MAX_INPUT_DATA (4 * 1024)
+#define MAX_INPUT_DATA (64 * 1024)
 
 #define TIMEOUT_CHECK_TIME 5000000
 
@@ -464,12 +464,6 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
     unsigned int   length;
     perf_result_t  result;
 
-    perf_buffer_clear(lines);
-    result = perf_datafile_next(input, lines, false);
-    if (result != PERF_R_SUCCESS)
-        perf_log_fatal("ran out of query data");
-    perf_buffer_usedregion(lines, &used);
-
     q = perf_list_head(instanding_list);
     if (!q)
         return (PERF_R_NOMORE);
@@ -504,6 +498,12 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
         qid  = (q - queries) / nsocks;
         sock = (q - queries) % nsocks;
     }
+
+    perf_buffer_clear(lines);
+    result = perf_datafile_next(input, lines, false);
+    if (result != PERF_R_SUCCESS)
+        perf_log_fatal("ran out of query data");
+    perf_buffer_usedregion(lines, &used);
 
     perf_buffer_clear(msg);
     result = perf_dns_buildrequest(&used, qid,
