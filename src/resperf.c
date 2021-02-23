@@ -499,6 +499,19 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
         sock = (q - queries) % nsocks;
     }
 
+    switch (perf_net_sockready(&socks[sock], dummypipe[0], TIMEOUT_CHECK_TIME)) {
+    case 0:
+        if (verbose) {
+            perf_log_warning("failed to send packet: socket %d not ready", sock);
+        }
+        return (PERF_R_FAILURE);
+    case -1:
+        perf_log_warning("failed to send packet: socket %d readiness check timed out", sock);
+        return (PERF_R_FAILURE);
+    default:
+        break;
+    }
+
     perf_buffer_clear(lines);
     result = perf_datafile_next(input, lines, false);
     if (result != PERF_R_SUCCESS)
@@ -514,19 +527,6 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
         return (result);
 
     q->sent_timestamp = time_now;
-
-    switch (perf_net_sockready(&socks[sock], dummypipe[0], TIMEOUT_CHECK_TIME)) {
-    case 0:
-        if (verbose) {
-            perf_log_warning("failed to send packet: socket %d not ready", sock);
-        }
-        return (PERF_R_FAILURE);
-    case -1:
-        perf_log_warning("failed to send packet: socket %d readiness check timed out", sock);
-        return (PERF_R_FAILURE);
-    default:
-        break;
-    }
 
     base   = perf_buffer_base(msg);
     length = perf_buffer_usedlength(msg);

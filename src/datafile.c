@@ -126,7 +126,7 @@ static perf_result_t read_more(perf_datafile_t* dfile)
         dfile->at = 0;
     } else if (dfile->at == dfile->have) {
         dfile->have = 0;
-        dfile->at = 0;
+        dfile->at   = 0;
     }
 
     n = read(dfile->fd, &dfile->databuf[dfile->have], sizeof(dfile->databuf) - dfile->have - 1);
