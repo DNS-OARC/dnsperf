@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.4.1
+Version:        2.4.2
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -93,6 +93,19 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Feb 23 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.4.2-1
+- Release 2.4.2
+  * This release fixes a few issues with reading of the datafile which
+    could lead to "ran out of data" errors.
+  * The problem was that reading from the datafile was done before finding
+    a socket to send it on, or socket readyness, and that lead to progressing
+    the queries without really doing anything.
+    Another issues that's been fixed was that if the read lines perfectly
+    aligned with the buffer, it would be treated like EOF and caused an exit.
+  * Commits:
+    9937287 resperf TLS
+    6736956 datafile
+    55faec6 ran out of data
 * Tue Feb 09 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.4.1-1
 - Release 2.4.1
   * This release fixes an issue with the socket readiness function that
