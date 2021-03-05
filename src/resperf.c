@@ -52,8 +52,8 @@
 
 #define DEFAULT_SERVER_NAME "127.0.0.1"
 #define DEFAULT_SERVER_PORT 53
-#define DEFAULT_SERVER_TLS_PORT 853
-#define DEFAULT_SERVER_PORTS "udp/tcp 53 or dot/tls 853"
+#define DEFAULT_SERVER_DOT_PORT 853
+#define DEFAULT_SERVER_PORTS "udp/tcp 53 or DoT 853"
 #define DEFAULT_LOCAL_PORT 0
 #define DEFAULT_SOCKET_BUFFER 32
 #define DEFAULT_TIMEOUT 45
@@ -88,11 +88,11 @@ static query_list instanding_list;
 
 static query_info* queries;
 
-static perf_sockaddr_t         server_addr;
-static perf_sockaddr_t         local_addr;
-static unsigned int            nsocks;
-static struct perf_net_socket* socks;
-static enum perf_net_mode      mode;
+static perf_sockaddr_t          server_addr;
+static perf_sockaddr_t          local_addr;
+static unsigned int             nsocks;
+static struct perf_net_socket** socks;
+static enum perf_net_mode       mode;
 
 static int dummypipe[2];
 
@@ -236,7 +236,7 @@ setup(int argc, char** argv)
     perf_opt_add('f', perf_opt_string, "family",
         "address family of DNS transport, inet or inet6", "any",
         &family);
-    perf_opt_add('M', perf_opt_string, "mode", "set transport mode: udp, tcp or dot/tls", "udp", &_mode);
+    perf_opt_add('M', perf_opt_string, "mode", "set transport mode: udp, tcp or dot", "udp", &_mode);
     perf_opt_add('s', perf_opt_string, "server_addr",
         "the server to query", DEFAULT_SERVER_NAME, &server_name);
     perf_opt_add('p', perf_opt_port, "port",
@@ -300,7 +300,7 @@ setup(int argc, char** argv)
         mode = perf_net_parsemode(_mode);
 
     if (!server_port) {
-        server_port = mode == sock_tls ? DEFAULT_SERVER_TLS_PORT : DEFAULT_SERVER_PORT;
+        server_port = mode == sock_dot ? DEFAULT_SERVER_DOT_PORT : DEFAULT_SERVER_PORT;
     }
 
     if (max_outstanding > nsocks * DEFAULT_MAX_OUTSTANDING)
@@ -340,8 +340,12 @@ setup(int argc, char** argv)
     if (!(socks = calloc(nsocks, sizeof(*socks)))) {
         perf_log_fatal("out of memory");
     }
-    for (i = 0; i < nsocks; i++)
+    for (i = 0; i < nsocks; i++) {
         socks[i] = perf_net_opensocket(mode, &server_addr, &local_addr, i, bufsize);
+        if (!socks[i]) {
+            perf_log_fatal("perf_net_opensocket(): no socket returned, out of memory?");
+        }
+    }
 }
 
 static void
@@ -351,7 +355,7 @@ cleanup(void)
 
     perf_datafile_close(&input);
     for (i = 0; i < nsocks; i++)
-        (void)perf_net_close(&socks[i]);
+        (void)perf_net_close(socks[i]);
     close(dummypipe[0]);
     close(dummypipe[1]);
 }
@@ -470,8 +474,8 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
     qid  = (q - queries) / nsocks;
     sock = (q - queries) % nsocks;
 
-    if (socks[sock].sending) {
-        if (perf_net_sockready(&socks[sock], dummypipe[0], TIMEOUT_CHECK_TIME) == -1) {
+    if (socks[sock]->is_sending) {
+        if (perf_net_sockready(socks[sock], dummypipe[0], TIMEOUT_CHECK_TIME) == -1) {
             if (errno == EINPROGRESS) {
                 if (verbose) {
                     perf_log_warning("network congested, packet sending in progress");
@@ -499,7 +503,7 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
         sock = (q - queries) % nsocks;
     }
 
-    switch (perf_net_sockready(&socks[sock], dummypipe[0], TIMEOUT_CHECK_TIME)) {
+    switch (perf_net_sockready(socks[sock], dummypipe[0], TIMEOUT_CHECK_TIME)) {
     case 0:
         if (verbose) {
             perf_log_warning("failed to send packet: socket %d not ready", sock);
@@ -530,7 +534,7 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
 
     base   = perf_buffer_base(msg);
     length = perf_buffer_usedlength(msg);
-    if (perf_net_sendto(&socks[sock], base, length, 0,
+    if (perf_net_sendto(socks[sock], base, length, 0,
             &server_addr.sa.sa, server_addr.length)
         < 1) {
         if (errno == EINPROGRESS) {
@@ -592,7 +596,7 @@ try_process_response(unsigned int sockindex)
     int           n;
 
     packet_header = (uint16_t*)packet_buffer;
-    n             = perf_net_recv(&socks[sockindex], packet_buffer, sizeof(packet_buffer), 0);
+    n             = perf_net_recv(socks[sockindex], packet_buffer, sizeof(packet_buffer), 0);
     if (n < 0) {
         if (errno == EAGAIN || errno == EINTR) {
             return;
@@ -667,7 +671,7 @@ handle_sigpipe(int sig)
     (void)sig;
     switch (mode) {
     case sock_tcp:
-    case sock_tls:
+    case sock_dot:
         // if connection is closed it will generate a signal
         perf_log_fatal("SIGPIPE received, connection(s) likely closed, can't continue");
         break;

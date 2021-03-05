@@ -247,7 +247,7 @@ the file may be read fewer times.
 .br
 .RS
 Sets the port on which the DNS packets are sent. If not specified, the
-standard DNS port (udp/tcp 53, dot/tls 853) is used.
+standard DNS port (udp/tcp 53, DoT 853) is used.
 .RE
 
 \fB-q \fInum_queries\fB\fR
@@ -267,7 +267,7 @@ Limits the number of requests per second. There is no default limit.
 \fB-m \fImode\fB\fR
 .br
 .RS
-Specifies the transport mode to use, "udp", "tcp" or "dot"/"tls".
+Specifies the transport mode to use, "udp", "tcp" or "dot".
 Default is "udp".
 .RE
 

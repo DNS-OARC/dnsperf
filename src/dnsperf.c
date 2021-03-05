@@ -51,8 +51,8 @@
 
 #define DEFAULT_SERVER_NAME "127.0.0.1"
 #define DEFAULT_SERVER_PORT 53
-#define DEFAULT_SERVER_TLS_PORT 853
-#define DEFAULT_SERVER_PORTS "udp/tcp 53 or dot/tls 853"
+#define DEFAULT_SERVER_DOT_PORT 853
+#define DEFAULT_SERVER_PORTS "udp/tcp 53 or DoT 853"
 #define DEFAULT_LOCAL_PORT 0
 #define DEFAULT_MAX_OUTSTANDING 100
 #define DEFAULT_TIMEOUT 5
@@ -140,9 +140,9 @@ typedef struct {
     pthread_mutex_t lock;
     pthread_cond_t  cond;
 
-    unsigned int            nsocks;
-    int                     current_sock;
-    struct perf_net_socket* socks;
+    unsigned int             nsocks;
+    int                      current_sock;
+    struct perf_net_socket** socks;
 
     bool     done_sending;
     uint64_t done_send_time;
@@ -194,8 +194,13 @@ print_initial_status(const config_t* config)
     printf("\n");
 
     perf_sockaddr_format(&config->server_addr, buf, sizeof(buf));
-    printf("[Status] Sending %s (to %s)\n",
-        config->updates ? "updates" : "queries", buf);
+    if (perf_sockaddr_isinet6(&config->server_addr)) {
+        printf("[Status] Sending %s (to [%s]:%d)\n",
+            config->updates ? "updates" : "queries", buf, perf_sockaddr_port(&config->server_addr));
+    } else {
+        printf("[Status] Sending %s (to %s:%d)\n",
+            config->updates ? "updates" : "queries", buf, perf_sockaddr_port(&config->server_addr));
+    }
 
     now = time(NULL);
     printf("[Status] Started at: %s", ctime_r(&now, ct));
@@ -378,7 +383,7 @@ setup(int argc, char** argv, config_t* config)
     perf_opt_add('f', perf_opt_string, "family",
         "address family of DNS transport, inet or inet6", "any",
         &family);
-    perf_opt_add('m', perf_opt_string, "mode", "set transport mode: udp, tcp or dot/tls", "udp", &mode);
+    perf_opt_add('m', perf_opt_string, "mode", "set transport mode: udp, tcp or dot", "udp", &mode);
     perf_opt_add('s', perf_opt_string, "server_addr",
         "the server to query", DEFAULT_SERVER_NAME, &server_name);
     perf_opt_add('p', perf_opt_port, "port",
@@ -449,7 +454,7 @@ setup(int argc, char** argv, config_t* config)
         config->mode = perf_net_parsemode(mode);
 
     if (!server_port) {
-        server_port = config->mode == sock_tls ? DEFAULT_SERVER_TLS_PORT : DEFAULT_SERVER_PORT;
+        server_port = config->mode == sock_dot ? DEFAULT_SERVER_DOT_PORT : DEFAULT_SERVER_PORT;
     }
 
     if (family != NULL)
@@ -620,7 +625,7 @@ do_send(void* arg)
 
         i = tinfo->nsocks * 2;
         while (i--) {
-            q->sock = &tinfo->socks[tinfo->current_sock++ % tinfo->nsocks];
+            q->sock = tinfo->socks[tinfo->current_sock++ % tinfo->nsocks];
             switch (perf_net_sockready(q->sock, threadpipe[0], TIMEOUT_CHECK_TIME)) {
             case 0:
                 if (config->verbose) {
@@ -719,7 +724,7 @@ do_send(void* arg)
     while (any_inprogress) {
         any_inprogress = 0;
         for (i = 0; i < tinfo->nsocks; i++) {
-            if (perf_net_sockready(&tinfo->socks[i], threadpipe[0], TIMEOUT_CHECK_TIME) == -1 && errno == EINPROGRESS) {
+            if (perf_net_sockready(tinfo->socks[i], threadpipe[0], TIMEOUT_CHECK_TIME) == -1 && errno == EINPROGRESS) {
                 any_inprogress = 1;
             }
         }
@@ -788,7 +793,7 @@ recv_one(threadinfo_t* tinfo, int which_sock,
 
     packet_header = (uint16_t*)packet_buffer;
 
-    n   = perf_net_recv(&tinfo->socks[which_sock], packet_buffer, packet_size, 0);
+    n   = perf_net_recv(tinfo->socks[which_sock], packet_buffer, packet_size, 0);
     now = perf_get_time();
     if (n < 0) {
         *saved_errnop = errno;
@@ -799,7 +804,7 @@ recv_one(threadinfo_t* tinfo, int which_sock,
         *saved_errnop = EAGAIN;
         return false;
     }
-    recvd->sock           = &tinfo->socks[which_sock];
+    recvd->sock           = tinfo->socks[which_sock];
     recvd->qid            = ntohs(packet_header[0]);
     recvd->rcode          = ntohs(packet_header[1]) & 0xF;
     recvd->size           = n;
@@ -1091,11 +1096,15 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
     socket_offset = 0;
     for (i = 0; i < offset; i++)
         socket_offset += threads[i].nsocks;
-    for (i = 0; i < tinfo->nsocks; i++)
+    for (i = 0; i < tinfo->nsocks; i++) {
         tinfo->socks[i] = perf_net_opensocket(config->mode, &config->server_addr,
             &config->local_addr,
             socket_offset++,
             config->bufsize);
+        if (!tinfo->socks[i]) {
+            perf_log_fatal("perf_net_opensocket(): no socket returned, out of memory?");
+        }
+    }
     tinfo->current_sock = 0;
 
     PERF_THREAD(&tinfo->receiver, do_recv, tinfo);
@@ -1118,7 +1127,7 @@ threadinfo_cleanup(threadinfo_t* tinfo, times_t* times)
     if (interrupted)
         cancel_queries(tinfo);
     for (i = 0; i < tinfo->nsocks; i++)
-        perf_net_close(&tinfo->socks[i]);
+        perf_net_close(tinfo->socks[i]);
     if (tinfo->last_recv > times->end_time)
         times->end_time = tinfo->last_recv;
 }
@@ -1152,8 +1161,8 @@ int main(int argc, char** argv)
     perf_os_blocksignal(SIGINT, true);
     switch (config.mode) {
     case sock_tcp:
-    case sock_tls:
-        // block SIGPIPE for TCP/TLS mode, if connection is closed it will generate a signal
+    case sock_dot:
+        // block SIGPIPE for TCP/DOT mode, if connection is closed it will generate a signal
         perf_os_blocksignal(SIGPIPE, true);
         break;
     default:

@@ -34,11 +34,11 @@ perf_result_t
 perf_os_waituntilreadable(struct perf_net_socket* sock, int pipe_fd, int64_t timeout);
 
 perf_result_t
-perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
+perf_os_waituntilanyreadable(struct perf_net_socket** socks, unsigned int nfds, int pipe_fd,
     int64_t timeout);
 
 perf_result_t
-perf_os_waituntilanywritable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
+perf_os_waituntilanywritable(struct perf_net_socket** socks, unsigned int nfds, int pipe_fd,
     int64_t timeout);
 
 #endif

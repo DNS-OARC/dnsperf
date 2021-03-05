@@ -61,11 +61,12 @@ void perf_os_handlesignal(int sig, void (*handler)(int))
 perf_result_t
 perf_os_waituntilreadable(struct perf_net_socket* sock, int pipe_fd, int64_t timeout)
 {
-    return perf_os_waituntilanyreadable(sock, 1, pipe_fd, timeout);
+    struct perf_net_socket* socks[] = { sock };
+    return perf_os_waituntilanyreadable(socks, 1, pipe_fd, timeout);
 }
 
 perf_result_t
-perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
+perf_os_waituntilanyreadable(struct perf_net_socket** socks, unsigned int nfds, int pipe_fd,
     int64_t timeout)
 {
     struct pollfd fds[nfds + 1];
@@ -73,10 +74,10 @@ perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, i
     int           to, n;
 
     for (i = 0; i < nfds; i++) {
-        if (socks[i].have_more)
+        if (socks[i]->have_more)
             return (PERF_R_SUCCESS);
 
-        fds[i].fd     = socks[i].fd;
+        fds[i].fd     = socks[i]->fd;
         fds[i].events = POLLIN;
     }
 
@@ -109,7 +110,7 @@ perf_os_waituntilanyreadable(struct perf_net_socket* socks, unsigned int nfds, i
 }
 
 perf_result_t
-perf_os_waituntilanywritable(struct perf_net_socket* socks, unsigned int nfds, int pipe_fd,
+perf_os_waituntilanywritable(struct perf_net_socket** socks, unsigned int nfds, int pipe_fd,
     int64_t timeout)
 {
     struct pollfd fds[nfds + 1];
@@ -117,7 +118,7 @@ perf_os_waituntilanywritable(struct perf_net_socket* socks, unsigned int nfds, i
     int           to, n;
 
     for (i = 0; i < nfds; i++) {
-        fds[i].fd     = socks[i].fd;
+        fds[i].fd     = socks[i]->fd;
         fds[i].events = POLLOUT;
     }
 
