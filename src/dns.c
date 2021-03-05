@@ -52,18 +52,39 @@ const char* perf_dns_rcode_strings[] = {
 
 perf_result_t perf_dname_fromstring(const char* str, size_t len, perf_buffer_t* target)
 {
-    size_t      label_len;
+    size_t      label_len, at;
     const char* orig_str = str;
+    bool        is_quoted;
 
     if (perf_buffer_availablelength(target) < len) {
         return PERF_R_NOSPACE;
     }
 
     while (len) {
-        for (label_len = 0; label_len < len; label_len++) {
-            if (*(str + label_len) == '.') {
+        is_quoted = false;
+        for (label_len = 0, at = 0; at < len;) {
+            if (*(str + at) == '\\') {
+                is_quoted = true;
+                at++;
+                if (at >= len)
+                    return PERF_R_FAILURE;
+                if (*(str + at) >= '0' && *(str + at) <= '9') {
+                    at++;
+                    if (at >= len)
+                        return PERF_R_FAILURE;
+                    if (*(str + at) < '0' || *(str + at) > '9')
+                        return PERF_R_FAILURE;
+                    at++;
+                    if (at >= len)
+                        return PERF_R_FAILURE;
+                    if (*(str + at) < '0' || *(str + at) > '9')
+                        return PERF_R_FAILURE;
+                }
+            } else if (*(str + at) == '.') {
                 break;
             }
+            label_len++;
+            at++;
         }
         if (!label_len) {
             // Just a dot
@@ -81,9 +102,33 @@ perf_result_t perf_dname_fromstring(const char* str, size_t len, perf_buffer_t* 
             return PERF_R_FAILURE;
         }
         perf_buffer_putuint8(target, label_len);
-        perf_buffer_putmem(target, str, label_len);
-        str += label_len;
-        len -= label_len;
+        if (is_quoted) {
+            for (at = 0; at < len; at++) {
+                if (*(str + at) == '\\') {
+                    at++;
+                    if (at >= len)
+                        return PERF_R_FAILURE;
+                    if (*(str + at) >= '0' && *(str + at) <= '9') {
+                        char b[4];
+                        long v;
+                        memcpy(b, str, 3);
+                        b[3] = 0;
+                        v    = strtol(b, 0, 7);
+                        if (v < 0 || v > 255)
+                            return PERF_R_FAILURE;
+                        perf_buffer_putuint8(target, (uint8_t)v);
+                        continue;
+                    }
+                }
+                perf_buffer_putmem(target, str + at, 1);
+            }
+            str += at;
+            len -= at;
+        } else {
+            perf_buffer_putmem(target, str, label_len);
+            str += label_len;
+            len -= label_len;
+        }
         if (len < 2) {
             // Last label/dot
             perf_buffer_putuint8(target, 0);

@@ -229,8 +229,8 @@ static int perf__dot_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
 
 struct perf_net_socket* perf_net_dot_opensocket(const perf_sockaddr_t* server, const perf_sockaddr_t* local, size_t bufsize)
 {
-    struct perf__dot_socket* tmp = calloc(1, sizeof(struct perf__dot_socket)); // clang scan-build
-    struct perf_net_socket* sock = (struct perf_net_socket*)tmp;
+    struct perf__dot_socket* tmp  = calloc(1, sizeof(struct perf__dot_socket)); // clang scan-build
+    struct perf_net_socket*  sock = (struct perf_net_socket*)tmp;
 
     int ret, flags;
 
