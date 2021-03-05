@@ -577,6 +577,7 @@ do_send(void* arg)
     unsigned int    length;
     int             n, i, any_inprogress = 0;
     perf_result_t   result;
+    bool            all_fail;
 
     tinfo           = (threadinfo_t*)arg;
     config          = tinfo->config;
@@ -623,7 +624,8 @@ do_send(void* arg)
         query_move(tinfo, q, prepend_outstanding);
         q->timestamp = UINT64_MAX;
 
-        i = tinfo->nsocks * 2;
+        i        = tinfo->nsocks * 2;
+        all_fail = true;
         while (i--) {
             q->sock = tinfo->socks[tinfo->current_sock++ % tinfo->nsocks];
             switch (perf_net_sockready(q->sock, threadpipe[0], TIMEOUT_CHECK_TIME)) {
@@ -631,7 +633,8 @@ do_send(void* arg)
                 if (config->verbose) {
                     perf_log_warning("socket %p not ready", q->sock);
                 }
-                q->sock = 0;
+                q->sock  = 0;
+                all_fail = false;
                 continue;
             case -1:
                 if (errno == EINPROGRESS) {
@@ -642,11 +645,18 @@ do_send(void* arg)
                 if (config->verbose) {
                     perf_log_warning("socket %p readiness check timed out", q->sock);
                 }
+                q->sock = 0;
+                continue;
             default:
                 break;
             }
+            all_fail = false;
             break;
         };
+
+        if (all_fail) {
+            perf_log_fatal("all sockets reported failure, can not continue");
+        }
 
         if (!q->sock) {
             query_move(tinfo, q, prepend_unused);
