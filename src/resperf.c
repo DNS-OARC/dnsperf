@@ -624,11 +624,12 @@ try_process_response(unsigned int sockindex)
     qid   = ntohs(packet_header[0]);
     rcode = ntohs(packet_header[1]) & 0xF;
 
-    q = &queries[qid * nsocks + sockindex];
-    if (q->list != &outstanding_list) {
+    size_t idx = qid * nsocks + sockindex;
+    if (idx >= max_outstanding || queries[idx].list != &outstanding_list) {
         perf_log_warning("received a response with an unexpected id: %u", qid);
         return;
     }
+    q = &queries[idx];
 
     perf_list_unlink(outstanding_list, q);
     perf_list_append(instanding_list, q);
