@@ -31,6 +31,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <ck_pr.h>
 
 #define self ((struct perf__tcp_socket*)sock)
 
@@ -39,24 +40,100 @@ struct perf__tcp_socket {
 
     char   recvbuf[TCP_RECV_BUF_SIZE], sendbuf[TCP_SEND_BUF_SIZE];
     size_t at, sending;
-    bool   is_ready;
+    bool   is_ready, need_reconnect, have_more, is_sending;
 
     int                     flags;
     struct sockaddr_storage dest_addr;
     socklen_t               addrlen;
+
+    perf_sockaddr_t server, local;
+    size_t          bufsize;
+
+    int recvfd;
 };
+
+static int perf__tcp_connect(struct perf_net_socket* sock)
+{
+    int fd;
+
+    self->is_ready = true;
+
+    fd = socket(self->server.sa.sa.sa_family, SOCK_STREAM, 0);
+    if (fd == -1) {
+        char __s[256];
+        perf_log_fatal("socket: %s", perf_strerror_r(errno, __s, sizeof(__s)));
+    }
+
+    if (self->server.sa.sa.sa_family == AF_INET6) {
+        int on = 1;
+
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on)) == -1) {
+            perf_log_warning("setsockopt(IPV6_V6ONLY) failed");
+        }
+    }
+
+    if (bind(fd, &self->local.sa.sa, self->local.length) == -1) {
+        char __s[256];
+        perf_log_fatal("bind: %s", perf_strerror_r(errno, __s, sizeof(__s)));
+    }
+
+    if (self->bufsize) {
+        int ret = setsockopt(fd, SOL_SOCKET, SO_RCVBUF,
+            &self->bufsize, sizeof(self->bufsize));
+        if (ret < 0)
+            perf_log_warning("setsockbuf(SO_RCVBUF) failed");
+
+        ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF,
+            &self->bufsize, sizeof(self->bufsize));
+        if (ret < 0)
+            perf_log_warning("setsockbuf(SO_SNDBUF) failed");
+    }
+
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0)
+        perf_log_fatal("fcntl(F_GETFL)");
+    int ret = fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    if (ret < 0)
+        perf_log_fatal("fcntl(F_SETFL)");
+
+    if (connect(fd, &self->server.sa.sa, self->server.length)) {
+        if (errno == EINPROGRESS) {
+            self->is_ready = false;
+        } else {
+            char __s[256];
+            perf_log_fatal("connect() failed: %s", perf_strerror_r(errno, __s, sizeof(__s)));
+        }
+    }
+
+    return fd;
+}
 
 static ssize_t perf__tcp_recv(struct perf_net_socket* sock, void* buf, size_t len, int flags)
 {
     ssize_t  n;
     uint16_t dnslen, dnslen2;
 
-    if (!sock->have_more) {
-        n = recv(sock->fd, self->recvbuf + self->at, TCP_RECV_BUF_SIZE - self->at, flags);
-        if (n < 0) {
-            if (errno == ECONNRESET) {
-                // Treat connection reset like try again until reconnection features are in
+    int fd = ck_pr_load_int(&sock->fd);
+    if (fd != self->recvfd) {
+        /* reconnecting happened, reset buffers */
+        self->have_more = false;
+        self->at        = 0;
+        self->recvfd    = fd;
+    }
+
+    if (!self->have_more) {
+        n = recv(fd, self->recvbuf + self->at, TCP_RECV_BUF_SIZE - self->at, flags);
+        if (!n) {
+            return 0;
+        } else if (n < 0) {
+            switch (errno) {
+            case ECONNREFUSED:
+            case ECONNRESET:
+            case ENOTCONN:
                 errno = EAGAIN;
+                break;
+            default:
+                break;
             }
             return n;
         }
@@ -81,12 +158,12 @@ static ssize_t perf__tcp_recv(struct perf_net_socket* sock, void* buf, size_t le
         memcpy(&dnslen2, self->recvbuf, 2);
         dnslen2 = ntohs(dnslen2);
         if (self->at >= dnslen2 + 2) {
-            sock->have_more = true;
+            self->have_more = true;
             return dnslen;
         }
     }
 
-    sock->have_more = false;
+    self->have_more = false;
     return dnslen;
 }
 
@@ -97,22 +174,43 @@ static ssize_t perf__tcp_sendto(struct perf_net_socket* sock, const void* buf, s
     uint16_t dnslen = htons(send);
     ssize_t  n;
 
+    if (self->need_reconnect) {
+        errno = EINPROGRESS;
+        return -1;
+    }
+
     memcpy(self->sendbuf, &dnslen, 2);
     memcpy(self->sendbuf + 2, buf, send);
     n = sendto(sock->fd, self->sendbuf, send + 2, flags, dest_addr, addrlen);
 
-    if (n > 0 && n < send + 2) {
-        sock->is_sending = true;
-        self->sending    = n;
-        self->flags      = flags;
-        memcpy(&self->dest_addr, dest_addr, addrlen);
-        self->addrlen  = addrlen;
-        self->is_ready = false;
-        errno          = EINPROGRESS;
+    if (n < 0) {
+        switch (errno) {
+        case ECONNREFUSED:
+        case ECONNRESET:
+        case ENOTCONN:
+        case EPIPE:
+            self->need_reconnect = true;
+            self->is_sending     = true;
+            self->sending        = 0;
+            errno                = EINPROGRESS;
+            return -1;
+        default:
+            break;
+        }
         return -1;
     }
 
-    return n > 0 ? n - 2 : n;
+    if (n < send + 2) {
+        self->is_sending = true;
+        self->sending    = n;
+        self->flags      = flags;
+        memcpy(&self->dest_addr, dest_addr, addrlen);
+        self->addrlen = addrlen;
+        errno         = EINPROGRESS;
+        return -1;
+    }
+
+    return n - 2;
 }
 
 static int perf__tcp_close(struct perf_net_socket* sock)
@@ -127,28 +225,47 @@ static int perf__tcp_sockeq(struct perf_net_socket* sock_a, struct perf_net_sock
 
 static int perf__tcp_sockready(struct perf_net_socket* sock, int pipe_fd, int64_t timeout)
 {
-    if (self->is_ready) {
-        return 1;
+    if (self->need_reconnect) {
+        int fd = perf__tcp_connect(sock), oldfd = ck_pr_load_int(&sock->fd);
+        ck_pr_store_int(&sock->fd, fd);
+        close(oldfd);
+        self->need_reconnect = false;
     }
 
-    if (self->sending) {
-        uint16_t dnslen;
-        ssize_t  n;
+    if (self->is_ready) {
+        if (self->is_sending) {
+            uint16_t dnslen;
+            ssize_t  n;
 
-        memcpy(&dnslen, self->sendbuf, 2);
-        dnslen = ntohs(dnslen);
-        n      = sendto(sock->fd, self->sendbuf + self->sending, dnslen + 2 - self->sending, self->flags, (struct sockaddr*)&self->dest_addr, self->addrlen);
-        if (n < 1) {
-            return -1;
+            memcpy(&dnslen, self->sendbuf, 2);
+            dnslen = ntohs(dnslen);
+            n      = sendto(sock->fd, self->sendbuf + self->sending, dnslen + 2 - self->sending, self->flags, (struct sockaddr*)&self->dest_addr, self->addrlen);
+            if (n < 1) {
+                switch (errno) {
+                case ECONNREFUSED:
+                case ECONNRESET:
+                case ENOTCONN:
+                case EPIPE:
+                    self->need_reconnect = true;
+                    if (self->sending) {
+                        self->sending    = 0;
+                        self->is_sending = false;
+                    }
+                    errno = EINPROGRESS;
+                    return -1;
+                default:
+                    break;
+                }
+                return -1;
+            }
+            self->sending += n;
+            if (self->sending < dnslen + 2) {
+                errno = EINPROGRESS;
+                return -1;
+            }
+            self->sending    = 0;
+            self->is_sending = false;
         }
-        self->sending += n;
-        if (self->sending < dnslen + 2) {
-            errno = EINPROGRESS;
-            return -1;
-        }
-        self->sending    = 0;
-        sock->is_sending = false;
-        self->is_ready   = true;
         return 1;
     }
 
@@ -171,6 +288,10 @@ static int perf__tcp_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
             return -1;
         }
         self->is_ready = true;
+        if (self->is_sending) {
+            errno = EINPROGRESS;
+            return -1;
+        }
         return 1;
     }
     default:
@@ -180,12 +301,15 @@ static int perf__tcp_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
     return -1;
 }
 
+static bool perf__tcp_have_more(struct perf_net_socket* sock)
+{
+    return self->have_more;
+}
+
 struct perf_net_socket* perf_net_tcp_opensocket(const perf_sockaddr_t* server, const perf_sockaddr_t* local, size_t bufsize)
 {
     struct perf__tcp_socket* tmp  = calloc(1, sizeof(struct perf__tcp_socket)); // clang scan-build
     struct perf_net_socket*  sock = (struct perf_net_socket*)tmp;
-
-    int ret, flags;
 
     if (!sock) {
         perf_log_fatal("perf_net_tcp_opensocket() out of memory");
@@ -197,57 +321,17 @@ struct perf_net_socket* perf_net_tcp_opensocket(const perf_sockaddr_t* server, c
     sock->close     = perf__tcp_close;
     sock->sockeq    = perf__tcp_sockeq;
     sock->sockready = perf__tcp_sockready;
+    sock->have_more = perf__tcp_have_more;
 
-    self->is_ready = true;
-
-    sock->fd = socket(server->sa.sa.sa_family, SOCK_STREAM, 0);
-    if (sock->fd == -1) {
-        char __s[256];
-        perf_log_fatal("socket: %s", perf_strerror_r(errno, __s, sizeof(__s)));
+    self->server  = *server;
+    self->local   = *local;
+    self->bufsize = bufsize;
+    if (self->bufsize > 0) {
+        self->bufsize *= 1024;
     }
 
-    if (server->sa.sa.sa_family == AF_INET6) {
-        int on = 1;
-
-        if (setsockopt(sock->fd, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on)) == -1) {
-            perf_log_warning("setsockopt(IPV6_V6ONLY) failed");
-        }
-    }
-
-    if (bind(sock->fd, &local->sa.sa, local->length) == -1) {
-        char __s[256];
-        perf_log_fatal("bind: %s", perf_strerror_r(errno, __s, sizeof(__s)));
-    }
-
-    if (bufsize > 0) {
-        bufsize *= 1024;
-
-        ret = setsockopt(sock->fd, SOL_SOCKET, SO_RCVBUF,
-            &bufsize, sizeof(bufsize));
-        if (ret < 0)
-            perf_log_warning("setsockbuf(SO_RCVBUF) failed");
-
-        ret = setsockopt(sock->fd, SOL_SOCKET, SO_SNDBUF,
-            &bufsize, sizeof(bufsize));
-        if (ret < 0)
-            perf_log_warning("setsockbuf(SO_SNDBUF) failed");
-    }
-
-    flags = fcntl(sock->fd, F_GETFL, 0);
-    if (flags < 0)
-        perf_log_fatal("fcntl(F_GETFL)");
-    ret = fcntl(sock->fd, F_SETFL, flags | O_NONBLOCK);
-    if (ret < 0)
-        perf_log_fatal("fcntl(F_SETFL)");
-
-    if (connect(sock->fd, &server->sa.sa, server->length)) {
-        if (errno == EINPROGRESS) {
-            self->is_ready = false;
-        } else {
-            char __s[256];
-            perf_log_fatal("connect() failed: %s", perf_strerror_r(errno, __s, sizeof(__s)));
-        }
-    }
+    sock->fd     = perf__tcp_connect(sock);
+    self->recvfd = sock->fd;
 
     return sock;
 }

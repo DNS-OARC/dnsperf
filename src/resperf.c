@@ -72,6 +72,7 @@ typedef perf_list(struct query_info) query_list;
 
 typedef struct query_info {
     uint64_t sent_timestamp;
+    bool     is_inprogress;
     /*
      * This link links the query into the list of outstanding
      * queries or the list of available query IDs.
@@ -474,7 +475,7 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
     qid  = (q - queries) / nsocks;
     sock = (q - queries) % nsocks;
 
-    if (socks[sock]->is_sending) {
+    while (q->is_inprogress) {
         if (perf_net_sockready(socks[sock], dummypipe[0], TIMEOUT_CHECK_TIME) == -1) {
             if (errno == EINPROGRESS) {
                 if (verbose) {
@@ -489,6 +490,7 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
             return (PERF_R_FAILURE);
         }
 
+        q->is_inprogress = false;
         perf_list_unlink(instanding_list, q);
         perf_list_prepend(outstanding_list, q);
         q->list = &outstanding_list;
@@ -510,7 +512,13 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
         }
         return (PERF_R_FAILURE);
     case -1:
-        perf_log_warning("failed to send packet: socket %d readiness check timed out", sock);
+        if (errno == EINPROGRESS) {
+            if (verbose) {
+                perf_log_warning("network congested, packet sending in progress");
+            }
+        } else {
+            perf_log_warning("failed to send packet: socket %d not ready", sock);
+        }
         return (PERF_R_FAILURE);
     default:
         break;
@@ -541,6 +549,7 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
             if (verbose) {
                 perf_log_warning("network congested, packet sending in progress");
             }
+            q->is_inprogress = true;
         } else {
             if (verbose) {
                 char __s[256];

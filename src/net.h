@@ -56,7 +56,17 @@ typedef ssize_t (*perf_net_recv_t)(struct perf_net_socket* sock, void* buf, size
 typedef ssize_t (*perf_net_sendto_t)(struct perf_net_socket* sock, const void* buf, size_t len, int flags, const struct sockaddr* dest_addr, socklen_t addrlen);
 typedef int (*perf_net_close_t)(struct perf_net_socket* sock);
 typedef int (*perf_net_sockeq_t)(struct perf_net_socket* sock, struct perf_net_socket* other);
+
+/* sockready return:
+ * -1: An error occurred, see errno
+ *   - EINPROGRESS: socket is still sending
+ * 0: Socket is not ready, may still be connecting or negotiating
+ * 1: Socket is ready and can be used for sending to
+ */
 typedef int (*perf_net_sockready_t)(struct perf_net_socket* sock, int pipe_fd, int64_t timeout);
+
+/* Indicates if there are more data to be read in buffers of the transport */
+typedef bool (*perf_net_have_more_t)(struct perf_net_socket* sock);
 
 struct perf_net_socket {
     enum perf_net_mode   mode;
@@ -65,10 +75,13 @@ struct perf_net_socket {
     perf_net_close_t     close;
     perf_net_sockeq_t    sockeq;
     perf_net_sockready_t sockready;
+    perf_net_have_more_t have_more;
 
-    int  fd;
-    bool is_sending; // indicate that the socket is still sending from buffers
-    bool have_more; // indicate that the socket has more bytes to process in its recieve buffers
+    /*
+     * The system file descriptor that is used for transport, this is used
+     * in os functions to poll/wait for read/write.
+     */
+    int fd;
 };
 
 static inline ssize_t perf_net_recv(struct perf_net_socket* sock, void* buf, size_t len, int flags)
@@ -97,6 +110,11 @@ static inline int perf_net_sockeq(struct perf_net_socket* sock_a, struct perf_ne
 static inline int perf_net_sockready(struct perf_net_socket* sock, int pipe_fd, int64_t timeout)
 {
     return sock->sockready(sock, pipe_fd, timeout);
+}
+
+static inline int perf_net_have_more(struct perf_net_socket* sock)
+{
+    return sock->have_more ? sock->have_more(sock) : false;
 }
 
 enum perf_net_mode perf_net_parsemode(const char* mode);

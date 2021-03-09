@@ -74,7 +74,7 @@ perf_os_waituntilanyreadable(struct perf_net_socket** socks, unsigned int nfds, 
     int           to, n;
 
     for (i = 0; i < nfds; i++) {
-        if (socks[i]->have_more)
+        if (perf_net_have_more(socks[i]))
             return (PERF_R_SUCCESS);
 
         fds[i].fd     = socks[i]->fd;

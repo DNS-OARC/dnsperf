@@ -1,6 +1,6 @@
 # dnsperf
 
-[![Build Status](https://travis-ci.com/DNS-OARC/dnsperf.svg?branch=develop)](https://travis-ci.com/DNS-OARC/dnsperf) [![Total alerts](https://img.shields.io/lgtm/alerts/g/DNS-OARC/dnsperf.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/DNS-OARC/dnsperf/alerts/) [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=dns-oarc%3Adnsperf&metric=bugs)](https://sonarcloud.io/dashboard?id=dns-oarc%3Adnsperf) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=dns-oarc%3Adnsperf&metric=security_rating)](https://sonarcloud.io/dashboard?id=dns-oarc%3Adnsperf)
+[![Total alerts](https://img.shields.io/lgtm/alerts/g/DNS-OARC/dnsperf.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/DNS-OARC/dnsperf/alerts/) [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=dns-oarc%3Adnsperf&metric=bugs)](https://sonarcloud.io/dashboard?id=dns-oarc%3Adnsperf) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=dns-oarc%3Adnsperf&metric=security_rating)](https://sonarcloud.io/dashboard?id=dns-oarc%3Adnsperf)
 
 `dnsperf` and `resperf` are free tools developed by Nominum/Akamai (2006-2018)
 and DNS-OARC (since 2019) that make it simple to gather accurate latency and
@@ -44,21 +44,22 @@ those queries to DNS servers to measure performance.
 environment with autoconf, automake, libtool and pkgconfig.
 
 - [OpenSSL](https://www.openssl.org/) - for TSIG support
+- [Concurrency Kit](http://concurrencykit.org/) - for atomic operations
 - [LDNS](https://nlnetlabs.nl/projects/ldns/about/) - optional for dynamic update support
 
 To install the dependencies under Debian/Ubuntu:
 ```
-apt-get install -y libssl-dev libldns-dev
+apt-get install -y libssl-dev libldns-dev libck-dev
 ```
 
 To install the dependencies under CentOS (with EPEL enabled):
 ```
-yum install -y openssl-devel ldns-devel
+yum install -y openssl-devel ldns-devel ck-devel
 ```
 
 To install the dependencies under FreeBSD 12+ using `pkg`:
 ```
-pkg install -y openssl ldns
+pkg install -y openssl ldns concurrencykit
 ```
 
 To install the dependencies under OpenBSD 6+ using `pkg_add`:
