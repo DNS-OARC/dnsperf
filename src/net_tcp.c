@@ -24,6 +24,7 @@
 #include "log.h"
 #include "strerror.h"
 #include "os.h"
+#include "util.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -50,6 +51,11 @@ struct perf__tcp_socket {
     size_t          bufsize;
 
     int recvfd;
+
+    uint16_t qid;
+
+    uint64_t            conn_ts;
+    perf_socket_event_t conn_event;
 };
 
 static int perf__tcp_connect(struct perf_net_socket* sock)
@@ -96,6 +102,7 @@ static int perf__tcp_connect(struct perf_net_socket* sock)
     if (ret < 0)
         perf_log_fatal("fcntl(F_SETFL)");
 
+    self->conn_ts = perf_get_time();
     if (connect(fd, &self->server.sa.sa, self->server.length)) {
         if (errno == EINPROGRESS) {
             self->is_ready = false;
@@ -167,21 +174,17 @@ static ssize_t perf__tcp_recv(struct perf_net_socket* sock, void* buf, size_t le
     return dnslen;
 }
 
-static ssize_t perf__tcp_sendto(struct perf_net_socket* sock, const void* buf, size_t len, int flags, const struct sockaddr* dest_addr, socklen_t addrlen)
+static ssize_t perf__tcp_sendto(struct perf_net_socket* sock, uint16_t qid, const void* buf, size_t len, int flags, const struct sockaddr* dest_addr, socklen_t addrlen)
 {
     size_t send = len < TCP_SEND_BUF_SIZE - 2 ? len : (TCP_SEND_BUF_SIZE - 2);
     // TODO: We only send what we can send, because we can't continue sending
     uint16_t dnslen = htons(send);
     ssize_t  n;
 
-    if (self->need_reconnect) {
-        errno = EINPROGRESS;
-        return -1;
-    }
-
     memcpy(self->sendbuf, &dnslen, 2);
     memcpy(self->sendbuf + 2, buf, send);
-    n = sendto(sock->fd, self->sendbuf, send + 2, flags, dest_addr, addrlen);
+    self->qid = qid;
+    n         = sendto(sock->fd, self->sendbuf, send + 2, flags, dest_addr, addrlen);
 
     if (n < 0) {
         switch (errno) {
@@ -265,6 +268,9 @@ static int perf__tcp_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
             }
             self->sending    = 0;
             self->is_sending = false;
+            if (sock->sent) {
+                sock->sent(sock, self->qid);
+            }
         }
         return 1;
     }
@@ -288,6 +294,10 @@ static int perf__tcp_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
             return -1;
         }
         self->is_ready = true;
+        if (sock->event) {
+            sock->event(sock, self->conn_event, perf_get_time() - self->conn_ts);
+            self->conn_event = perf_socket_event_reconnect;
+        }
         if (self->is_sending) {
             errno = EINPROGRESS;
             return -1;
@@ -329,6 +339,7 @@ struct perf_net_socket* perf_net_tcp_opensocket(const perf_sockaddr_t* server, c
     if (self->bufsize > 0) {
         self->bufsize *= 1024;
     }
+    self->conn_event = perf_socket_event_connect;
 
     sock->fd     = perf__tcp_connect(sock);
     self->recvfd = sock->fd;

@@ -73,6 +73,7 @@ typedef perf_list(struct query_info) query_list;
 typedef struct query_info {
     uint64_t sent_timestamp;
     bool     is_inprogress;
+
     /*
      * This link links the query into the list of outstanding
      * queries or the list of available query IDs.
@@ -144,6 +145,7 @@ static uint64_t num_queries_outstanding;
 static uint64_t num_responses_received;
 static uint64_t num_queries_timed_out;
 static uint64_t rcodecounts[16];
+static uint64_t num_reconnections;
 
 static uint64_t time_now;
 static uint64_t time_of_program_start;
@@ -165,6 +167,9 @@ typedef struct {
     int    responses;
     int    failures;
     double latency_sum;
+
+    int    connections;
+    double conn_latency_sum;
 } ramp_bucket;
 
 /* Pointer to array of n_buckets ramp_bucket structures */
@@ -205,6 +210,9 @@ stringify(double value, int precision)
     snprintf(buf, sizeof(buf), "%.*f", precision, value);
     return buf;
 }
+
+static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t event, uint64_t elapsed_time);
+static void perf__net_sent(struct perf_net_socket* sock, uint16_t qid);
 
 static void
 setup(int argc, char** argv)
@@ -346,6 +354,9 @@ setup(int argc, char** argv)
         if (!socks[i]) {
             perf_log_fatal("perf_net_opensocket(): no socket returned, out of memory?");
         }
+        socks[i]->data  = (void*)(intptr_t)i;
+        socks[i]->sent  = perf__net_sent;
+        socks[i]->event = perf__net_event;
     }
 }
 
@@ -377,6 +388,30 @@ find_bucket(uint64_t when)
     if (i > n_buckets - 1)
         i = n_buckets - 1;
     return &buckets[i];
+}
+
+static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t event, uint64_t elapsed_time)
+{
+    ramp_bucket* b = find_bucket(time_now);
+
+    switch (event) {
+    case perf_socket_event_reconnect:
+        num_reconnections++;
+    case perf_socket_event_connect:
+        b->connections++;
+        b->conn_latency_sum += elapsed_time / (double)MILLION;
+    }
+}
+
+static void perf__net_sent(struct perf_net_socket* sock, uint16_t qid)
+{
+    ramp_bucket* b       = find_bucket(time_now);
+
+    b->queries++;
+
+    size_t idx = (size_t)qid * nsocks + (intptr_t)sock->data;
+    assert(idx < max_outstanding);
+    queries[idx].sent_timestamp = time_now;
 }
 
 /*
@@ -414,6 +449,7 @@ print_statistics(void)
             (rcodecounts[i] * 100.0) / num_responses_received);
     }
     printf("\n");
+    printf("  Reconnection(s):      %" PRIu64 "\n", num_reconnections);
     printf("  Run time (s):         %u.%06u\n",
         (unsigned int)(run_time / MILLION),
         (unsigned int)(run_time % MILLION));
@@ -484,7 +520,7 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
             } else {
                 if (verbose) {
                     char __s[256];
-                    perf_log_warning("failed to send packet: %s", perf_strerror_r(errno, __s, sizeof(__s)));
+                    perf_log_warning("failed to check socket readiness: %s", perf_strerror_r(errno, __s, sizeof(__s)));
                 }
             }
             return (PERF_R_FAILURE);
@@ -542,7 +578,7 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
 
     base   = perf_buffer_base(msg);
     length = perf_buffer_usedlength(msg);
-    if (perf_net_sendto(socks[sock], base, length, 0,
+    if (perf_net_sendto(socks[sock], qid, base, length, 0,
             &server_addr.sa.sa, server_addr.length)
         < 1) {
         if (errno == EINPROGRESS) {
@@ -603,6 +639,15 @@ try_process_response(unsigned int sockindex)
     double        latency;
     ramp_bucket*  b;
     int           n;
+
+    if (perf_net_sockready(socks[sockindex], dummypipe[0], TIMEOUT_CHECK_TIME) == -1) {
+        if (errno != EINPROGRESS) {
+            if (verbose) {
+                char __s[256];
+                perf_log_warning("failed to check socket readiness: %s", perf_strerror_r(errno, __s, sizeof(__s)));
+            }
+        }
+    }
 
     packet_header = (uint16_t*)packet_buffer;
     n             = perf_net_recv(socks[sockindex], packet_buffer, sizeof(packet_buffer), 0);
@@ -675,21 +720,6 @@ num_scheduled(uint64_t time_since_start)
     }
 }
 
-static void
-handle_sigpipe(int sig)
-{
-    (void)sig;
-    switch (mode) {
-    case sock_tcp:
-    case sock_dot:
-        // if connection is closed it will generate a signal
-        perf_log_fatal("SIGPIPE received, connection(s) likely closed, can't continue");
-        break;
-    default:
-        break;
-    }
-}
-
 int main(int argc, char** argv)
 {
     int           i;
@@ -715,7 +745,15 @@ int main(int argc, char** argv)
     if (pipe(dummypipe) < 0)
         perf_log_fatal("creating pipe");
 
-    perf_os_handlesignal(SIGPIPE, handle_sigpipe);
+    switch (mode) {
+    case sock_tcp:
+    case sock_dot:
+        // block SIGPIPE for TCP/DOT mode, if connection is closed it will generate a signal
+        perf_os_blocksignal(SIGPIPE, true);
+        break;
+    default:
+        break;
+    }
 
     perf_buffer_init(&lines, input_data, sizeof(input_data));
 
@@ -794,8 +832,8 @@ end_loop:
     }
 
     /* Print column headers */
-    fprintf(plotf, "# time target_qps actual_qps "
-                   "responses_per_sec failures_per_sec avg_latency\n");
+    fprintf(plotf, "# time target_qps actual_qps responses_per_sec failures_per_sec avg_latency"
+                   " connections conn_avg_latency\n");
 
     /* Don't print unused buckets */
     last_bucket_used = find_bucket(wait_phase_began) - buckets;
@@ -810,13 +848,18 @@ end_loop:
         double target_qps = t <= ramp_dtime ? (t / ramp_dtime) * max_qps : max_qps;
         double latency    = buckets[i].responses ? buckets[i].latency_sum / buckets[i].responses : 0;
         double interval   = bucket_interval / (double)MILLION;
-        fprintf(plotf, "%7.3f %8.2f %8.2f %8.2f %8.2f %8.6f\n",
+
+        double conn_latency = buckets[i].connections ? buckets[i].conn_latency_sum / buckets[i].connections : 0;
+
+        fprintf(plotf, "%7.3f %8.2f %8.2f %8.2f %8.2f %8.6f %8.2f %8.6f\n",
             t,
             target_qps,
-            buckets[i].queries / interval,
-            buckets[i].responses / interval,
-            buckets[i].failures / interval,
-            latency);
+            (double)buckets[i].queries / interval,
+            (double)buckets[i].responses / interval,
+            (double)buckets[i].failures / interval,
+            latency,
+            (double)buckets[i].connections / interval,
+            conn_latency);
     }
 
     fclose(plotf);

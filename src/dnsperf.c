@@ -111,6 +111,14 @@ typedef struct {
     uint64_t latency_sum_squares;
     uint64_t latency_min;
     uint64_t latency_max;
+
+    uint64_t num_conn_reconnect;
+    uint64_t num_conn_completed;
+
+    uint64_t conn_latency_sum;
+    uint64_t conn_latency_sum_squares;
+    uint64_t conn_latency_min;
+    uint64_t conn_latency_max;
 } stats_t;
 
 typedef perf_list(struct query_info) query_list;
@@ -315,6 +323,27 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats)
     }
 
     printf("\n");
+
+    if (!stats->num_conn_completed) {
+        return;
+    }
+
+    printf("Connection Statistics:\n\n");
+    printf("  Reconnections:        %" PRIu64 "\n\n", stats->num_conn_reconnect);
+    latency_avg = PERF_SAFE_DIV(stats->conn_latency_sum, stats->num_conn_completed);
+    printf("  Average Latency (s):  %u.%06u (min %u.%06u, max %u.%06u)\n",
+        (unsigned int)(latency_avg / MILLION),
+        (unsigned int)(latency_avg % MILLION),
+        (unsigned int)(stats->conn_latency_min / MILLION),
+        (unsigned int)(stats->conn_latency_min % MILLION),
+        (unsigned int)(stats->conn_latency_max / MILLION),
+        (unsigned int)(stats->conn_latency_max % MILLION));
+    if (stats->num_conn_completed > 1) {
+        printf("  Latency StdDev (s):   %f\n",
+            stddev(stats->conn_latency_sum_squares, stats->conn_latency_sum, stats->num_conn_completed) / MILLION);
+    }
+
+    printf("\n");
 }
 
 static void
@@ -344,6 +373,16 @@ sum_stats(const config_t* config, stats_t* total)
             total->latency_min = stats->latency_min;
         if (stats->latency_max > total->latency_max)
             total->latency_max = stats->latency_max;
+
+        total->num_conn_completed += stats->num_conn_completed;
+        total->num_conn_reconnect += stats->num_conn_reconnect;
+
+        total->conn_latency_sum += stats->conn_latency_sum;
+        total->conn_latency_sum_squares += stats->conn_latency_sum_squares;
+        if (stats->conn_latency_min < total->conn_latency_min || i == 0)
+            total->conn_latency_min = stats->conn_latency_min;
+        if (stats->conn_latency_max > total->conn_latency_max)
+            total->conn_latency_max = stats->conn_latency_max;
     }
 }
 
@@ -701,7 +740,7 @@ do_send(void* arg)
         }
         q->timestamp = now;
 
-        n = perf_net_sendto(q->sock, base, length, 0, &config->server_addr.sa.sa,
+        n = perf_net_sendto(q->sock, qid, base, length, 0, &config->server_addr.sa.sa,
             config->server_addr.length);
         if (n < 0) {
             if (errno == EINPROGRESS) {
@@ -1060,6 +1099,36 @@ per_thread(uint32_t total, uint32_t nthreads, unsigned int offset)
     return value;
 }
 
+static void perf__net_sent(struct perf_net_socket* sock, uint16_t qid)
+{
+    threadinfo_t* tinfo = (threadinfo_t*)sock->data;
+    query_info*   q;
+
+    q = &tinfo->queries[qid];
+    if (q->timestamp != UINT64_MAX) {
+        q->timestamp = perf_get_time();
+    }
+}
+
+static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t event, uint64_t elapsed_time)
+{
+    stats_t* stats = &((threadinfo_t*)sock->data)->stats;
+
+    switch (event) {
+    case perf_socket_event_reconnect:
+        stats->num_conn_reconnect++;
+    case perf_socket_event_connect:
+        stats->num_conn_completed++;
+
+        stats->conn_latency_sum += elapsed_time;
+        stats->conn_latency_sum_squares += (elapsed_time * elapsed_time);
+        if (elapsed_time < stats->conn_latency_min || stats->num_conn_completed == 1)
+            stats->conn_latency_min = elapsed_time;
+        if (elapsed_time > stats->conn_latency_max)
+            stats->conn_latency_max = elapsed_time;
+    }
+}
+
 static void
 threadinfo_init(threadinfo_t* tinfo, const config_t* config,
     const times_t* times)
@@ -1114,6 +1183,9 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
         if (!tinfo->socks[i]) {
             perf_log_fatal("perf_net_opensocket(): no socket returned, out of memory?");
         }
+        tinfo->socks[i]->data  = tinfo;
+        tinfo->socks[i]->sent  = perf__net_sent;
+        tinfo->socks[i]->event = perf__net_event;
     }
     tinfo->current_sock = 0;
 

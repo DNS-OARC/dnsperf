@@ -9,6 +9,7 @@ extraction:
         - pkg-config
         - libssl-dev
         - libldns-dev
+        - libck-dev
     configure:
       command:
         - ./autogen.sh
