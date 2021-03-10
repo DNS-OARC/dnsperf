@@ -41,7 +41,7 @@ static ssize_t perf__udp_recv(struct perf_net_socket* sock, void* buf, size_t le
     return recv(sock->fd, buf, len, flags);
 }
 
-static ssize_t perf__udp_sendto(struct perf_net_socket* sock, const void* buf, size_t len, int flags, const struct sockaddr* dest_addr, socklen_t addrlen)
+static ssize_t perf__udp_sendto(struct perf_net_socket* sock, uint16_t qid, const void* buf, size_t len, int flags, const struct sockaddr* dest_addr, socklen_t addrlen)
 {
     return sendto(sock->fd, buf, len, flags, dest_addr, addrlen);
 }

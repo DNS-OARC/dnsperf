@@ -50,6 +50,11 @@ struct perf__dot_socket {
 
     perf_sockaddr_t server, local;
     size_t          bufsize;
+
+    uint16_t qid;
+
+    uint64_t            conn_ts;
+    perf_socket_event_t conn_event;
 };
 
 static void perf__dot_connect(struct perf_net_socket* sock)
@@ -107,6 +112,7 @@ static void perf__dot_connect(struct perf_net_socket* sock)
     if (ret < 0)
         perf_log_fatal("fcntl(F_SETFL)");
 
+    self->conn_ts = perf_get_time();
     if (connect(sock->fd, &self->server.sa.sa, self->server.length)) {
         if (errno == EINPROGRESS) {
             self->is_ready = false;
@@ -120,10 +126,12 @@ static void perf__dot_connect(struct perf_net_socket* sock)
 static void perf__dot_reconnect(struct perf_net_socket* sock)
 {
     close(sock->fd);
-    self->have_more     = false;
-    self->at            = 0;
-    self->sending       = 0;
-    self->is_sending    = false;
+    self->have_more = false;
+    self->at        = 0;
+    if (self->sending) {
+        self->sending    = 0;
+        self->is_sending = false;
+    }
     self->is_conn_ready = false;
     perf__dot_connect(sock);
 }
@@ -205,15 +213,12 @@ static ssize_t perf__dot_recv(struct perf_net_socket* sock, void* buf, size_t le
     return dnslen;
 }
 
-static ssize_t perf__dot_sendto(struct perf_net_socket* sock, const void* buf, size_t len, int flags, const struct sockaddr* dest_addr, socklen_t addrlen)
+static ssize_t perf__dot_sendto(struct perf_net_socket* sock, uint16_t qid, const void* buf, size_t len, int flags, const struct sockaddr* dest_addr, socklen_t addrlen)
 {
     size_t send = len < TCP_SEND_BUF_SIZE - 2 ? len : (TCP_SEND_BUF_SIZE - 2);
     // TODO: We only send what we can send, because we can't continue sending
     uint16_t dnslen = htons(send);
     ssize_t  n;
-
-    memcpy(self->sendbuf, &dnslen, 2);
-    memcpy(self->sendbuf + 2, buf, send);
 
     PERF_LOCK(&self->lock);
     if (!self->is_ready) {
@@ -221,6 +226,11 @@ static ssize_t perf__dot_sendto(struct perf_net_socket* sock, const void* buf, s
         errno = EAGAIN;
         return -1;
     }
+
+    memcpy(self->sendbuf, &dnslen, 2);
+    memcpy(self->sendbuf + 2, buf, send);
+    self->qid = qid;
+
     n = SSL_write(self->ssl, self->sendbuf, send + 2);
     if (n < 1) {
         switch (SSL_get_error(self->ssl, n)) {
@@ -260,7 +270,7 @@ static ssize_t perf__dot_sendto(struct perf_net_socket* sock, const void* buf, s
         self->sending    = n;
         self->is_sending = true;
         PERF_UNLOCK(&self->lock);
-        errno            = EINPROGRESS;
+        errno = EINPROGRESS;
         return -1;
     }
     PERF_UNLOCK(&self->lock);
@@ -288,7 +298,7 @@ static int perf__dot_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
     }
 
     if (self->is_ready) {
-        if (self->sending) {
+        if (self->is_sending) {
             uint16_t dnslen;
             ssize_t  n;
 
@@ -304,13 +314,7 @@ static int perf__dot_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
                     case ECONNRESET:
                     case ENOTCONN:
                     case EPIPE:
-                        if (self->sending) {
-                            perf__dot_reconnect(sock);
-                            self->sending    = 0;
-                            self->is_sending = false;
-                        } else {
-                            perf__dot_reconnect(sock);
-                        }
+                        perf__dot_reconnect(sock);
                         PERF_UNLOCK(&self->lock);
                         errno = EINPROGRESS;
                         return -1;
@@ -341,6 +345,9 @@ static int perf__dot_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
             }
             self->sending    = 0;
             self->is_sending = false;
+            if (sock->sent) {
+                sock->sent(sock, self->qid);
+            }
             return 1;
         }
         PERF_UNLOCK(&self->lock);
@@ -397,6 +404,10 @@ static int perf__dot_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
     }
     self->is_ready = true;
     PERF_UNLOCK(&self->lock);
+    if (sock->event) {
+        sock->event(sock, self->conn_event, perf_get_time() - self->conn_ts);
+        self->conn_event = perf_socket_event_reconnect;
+    }
     if (self->is_sending) {
         errno = EINPROGRESS;
         return -1;
@@ -432,6 +443,7 @@ struct perf_net_socket* perf_net_dot_opensocket(const perf_sockaddr_t* server, c
     if (self->bufsize > 0) {
         self->bufsize *= 1024;
     }
+    self->conn_event = perf_socket_event_connect;
     PERF_MUTEX_INIT(&self->lock);
 
     if (!ssl_ctx) {
