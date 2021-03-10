@@ -22,6 +22,7 @@ resperf \- test the resolution performance of a caching DNS server
 .ad l
 \fBresperf\-report\fR\ [\fB\-a\ \fIlocal_addr\fB\fR]
 [\fB\-d\ \fIdatafile\fB\fR]
+[\fB\-R\fR]
 [\fB\-M\ \fImode\fB\fR]
 [\fB\-s\ \fIserver_addr\fB\fR]
 [\fB\-p\ \fIport\fB\fR]
@@ -40,7 +41,9 @@ resperf \- test the resolution performance of a caching DNS server
 [\fB\-L\ \fImax_loss\fB\fR]
 [\fB\-C\ \fIclients\fB\fR]
 [\fB\-q\ \fImax_outstanding\fB\fR]
+[\fB\-F\ \fIfall_behind\fB\fR]
 [\fB\-v\fR]
+[\fB\-W\fR]
 .ad
 .hy
 .hy 0
@@ -48,6 +51,7 @@ resperf \- test the resolution performance of a caching DNS server
 
 \fBresperf\fR\ [\fB\-a\ \fIlocal_addr\fB\fR]
 [\fB\-d\ \fIdatafile\fB\fR]
+[\fB\-R\fR]
 [\fB\-M\ \fImode\fB\fR]
 [\fB\-s\ \fIserver_addr\fB\fR]
 [\fB\-p\ \fIport\fB\fR]
@@ -67,7 +71,9 @@ resperf \- test the resolution performance of a caching DNS server
 [\fB\-L\ \fImax_loss\fB\fR]
 [\fB\-C\ \fIclients\fB\fR]
 [\fB\-q\ \fImax_outstanding\fB\fR]
+[\fB\-F\ \fIfall_behind\fB\fR]
 [\fB\-v\fR]
+[\fB\-W\fR]
 .ad
 .hy
 .SH DESCRIPTION
@@ -390,6 +396,13 @@ Specifies the input data file. If not specified, \fBresperf\fR will read
 from standard input.
 .RE
 
+\fB-R\fR
+.br
+.RS
+Reopen the datafile if it runs out of data before the testing is completed.
+This allows for long running tests on very small and simple query datafile.
+.RE
+
 \fB-M \fImode\fB\fR
 .br
 .RS
@@ -559,10 +572,26 @@ ramping up traffic when this many queries are outstanding. The default is
 64k, and the limit is 64k per client.
 .RE
 
+\fB-F \fIfall_behind\fB\fR
+.br
+.RS
+Sets the maximum number of queries that can fall behind being sent.
+\fBresperf\fR will stop when this many queries should have been sent and it
+can be relative easy to hit if \fImax_qps\fR is set too high.
+The default is 1000 and setting it to zero (0) disables the check.
+.RE
+
 \fB-v\fR
 .br
 .RS
 Enables verbose mode to report about network readiness and congestion.
+.RE
+
+\fB-W\fR
+.br
+.RS
+Log warnings and errors to standard output instead of standard error making
+it easier for script, test and automation to capture all output.
 .RE
 .SH "THE PLOT DATA FILE"
 The plot data file is written by the \fBresperf\fR program and contains the
@@ -621,6 +650,23 @@ length of the interval
 The average time between sending the query and receiving a response, for
 queries sent in this time interval
 .RE
+
+\fBConnections\fR
+.br
+.RS
+The number of connections done, including re-connections, during this time
+interval.
+This is only relevant to connection oriented protocols, such as TCP and DoT.
+.RE
+
+\fBAverage connection latency\fR
+.br
+.RS
+The average time between starting to connect and having the connection ready
+for sending queries to, for this time interval.
+This is only relevant to connection oriented protocols, such as TCP and DoT.
+.RE
+
 .SH "SEE ALSO"
 \fBdnsperf\fR(1)
 .SH AUTHOR

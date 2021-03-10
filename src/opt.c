@@ -214,6 +214,10 @@ void perf_opt_parse(int argc, char** argv)
             *opt->u.uintp = parse_uint(opt->desc, optarg,
                 1, 0xFFFFFFFF);
             break;
+        case perf_opt_zpint:
+            *opt->u.uintp = parse_uint(opt->desc, optarg,
+                0, 0xFFFFFFFF);
+            break;
         case perf_opt_timeval:
             *opt->u.uint64p = parse_timeval(opt->desc, optarg);
             break;

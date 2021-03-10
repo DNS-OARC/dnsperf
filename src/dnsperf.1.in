@@ -41,6 +41,7 @@ dnsperf \- test the performance of a DNS server
 [\fB\-T\ \fIthreads\fB\fR]
 [\fB\-u\fR]
 [\fB\-v\fR]
+[\fB\-W\fR]
 [\fB\-x\ \fIlocal_port\fB\fR]
 [\fB\-y\ \fI[alg:]name:secret\fB\fR]
 .ad
@@ -318,6 +319,13 @@ query times out, it will be reported with the special string "T" instead of
 a normal DNS RCODE. If a query is interrupted, it will be reported with the
 special string "I". Additional information regarding network readiness and
 congestion will also be reported.
+.RE
+
+\fB-W\fR
+.br
+.RS
+Log warnings and errors to standard output instead of standard error making
+it easier for script, test and automation to capture all output.
 .RE
 
 \fB-x \fIlocal_port\fB\fR

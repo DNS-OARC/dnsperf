@@ -23,7 +23,8 @@
 typedef enum {
     perf_opt_string,
     perf_opt_boolean,
-    perf_opt_uint,
+    perf_opt_uint, // can not be zero
+    perf_opt_zpint, // zero or positive
     perf_opt_timeval,
     perf_opt_double,
     perf_opt_port,
