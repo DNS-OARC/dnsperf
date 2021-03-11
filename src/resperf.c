@@ -58,6 +58,7 @@
 #define DEFAULT_SOCKET_BUFFER 32
 #define DEFAULT_TIMEOUT 45
 #define DEFAULT_MAX_OUTSTANDING (64 * 1024)
+#define DEFAULT_MAX_FALL_BEHIND 1000
 
 #define MAX_INPUT_DATA (64 * 1024)
 
@@ -198,7 +199,8 @@ static uint64_t sustain_phase_began, wait_phase_began;
 
 static perf_tsigkey_t* tsigkey;
 
-static bool verbose;
+static bool         verbose;
+static unsigned int max_fall_behind;
 
 const char* progname = "resperf";
 
@@ -241,6 +243,7 @@ setup(int argc, char** argv)
     nsocks          = 1;
     mode            = sock_udp;
     verbose         = false;
+    max_fall_behind = DEFAULT_MAX_FALL_BEHIND;
 
     perf_opt_add('f', perf_opt_string, "family",
         "address family of DNS transport, inet or inet6", "any",
@@ -289,7 +292,7 @@ setup(int argc, char** argv)
         "the maximum acceptable query loss, in percent",
         stringify(max_loss_percent, 0), &max_loss_percent);
     perf_opt_add('C', perf_opt_uint, "clients",
-        "the number of clients to act as", NULL, &nsocks);
+        "the number of clients to act as", stringify(1, 0), &nsocks);
     perf_opt_add('q', perf_opt_uint, "num_outstanding",
         "the maximum number of queries outstanding",
         stringify(DEFAULT_MAX_OUTSTANDING, 0), &max_outstanding);
@@ -298,6 +301,10 @@ setup(int argc, char** argv)
         NULL, &verbose);
     bool log_stdout = false;
     perf_opt_add('W', perf_opt_boolean, NULL, "log warnings and errors to stdout instead of stderr", NULL, &log_stdout);
+    bool reopen_datafile = false;
+    perf_opt_add('R', perf_opt_boolean, NULL, "reopen datafile on end, allow for infinit use of it", NULL, &reopen_datafile);
+    perf_opt_add('F', perf_opt_zpint, "fall_behind", "the maximum number of queries that is allowed to fall behind, zero to disable",
+        stringify(DEFAULT_MAX_FALL_BEHIND, 0), &max_fall_behind);
 
     perf_opt_parse(argc, argv);
 
@@ -339,6 +346,9 @@ setup(int argc, char** argv)
         local_port, &local_addr);
 
     input = perf_datafile_open(filename);
+    if (reopen_datafile) {
+        perf_datafile_setmaxruns(input, -1);
+    }
 
     if (dnssec)
         edns = true;
@@ -405,7 +415,7 @@ static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t ev
 
 static void perf__net_sent(struct perf_net_socket* sock, uint16_t qid)
 {
-    ramp_bucket* b       = find_bucket(time_now);
+    ramp_bucket* b = find_bucket(time_now);
 
     b->queries++;
 
@@ -777,7 +787,8 @@ int main(int argc, char** argv)
 
     printf("[Status] Sending\n");
 
-    current_sock = 0;
+    int try_responses = (max_qps / max_outstanding) + 1;
+    current_sock      = 0;
     for (;;) {
         int      should_send;
         uint64_t time_since_start = time_now - time_of_program_start;
@@ -797,7 +808,7 @@ int main(int argc, char** argv)
         }
         if (phase != PHASE_WAIT) {
             should_send = num_scheduled(time_since_start) - num_queries_sent;
-            if (should_send >= 1000) {
+            if (max_fall_behind && should_send >= max_fall_behind) {
                 printf("[Status] Fell behind by %d queries, "
                        "ending test at %.0f qps\n",
                     should_send, (max_qps * time_since_start) / ramp_time);
@@ -814,8 +825,11 @@ int main(int argc, char** argv)
                 }
             }
         }
-        try_process_response(current_sock++);
-        current_sock = current_sock % nsocks;
+        for (i = try_responses; i--;) {
+            try_process_response(current_sock++);
+            if (current_sock >= nsocks)
+                current_sock = 0;
+        }
         retire_old_queries();
         time_now = perf_get_time();
     }
