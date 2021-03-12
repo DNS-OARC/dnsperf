@@ -16,7 +16,7 @@
 # limitations under the License.
 
 AC_PREREQ(2.64)
-AC_INIT([dnsperf], [2.4.2], [admin@dns-oarc.net], [dnsperf], [https://github.com/DNS-OARC/dnsperf/issues])
+AC_INIT([dnsperf], [2.5.0], [admin@dns-oarc.net], [dnsperf], [https://github.com/DNS-OARC/dnsperf/issues])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 AC_CONFIG_SRCDIR([src/dnsperf.c])
 AC_CONFIG_HEADER([src/config.h])
@@ -62,6 +62,13 @@ PKG_CHECK_MODULES([libssl], [libssl])
 PKG_CHECK_MODULES([libcrypto], [libcrypto])
 AC_CHECK_LIB([ssl], [TLS_method],
   [AC_DEFINE([HAVE_TLS_METHOD], [1], [Define to 1 if you have the 'TLS_method' function])])
+PKG_CHECK_MODULES([ck], [ck >= 0], [
+  AS_VAR_APPEND([CFLAGS], [" $ck_CFLAGS"])
+  AS_VAR_APPEND([LIBS], [" $ck_LIBS"])
+], [
+  AC_CHECK_HEADERS([ck_ring.h ck_pr.h],, [AC_MSG_ERROR([libck headers not found])])
+  AC_CHECK_LIB([ck], [ck_array_init],, [AC_MSG_ERROR([libck not found])])
+])
 
 # Check for LDNS
 PKG_CHECK_MODULES([libldns], [libldns >= 1.7.0], [AC_DEFINE([HAVE_LDNS], [1], [Define to 1 if you have the LDNS library])], [

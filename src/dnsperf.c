@@ -51,8 +51,8 @@
 
 #define DEFAULT_SERVER_NAME "127.0.0.1"
 #define DEFAULT_SERVER_PORT 53
-#define DEFAULT_SERVER_TLS_PORT 853
-#define DEFAULT_SERVER_PORTS "udp/tcp 53 or dot/tls 853"
+#define DEFAULT_SERVER_DOT_PORT 853
+#define DEFAULT_SERVER_PORTS "udp/tcp 53 or DoT 853"
 #define DEFAULT_LOCAL_PORT 0
 #define DEFAULT_MAX_OUTSTANDING 100
 #define DEFAULT_TIMEOUT 5
@@ -111,6 +111,14 @@ typedef struct {
     uint64_t latency_sum_squares;
     uint64_t latency_min;
     uint64_t latency_max;
+
+    uint64_t num_conn_reconnect;
+    uint64_t num_conn_completed;
+
+    uint64_t conn_latency_sum;
+    uint64_t conn_latency_sum_squares;
+    uint64_t conn_latency_min;
+    uint64_t conn_latency_max;
 } stats_t;
 
 typedef perf_list(struct query_info) query_list;
@@ -140,9 +148,9 @@ typedef struct {
     pthread_mutex_t lock;
     pthread_cond_t  cond;
 
-    unsigned int            nsocks;
-    int                     current_sock;
-    struct perf_net_socket* socks;
+    unsigned int             nsocks;
+    int                      current_sock;
+    struct perf_net_socket** socks;
 
     bool     done_sending;
     uint64_t done_send_time;
@@ -194,8 +202,13 @@ print_initial_status(const config_t* config)
     printf("\n");
 
     perf_sockaddr_format(&config->server_addr, buf, sizeof(buf));
-    printf("[Status] Sending %s (to %s)\n",
-        config->updates ? "updates" : "queries", buf);
+    if (perf_sockaddr_isinet6(&config->server_addr)) {
+        printf("[Status] Sending %s (to [%s]:%d)\n",
+            config->updates ? "updates" : "queries", buf, perf_sockaddr_port(&config->server_addr));
+    } else {
+        printf("[Status] Sending %s (to %s:%d)\n",
+            config->updates ? "updates" : "queries", buf, perf_sockaddr_port(&config->server_addr));
+    }
 
     now = time(NULL);
     printf("[Status] Started at: %s", ctime_r(&now, ct));
@@ -310,6 +323,27 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats)
     }
 
     printf("\n");
+
+    if (!stats->num_conn_completed) {
+        return;
+    }
+
+    printf("Connection Statistics:\n\n");
+    printf("  Reconnections:        %" PRIu64 "\n\n", stats->num_conn_reconnect);
+    latency_avg = PERF_SAFE_DIV(stats->conn_latency_sum, stats->num_conn_completed);
+    printf("  Average Latency (s):  %u.%06u (min %u.%06u, max %u.%06u)\n",
+        (unsigned int)(latency_avg / MILLION),
+        (unsigned int)(latency_avg % MILLION),
+        (unsigned int)(stats->conn_latency_min / MILLION),
+        (unsigned int)(stats->conn_latency_min % MILLION),
+        (unsigned int)(stats->conn_latency_max / MILLION),
+        (unsigned int)(stats->conn_latency_max % MILLION));
+    if (stats->num_conn_completed > 1) {
+        printf("  Latency StdDev (s):   %f\n",
+            stddev(stats->conn_latency_sum_squares, stats->conn_latency_sum, stats->num_conn_completed) / MILLION);
+    }
+
+    printf("\n");
 }
 
 static void
@@ -339,6 +373,16 @@ sum_stats(const config_t* config, stats_t* total)
             total->latency_min = stats->latency_min;
         if (stats->latency_max > total->latency_max)
             total->latency_max = stats->latency_max;
+
+        total->num_conn_completed += stats->num_conn_completed;
+        total->num_conn_reconnect += stats->num_conn_reconnect;
+
+        total->conn_latency_sum += stats->conn_latency_sum;
+        total->conn_latency_sum_squares += stats->conn_latency_sum_squares;
+        if (stats->conn_latency_min < total->conn_latency_min || i == 0)
+            total->conn_latency_min = stats->conn_latency_min;
+        if (stats->conn_latency_max > total->conn_latency_max)
+            total->conn_latency_max = stats->conn_latency_max;
     }
 }
 
@@ -378,7 +422,7 @@ setup(int argc, char** argv, config_t* config)
     perf_opt_add('f', perf_opt_string, "family",
         "address family of DNS transport, inet or inet6", "any",
         &family);
-    perf_opt_add('m', perf_opt_string, "mode", "set transport mode: udp, tcp or dot/tls", "udp", &mode);
+    perf_opt_add('m', perf_opt_string, "mode", "set transport mode: udp, tcp or dot", "udp", &mode);
     perf_opt_add('s', perf_opt_string, "server_addr",
         "the server to query", DEFAULT_SERVER_NAME, &server_name);
     perf_opt_add('p', perf_opt_port, "port",
@@ -449,7 +493,7 @@ setup(int argc, char** argv, config_t* config)
         config->mode = perf_net_parsemode(mode);
 
     if (!server_port) {
-        server_port = config->mode == sock_tls ? DEFAULT_SERVER_TLS_PORT : DEFAULT_SERVER_PORT;
+        server_port = config->mode == sock_dot ? DEFAULT_SERVER_DOT_PORT : DEFAULT_SERVER_PORT;
     }
 
     if (family != NULL)
@@ -572,6 +616,7 @@ do_send(void* arg)
     unsigned int    length;
     int             n, i, any_inprogress = 0;
     perf_result_t   result;
+    bool            all_fail;
 
     tinfo           = (threadinfo_t*)arg;
     config          = tinfo->config;
@@ -618,15 +663,17 @@ do_send(void* arg)
         query_move(tinfo, q, prepend_outstanding);
         q->timestamp = UINT64_MAX;
 
-        i = tinfo->nsocks * 2;
+        i        = tinfo->nsocks * 2;
+        all_fail = true;
         while (i--) {
-            q->sock = &tinfo->socks[tinfo->current_sock++ % tinfo->nsocks];
+            q->sock = tinfo->socks[tinfo->current_sock++ % tinfo->nsocks];
             switch (perf_net_sockready(q->sock, threadpipe[0], TIMEOUT_CHECK_TIME)) {
             case 0:
                 if (config->verbose) {
                     perf_log_warning("socket %p not ready", q->sock);
                 }
-                q->sock = 0;
+                q->sock  = 0;
+                all_fail = false;
                 continue;
             case -1:
                 if (errno == EINPROGRESS) {
@@ -637,11 +684,18 @@ do_send(void* arg)
                 if (config->verbose) {
                     perf_log_warning("socket %p readiness check timed out", q->sock);
                 }
+                q->sock = 0;
+                continue;
             default:
                 break;
             }
+            all_fail = false;
             break;
         };
+
+        if (all_fail) {
+            perf_log_fatal("all sockets reported failure, can not continue");
+        }
 
         if (!q->sock) {
             query_move(tinfo, q, prepend_unused);
@@ -686,7 +740,7 @@ do_send(void* arg)
         }
         q->timestamp = now;
 
-        n = perf_net_sendto(q->sock, base, length, 0, &config->server_addr.sa.sa,
+        n = perf_net_sendto(q->sock, qid, base, length, 0, &config->server_addr.sa.sa,
             config->server_addr.length);
         if (n < 0) {
             if (errno == EINPROGRESS) {
@@ -719,7 +773,7 @@ do_send(void* arg)
     while (any_inprogress) {
         any_inprogress = 0;
         for (i = 0; i < tinfo->nsocks; i++) {
-            if (perf_net_sockready(&tinfo->socks[i], threadpipe[0], TIMEOUT_CHECK_TIME) == -1 && errno == EINPROGRESS) {
+            if (perf_net_sockready(tinfo->socks[i], threadpipe[0], TIMEOUT_CHECK_TIME) == -1 && errno == EINPROGRESS) {
                 any_inprogress = 1;
             }
         }
@@ -788,7 +842,7 @@ recv_one(threadinfo_t* tinfo, int which_sock,
 
     packet_header = (uint16_t*)packet_buffer;
 
-    n   = perf_net_recv(&tinfo->socks[which_sock], packet_buffer, packet_size, 0);
+    n   = perf_net_recv(tinfo->socks[which_sock], packet_buffer, packet_size, 0);
     now = perf_get_time();
     if (n < 0) {
         *saved_errnop = errno;
@@ -799,7 +853,7 @@ recv_one(threadinfo_t* tinfo, int which_sock,
         *saved_errnop = EAGAIN;
         return false;
     }
-    recvd->sock           = &tinfo->socks[which_sock];
+    recvd->sock           = tinfo->socks[which_sock];
     recvd->qid            = ntohs(packet_header[0]);
     recvd->rcode          = ntohs(packet_header[1]) & 0xF;
     recvd->size           = n;
@@ -1045,6 +1099,36 @@ per_thread(uint32_t total, uint32_t nthreads, unsigned int offset)
     return value;
 }
 
+static void perf__net_sent(struct perf_net_socket* sock, uint16_t qid)
+{
+    threadinfo_t* tinfo = (threadinfo_t*)sock->data;
+    query_info*   q;
+
+    q = &tinfo->queries[qid];
+    if (q->timestamp != UINT64_MAX) {
+        q->timestamp = perf_get_time();
+    }
+}
+
+static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t event, uint64_t elapsed_time)
+{
+    stats_t* stats = &((threadinfo_t*)sock->data)->stats;
+
+    switch (event) {
+    case perf_socket_event_reconnect:
+        stats->num_conn_reconnect++;
+    case perf_socket_event_connect:
+        stats->num_conn_completed++;
+
+        stats->conn_latency_sum += elapsed_time;
+        stats->conn_latency_sum_squares += (elapsed_time * elapsed_time);
+        if (elapsed_time < stats->conn_latency_min || stats->num_conn_completed == 1)
+            stats->conn_latency_min = elapsed_time;
+        if (elapsed_time > stats->conn_latency_max)
+            stats->conn_latency_max = elapsed_time;
+    }
+}
+
 static void
 threadinfo_init(threadinfo_t* tinfo, const config_t* config,
     const times_t* times)
@@ -1091,11 +1175,18 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
     socket_offset = 0;
     for (i = 0; i < offset; i++)
         socket_offset += threads[i].nsocks;
-    for (i = 0; i < tinfo->nsocks; i++)
+    for (i = 0; i < tinfo->nsocks; i++) {
         tinfo->socks[i] = perf_net_opensocket(config->mode, &config->server_addr,
             &config->local_addr,
             socket_offset++,
             config->bufsize);
+        if (!tinfo->socks[i]) {
+            perf_log_fatal("perf_net_opensocket(): no socket returned, out of memory?");
+        }
+        tinfo->socks[i]->data  = tinfo;
+        tinfo->socks[i]->sent  = perf__net_sent;
+        tinfo->socks[i]->event = perf__net_event;
+    }
     tinfo->current_sock = 0;
 
     PERF_THREAD(&tinfo->receiver, do_recv, tinfo);
@@ -1118,7 +1209,7 @@ threadinfo_cleanup(threadinfo_t* tinfo, times_t* times)
     if (interrupted)
         cancel_queries(tinfo);
     for (i = 0; i < tinfo->nsocks; i++)
-        perf_net_close(&tinfo->socks[i]);
+        perf_net_close(tinfo->socks[i]);
     if (tinfo->last_recv > times->end_time)
         times->end_time = tinfo->last_recv;
 }
@@ -1152,8 +1243,8 @@ int main(int argc, char** argv)
     perf_os_blocksignal(SIGINT, true);
     switch (config.mode) {
     case sock_tcp:
-    case sock_tls:
-        // block SIGPIPE for TCP/TLS mode, if connection is closed it will generate a signal
+    case sock_dot:
+        // block SIGPIPE for TCP/DOT mode, if connection is closed it will generate a signal
         perf_os_blocksignal(SIGPIPE, true);
         break;
     default:

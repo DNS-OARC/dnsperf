@@ -1,3 +1,61 @@
+dnsperf (2.5.0-1~unstable+1) unstable; urgency=low
+
+  * Release 2.5.0
+
+    This release adds re-connection support for TCP and DoT protocol,
+    new options to `resperf` and fixes a few bugs.
+
+    `dnsperf` and `resperf` will now try to re-connect when they lose a TCP
+    or DoT connection, and with that comes a few new statistics metrics.
+    For `dnsperf`, if a connection oriented protocol is used, it will now
+    show the total number of re-connections made and the connection latency.
+    For `resperf` it also shows the total number of re-connections made and
+    the gnuplot data now contains the total number of connections made and
+    the connection latency for each interval.
+    Beside re-connection support, improvements have been made when it comes
+    to tracking socket readiness while connections are established which
+    should generate less warnings about "socket not ready".
+
+    New `resperf` options:
+    - `-R`: Reopen the datafile if it runs out of data before the testing
+      is completed. This allows for long running tests on very small and
+      simple query datafile.
+    - `-F <fall_behind>`: Sets the maximum number of queries that can fall
+      behind being sent. `resperf` will stop when this many queries should
+      have been sent and it can be relative easy to hit if `-m <max_qps>`
+      is set too high.
+      The default is 1000 and setting it to zero (0) disables the check.
+
+    Bugfixes:
+    - Fixed port handling for host/network format when setting client side
+      port with `-x`
+    - Fix support for quoted characters, `\000` and `\.`, in domain names,
+      this was lost when removing BIND's internal development libraries
+    - Fix issue in `dnsperf`, it would loop forever if no connection could
+      be established
+    - Fix potential buffer overrun in `resperf` when using response id
+      for `queries[]`
+    - DoT: Fix bug when sending from buffer
+
+    Other changes:
+    - Always use `IPV6_V6ONLY` socket option for IPv6
+    - Add man-page on `-W` option added in v2.4.0
+    - Reformat man-pages
+    - `resperf`:
+      - Try and process more request each run to hopefully not hit max
+        outstanding so easy when high QPS
+      - Add default value to `-C` so it shows in help
+
+    9308361 man-page format
+    0e52fb4 man-page, opts, tuneups
+    e36211d stats
+    d9b9ba3 Response qid to index
+    2b2c37e fixes, reconnection
+    acd31e5 dname quote
+    de8f049 net
+
+ -- Jerry Lundström <lundstrom.jerry@gmail.com>  Fri, 12 Mar 2021 10:53:34 +0100
+
 dnsperf (2.4.2-1~unstable+1) unstable; urgency=low
 
   * Release 2.4.2
