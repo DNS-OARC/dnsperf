@@ -75,7 +75,7 @@ grep -q "Queries sent: *2" test2.out
 # TYPE test
 ../dnsperf -s $ip -d "$srcdir/datafile5" -n 1 -W >test2.out
 cat test2.out
-grep -q "Queries sent: *3" test2.out
+grep -q "Queries sent: *4" test2.out
 grep -q "Warning: invalid qtype: TYPE99999999" test2.out
 
 done # for ip
