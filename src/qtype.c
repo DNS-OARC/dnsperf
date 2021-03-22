@@ -75,7 +75,6 @@ const perf_qtype_t qtype_table[] = {
     { "NSEC3PARAM", 51 },
     { "TLSA", 52 },
     { "SMIMEA", 53 },
-    { "Unassigned", 54 },
     { "HIP", 55 },
     { "NINFO", 56 },
     { "RKEY", 57 },
@@ -104,7 +103,6 @@ const perf_qtype_t qtype_table[] = {
     { "AXFR", 252 },
     { "MAILB", 253 },
     { "MAILA", 254 },
-    { "*", 255 },
     { "URI", 256 },
     { "CAA", 257 },
     { "AVC", 258 },
@@ -112,6 +110,5 @@ const perf_qtype_t qtype_table[] = {
     { "AMTRELAY", 260 },
     { "TA", 32768 },
     { "DLV", 32769 },
-    { "Reserved", 65535 },
     { 0, 0 }
 };
