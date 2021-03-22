@@ -103,6 +103,7 @@ const perf_qtype_t qtype_table[] = {
     { "AXFR", 252 },
     { "MAILB", 253 },
     { "MAILA", 254 },
+    { "ANY", 255 },
     { "URI", 256 },
     { "CAA", 257 },
     { "AVC", 258 },
