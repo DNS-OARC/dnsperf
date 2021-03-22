@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.5.0
+Version:        2.5.1
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -94,6 +94,16 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Mon Mar 22 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.5.1-1
+- Release 2.5.1
+  * This release re-adds support for TYPEnnn and ANY in the datafile, this
+    was missed during the removal of the dependency on BINDs development
+    libraries in v2.4.0.
+  * Also note that with v2.5.0, this software now depends on Concurrency
+    Kit (ck) for atomic operations.
+  * Commits:
+    924e6ea ANY
+    0a444c0 TYPEnnn
 * Fri Mar 12 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.5.0-1
 - Release 2.5.0
   * This release adds re-connection support for TCP and DoT protocol,

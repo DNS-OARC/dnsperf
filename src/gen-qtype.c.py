@@ -40,6 +40,10 @@ print("""/*
 const perf_qtype_t qtype_table[] = {""")
 
 for k, v in qtype.items():
+    if k == "Unassigned" or k == "Reserved":
+        continue
+    if k == "*":
+        k = "ANY"
     print("    { \"%s\", %d }," % (k, v))
 
 print("""    { 0, 0 }

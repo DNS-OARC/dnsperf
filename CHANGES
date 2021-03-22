@@ -1,3 +1,17 @@
+2020-03-22 Jerry Lundström
+
+    Release 2.5.1
+
+    This release re-adds support for TYPEnnn and ANY in the datafile, this
+    was missed during the removal of the dependency on BINDs development
+    libraries in v2.4.0.
+
+    Also note that with v2.5.0, this software now depends on Concurrency
+    Kit (ck) for atomic operations.
+
+    924e6ea ANY
+    0a444c0 TYPEnnn
+
 2021-03-12 Jerry Lundström
 
     Release 2.5.0
