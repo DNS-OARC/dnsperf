@@ -146,6 +146,17 @@ perf_result_t perf_qtype_fromstring(const char* str, size_t len, perf_buffer_t* 
 {
     const perf_qtype_t* q = qtype_table;
 
+    if (len > 4 && !strncasecmp(str, "TYPE", 4)) {
+        char*             endptr = 0;
+        unsigned long int u      = strtoul(str + 4, &endptr, 10);
+        if (endptr != str + len || u == ULONG_MAX || u > 65535) {
+            return PERF_R_FAILURE;
+        }
+
+        perf_buffer_putuint16(target, u);
+        return PERF_R_SUCCESS;
+    }
+
     while (q->type) {
         if (!strncasecmp(q->type, str, len)) {
             perf_buffer_putuint16(target, q->value);

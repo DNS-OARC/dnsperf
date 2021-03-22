@@ -6,4 +6,4 @@ CLEANFILES = test*.log test*.trs \
 TESTS = test1.sh test2.sh test3.sh test4.sh
 
 EXTRA_DIST = $(TESTS) \
-  datafile datafile2 updatefile datafile3 datafile4
+  datafile datafile2 updatefile datafile3 datafile4 datafile5
