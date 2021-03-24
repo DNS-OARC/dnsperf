@@ -676,11 +676,6 @@ do_send(void* arg)
                 all_fail = false;
                 continue;
             case -1:
-                if (errno == EINPROGRESS) {
-                    any_inprogress = 1;
-                    q->sock        = 0;
-                    continue;
-                }
                 if (config->verbose) {
                     perf_log_warning("socket %p readiness check timed out", q->sock);
                 }
@@ -773,7 +768,7 @@ do_send(void* arg)
     while (any_inprogress) {
         any_inprogress = 0;
         for (i = 0; i < tinfo->nsocks; i++) {
-            if (perf_net_sockready(tinfo->socks[i], threadpipe[0], TIMEOUT_CHECK_TIME) == -1 && errno == EINPROGRESS) {
+            if (!perf_net_sockready(tinfo->socks[i], threadpipe[0], TIMEOUT_CHECK_TIME)) {
                 any_inprogress = 1;
             }
         }
@@ -1115,9 +1110,8 @@ static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t ev
     stats_t* stats = &((threadinfo_t*)sock->data)->stats;
 
     switch (event) {
-    case perf_socket_event_reconnect:
-        stats->num_conn_reconnect++;
-    case perf_socket_event_connect:
+    case perf_socket_event_reconnected:
+    case perf_socket_event_connected:
         stats->num_conn_completed++;
 
         stats->conn_latency_sum += elapsed_time;
@@ -1126,6 +1120,14 @@ static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t ev
             stats->conn_latency_min = elapsed_time;
         if (elapsed_time > stats->conn_latency_max)
             stats->conn_latency_max = elapsed_time;
+        break;
+
+    case perf_socket_event_reconnecting:
+        stats->num_conn_reconnect++;
+        break;
+
+    default:
+        break;
     }
 }
 

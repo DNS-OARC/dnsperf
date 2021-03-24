@@ -58,9 +58,8 @@ typedef int (*perf_net_close_t)(struct perf_net_socket* sock);
 typedef int (*perf_net_sockeq_t)(struct perf_net_socket* sock, struct perf_net_socket* other);
 
 /* sockready return:
- * -1: An error occurred, see errno
- *   - EINPROGRESS: socket is still sending
- * 0: Socket is not ready, may still be connecting or negotiating
+ * -1: socket readiness timed out / canceled / interrupted or unknown error
+ * 0: Socket is not ready, may still be connecting, negotiating or sending
  * 1: Socket is ready and can be used for sending to
  */
 typedef int (*perf_net_sockready_t)(struct perf_net_socket* sock, int pipe_fd, int64_t timeout);
@@ -72,8 +71,10 @@ typedef bool (*perf_net_have_more_t)(struct perf_net_socket* sock);
 typedef void (*perf_net_sent_cb_t)(struct perf_net_socket* sock, uint16_t qid);
 
 typedef enum perf_socket_event {
-    perf_socket_event_connect,
-    perf_socket_event_reconnect
+    perf_socket_event_connecting,
+    perf_socket_event_connected,
+    perf_socket_event_reconnecting,
+    perf_socket_event_reconnected
 } perf_socket_event_t;
 /* Callback for socket events related to connection oriented protocols, for statistics */
 typedef void (*perf_net_event_cb_t)(struct perf_net_socket* sock, perf_socket_event_t event, uint64_t elapsed_time);

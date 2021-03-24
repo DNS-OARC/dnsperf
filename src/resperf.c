@@ -405,11 +405,18 @@ static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t ev
     ramp_bucket* b = find_bucket(time_now);
 
     switch (event) {
-    case perf_socket_event_reconnect:
-        num_reconnections++;
-    case perf_socket_event_connect:
+    case perf_socket_event_reconnected:
+    case perf_socket_event_connected:
         b->connections++;
         b->conn_latency_sum += elapsed_time / (double)MILLION;
+        break;
+
+    case perf_socket_event_reconnecting:
+        num_reconnections++;
+        break;
+
+    default:
+        break;
     }
 }
 
