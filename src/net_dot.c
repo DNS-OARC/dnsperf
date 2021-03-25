@@ -54,7 +54,7 @@ struct perf__dot_socket {
     uint16_t qid;
 
     uint64_t            conn_ts;
-    perf_socket_event_t conn_event;
+    perf_socket_event_t conn_event, conning_event;
 };
 
 static void perf__dot_connect(struct perf_net_socket* sock)
@@ -113,6 +113,10 @@ static void perf__dot_connect(struct perf_net_socket* sock)
         perf_log_fatal("fcntl(F_SETFL)");
 
     self->conn_ts = perf_get_time();
+    if (sock->event) {
+        sock->event(sock, self->conning_event, self->conn_ts);
+        self->conning_event = perf_socket_event_reconnecting;
+    }
     if (connect(sock->fd, &self->server.sa.sa, self->server.length)) {
         if (errno == EINPROGRESS) {
             self->is_ready = false;
@@ -221,15 +225,18 @@ static ssize_t perf__dot_sendto(struct perf_net_socket* sock, uint16_t qid, cons
     ssize_t  n;
 
     PERF_LOCK(&self->lock);
-    if (!self->is_ready) {
-        PERF_UNLOCK(&self->lock);
-        errno = EAGAIN;
-        return -1;
-    }
 
     memcpy(self->sendbuf, &dnslen, 2);
     memcpy(self->sendbuf + 2, buf, send);
     self->qid = qid;
+
+    if (!self->is_ready) {
+        self->is_sending = true;
+        self->sending    = 0;
+        PERF_UNLOCK(&self->lock);
+        errno = EINPROGRESS;
+        return -1;
+    }
 
     n = SSL_write(self->ssl, self->sendbuf, send + 2);
     if (n < 1) {
@@ -309,39 +316,25 @@ static int perf__dot_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
             if (n < 1) {
                 switch (SSL_get_error(self->ssl, n)) {
                 case SSL_ERROR_SYSCALL:
-                    switch (errno) {
-                    case ECONNREFUSED:
-                    case ECONNRESET:
-                    case ENOTCONN:
-                    case EPIPE:
-                        perf__dot_reconnect(sock);
-                        PERF_UNLOCK(&self->lock);
-                        errno = EINPROGRESS;
-                        return -1;
-                    default:
-                        break;
-                    }
+                    perf__dot_reconnect(sock);
                     PERF_UNLOCK(&self->lock);
-                    return -1;
+                    return 0;
                 case SSL_ERROR_WANT_READ:
                 case SSL_ERROR_WANT_WRITE:
                     PERF_UNLOCK(&self->lock);
-                    errno = EINPROGRESS;
-                    return -1;
+                    return 0;
                 default:
                     break;
                 }
                 perf_log_warning("SSL_write(): %s", ERR_error_string(SSL_get_error(self->ssl, n), 0));
-                errno = EBADF;
                 PERF_UNLOCK(&self->lock);
-                return -1;
+                return 0;
             }
             PERF_UNLOCK(&self->lock);
 
             self->sending += n;
             if (self->sending < dnslen + 2) {
-                errno = EINPROGRESS;
-                return -1;
+                return 0;
             }
             self->sending    = 0;
             self->is_sending = false;
@@ -373,8 +366,10 @@ static int perf__dot_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
                     PERF_UNLOCK(&self->lock);
                     return 0;
                 }
+                // unrecoverable error, reconnect
+                self->do_reconnect = true;
                 PERF_UNLOCK(&self->lock);
-                return -1;
+                return 0;
             }
             break;
         }
@@ -387,30 +382,31 @@ static int perf__dot_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
 
     int ret = SSL_connect(self->ssl);
     if (!ret) {
-        perf_log_warning("SSL_connect(): %s", ERR_error_string(SSL_get_error(self->ssl, ret), 0));
-        PERF_UNLOCK(&self->lock);
-        return -1;
-    }
-    if (ret < 0) {
-        int err = SSL_get_error(self->ssl, ret);
-        if (err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE) {
-            PERF_UNLOCK(&self->lock);
-            return 0;
-        }
+        // unrecoverable error, reconnect
         self->do_reconnect = true;
         PERF_UNLOCK(&self->lock);
-        perf_log_warning("SSL_connect(): %s", ERR_error_string(err, 0));
-        return -1;
+        return 0;
+    }
+    if (ret < 0) {
+        switch (SSL_get_error(self->ssl, ret)) {
+        case SSL_ERROR_WANT_READ:
+        case SSL_ERROR_WANT_WRITE:
+            break;
+        default:
+            // unrecoverable error, reconnect
+            self->do_reconnect = true;
+        }
+        PERF_UNLOCK(&self->lock);
+        return 0;
     }
     self->is_ready = true;
     PERF_UNLOCK(&self->lock);
     if (sock->event) {
         sock->event(sock, self->conn_event, perf_get_time() - self->conn_ts);
-        self->conn_event = perf_socket_event_reconnect;
+        self->conn_event = perf_socket_event_reconnected;
     }
     if (self->is_sending) {
-        errno = EINPROGRESS;
-        return -1;
+        return 0;
     }
     return 1;
 }
@@ -443,7 +439,8 @@ struct perf_net_socket* perf_net_dot_opensocket(const perf_sockaddr_t* server, c
     if (self->bufsize > 0) {
         self->bufsize *= 1024;
     }
-    self->conn_event = perf_socket_event_connect;
+    self->conning_event = perf_socket_event_connecting;
+    self->conn_event    = perf_socket_event_connected;
     PERF_MUTEX_INIT(&self->lock);
 
     if (!ssl_ctx) {

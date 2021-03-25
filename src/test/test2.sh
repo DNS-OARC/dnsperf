@@ -88,15 +88,6 @@ pkill -KILL -u `id -u` dnsperf || true
 sleep 2
 pkill -KILL -u `id -u` dnsperf || true
 
-! echo "invalid" | ../dnsperf -s 127.66.66.66 -m tcp
-! echo "invalid invalid" | ../dnsperf -s 127.66.66.66 -m tcp
-echo "invalid" | ../dnsperf -u -s 127.66.66.66 -m tcp &
-sleep 2
-pkill -KILL -u `id -u` dnsperf || true
-echo "invalid\ninvalid" | ../dnsperf -u -s 127.66.66.66 -m tcp &
-sleep 2
-pkill -KILL -u `id -u` dnsperf || true
-
 ! echo "google.com A" \
   | ../dnsperf -W -s 1.1.1.1 -y tooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong:Ax42vsuHBjQOKlVHO8yU1zGuQ5hjeSz01LXiNze8pb8= \
   | grep "adding TSIG: invalid owner name"

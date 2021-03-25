@@ -44,3 +44,11 @@ echo "" | ../dnsperf -W -y test: | grep "unable to setup TSIG, secret empty"
 ! ../resperf -m 123.45 unexpected argument
 ! ../resperf -m 123..
 ! ../resperf -m 123a
+
+echo "invalid" | ../dnsperf -W | grep "invalid query input format: invalid"
+echo "invalid invalid" | ../dnsperf -W | grep "invalid qtype: invalid"
+if ! echo "invalid" | ../dnsperf -u -W | grep "Unable to dynamic update, support not built in"; then
+    echo "invalid" | ../dnsperf -u -W | grep "incomplete update: invalid"
+    echo -e "invalid\ninvalid" | ../dnsperf -u -W | grep "invalid update command: invalid"
+    echo -e "invalid\ninvalid" | ../dnsperf -u -W | grep "error processing update command: invalid"
+fi
