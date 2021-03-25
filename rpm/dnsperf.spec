@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.5.1
+Version:        2.5.2
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -94,6 +94,27 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Thu Mar 25 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.5.2-1
+- Release 2.5.2
+  * This release tweaks the reconnect code for TCP and DoT.
+  * For TCP, atomic operations are used to signal the need to reconnect
+    from the receiving thread to the sending, as the sending is the one in
+    charge of reconnecting.
+    This speeds up detection of connection lost which reduces the amount of
+    lost queries on a disconnect.
+  * This change does not affect DoT as much, as the SSL context shared
+    between the threads are protected by a mutex.
+    But a bug was found in `sendto()` for DoT that could drop a query if
+    the socket was busy sending.
+  * The connect and reconnect socket events has been split into connecting,
+    connected and reconnecting, reconnected. This is to report more correct
+    reconnect events when it comes to DoT, because the connection can be
+    lost while negotiating TLS.
+  * Lastly, additional tests has been added for the network code.
+  * Commits:
+    d9e5663 net test
+    22f49df network tests
+    8e5b56e reconnect
 * Mon Mar 22 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.5.1-1
 - Release 2.5.1
   * This release re-adds support for TYPEnnn and ANY in the datafile, this
