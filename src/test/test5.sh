@@ -28,5 +28,5 @@ if [ -n "$dumdumd" ]; then
     ../dnsperf -s 127.0.0.1 -p 5353 -d "$srcdir/datafile" -t 2 -l 10 -Q 100 -m dot
     kill "$pid"
 
-    pkill -9 dumdumd
+    pkill -9 dumdumd || true
 fi
