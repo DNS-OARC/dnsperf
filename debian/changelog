@@ -1,3 +1,33 @@
+dnsperf (2.5.2-1~unstable+1) unstable; urgency=low
+
+  * Release 2.5.2
+
+    This release tweaks the reconnect code for TCP and DoT.
+
+    For TCP, atomic operations are used to signal the need to reconnect
+    from the receiving thread to the sending, as the sending is the one in
+    charge of reconnecting.
+    This speeds up detection of connection lost which reduces the amount of
+    lost queries on a disconnect.
+
+    This change does not affect DoT as much, as the SSL context shared
+    between the threads are protected by a mutex.
+    But a bug was found in `sendto()` for DoT that could drop a query if
+    the socket was busy sending.
+
+    The connect and reconnect socket events has been split into connecting,
+    connected and reconnecting, reconnected. This is to report more correct
+    reconnect events when it comes to DoT, because the connection can be
+    lost while negotiating TLS.
+
+    Lastly, additional tests has been added for the network code.
+
+    d9e5663 net test
+    22f49df network tests
+    8e5b56e reconnect
+
+ -- Jerry Lundström <lundstrom.jerry@gmail.com>  Thu, 25 Mar 2021 13:18:38 +0100
+
 dnsperf (2.5.1-1~unstable+1) unstable; urgency=low
 
   * Release 2.5.1
