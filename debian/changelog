@@ -1,3 +1,15 @@
+dnsperf (2.6.0-1~unstable+1) unstable; urgency=low
+
+  * Release 2.6.0
+
+    This release adds EDNS options parameter `-E` to `resperf` and a script
+    for generating EDNS Client Subnet options (see `contrib/ecs-gen`).
+
+    d29d880 ECS opt
+    877f31e edns option
+
+ -- Jerry Lundström <lundstrom.jerry@gmail.com>  Mon, 31 May 2021 11:40:40 +0200
+
 dnsperf (2.5.2-1~unstable+1) unstable; urgency=low
 
   * Release 2.5.2
