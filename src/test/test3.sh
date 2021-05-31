@@ -37,6 +37,15 @@ echo "" | ../dnsperf -W -y test: | grep "unable to setup TSIG, secret empty"
 ../dnsperf -W -E a:aa | grep "invalid EDNS Option code 'a'"
 ../dnsperf -W -E 1:xx | grep "invalid EDNS Option hex value 'xx'"
 
+! ../resperf -e -E invalid
+! ../resperf -e -E 9999999:invalid
+! ../resperf -e -E 123:invalid
+! ../resperf -e -E 123:fa0
+../resperf -W -E a: | grep "invalid EDNS Option, value is empty"
+../resperf -W -E a:a | grep "invalid EDNS Option, value must hex string (even number of characters)"
+../resperf -W -E a:aa | grep "invalid EDNS Option code 'a'"
+../resperf -W -E 1:xx | grep "invalid EDNS Option hex value 'xx'"
+
 ! ../resperf -d does_not_exist
 ! ../resperf -r 0 -c 0
 ! ../resperf -f invalid

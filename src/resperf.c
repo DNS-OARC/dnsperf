@@ -103,6 +103,8 @@ static uint64_t query_timeout;
 static bool     edns;
 static bool     dnssec;
 
+static perf_ednsoption_t* edns_option = 0;
+
 static perf_datafile_t* input;
 
 /* The target traffic level at the end of the ramp-up */
@@ -229,7 +231,8 @@ setup(int argc, char** argv)
     int          sock_family;
     unsigned int bufsize;
     unsigned int i;
-    const char*  _mode = 0;
+    const char*  _mode           = 0;
+    const char*  edns_option_str = NULL;
 
     sock_family     = AF_UNSPEC;
     server_port     = 0;
@@ -270,6 +273,8 @@ setup(int argc, char** argv)
         &bufsize);
     perf_opt_add('e', perf_opt_boolean, NULL,
         "enable EDNS 0", NULL, &edns);
+    perf_opt_add('E', perf_opt_string, "code:value",
+        "send EDNS option", NULL, &edns_option_str);
     perf_opt_add('D', perf_opt_boolean, NULL,
         "set the DNSSEC OK bit (implies EDNS)", NULL, &dnssec);
     perf_opt_add('y', perf_opt_string, "[alg:]name:secret",
@@ -350,11 +355,14 @@ setup(int argc, char** argv)
         perf_datafile_setmaxruns(input, -1);
     }
 
-    if (dnssec)
+    if (dnssec || edns_option_str)
         edns = true;
 
     if (tsigkey_str != NULL)
         tsigkey = perf_tsig_parsekey(tsigkey_str);
+
+    if (edns_option_str != NULL)
+        edns_option = perf_edns_parseoption(edns_option_str);
 
     if (!(socks = calloc(nsocks, sizeof(*socks)))) {
         perf_log_fatal("out of memory");
@@ -380,6 +388,9 @@ cleanup(void)
         (void)perf_net_close(socks[i]);
     close(dummypipe[0]);
     close(dummypipe[1]);
+
+    if (edns_option)
+        perf_edns_destroyoption(&edns_option);
 }
 
 /* Find the ramp_bucket for queries sent at time "when" */
@@ -586,7 +597,7 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
     perf_buffer_clear(msg);
     result = perf_dns_buildrequest(&used, qid,
         edns, dnssec, false,
-        tsigkey, 0,
+        tsigkey, edns_option,
         msg);
     if (result != PERF_R_SUCCESS)
         return (result);
