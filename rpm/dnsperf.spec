@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.5.2
+Version:        2.6.0
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -94,6 +94,13 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Mon May 31 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.6.0-1
+- Release 2.6.0
+  * This release adds EDNS options parameter `-E` to `resperf` and a script
+    for generating EDNS Client Subnet options (see `contrib/ecs-gen`).
+  * Commits:
+    d29d880 ECS opt
+    877f31e edns option
 * Thu Mar 25 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.5.2-1
 - Release 2.5.2
   * This release tweaks the reconnect code for TCP and DoT.

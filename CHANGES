@@ -1,4 +1,14 @@
-2020-03-25 Jerry Lundström
+2021-05-31 Jerry Lundström
+
+    Release 2.6.0
+
+    This release adds EDNS options parameter `-E` to `resperf` and a script
+    for generating EDNS Client Subnet options (see `contrib/ecs-gen`).
+
+    d29d880 ECS opt
+    877f31e edns option
+
+2021-03-25 Jerry Lundström
 
     Release 2.5.2
 
@@ -26,7 +36,7 @@
     22f49df network tests
     8e5b56e reconnect
 
-2020-03-22 Jerry Lundström
+2021-03-22 Jerry Lundström
 
     Release 2.5.1
 
