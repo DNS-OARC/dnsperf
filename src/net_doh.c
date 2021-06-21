@@ -59,15 +59,15 @@ typedef struct {
   size_t authority_len;
   char *path;
   size_t path_len;
-  int32_t sid; // stream ID
-} http2_stream_data;
+  int32_t stream_id; // stream ID
+} perf__doh_http2_stream_data_t;
 
 typedef struct {
-    nghttp2_session*    session;
-    http2_stream_data*  stream_data;
+    nghttp2_session* session;
+    perf__doh_http2_stream_data_t* stream_data;
     uint32_t max_concurrent_streams;
-    uint32_t open_streams; // future use 
-} perf__doh_http2_ctx_t;
+    uint32_t open_streams; // for future use 
+} perf__doh_http2_session_data_t;
 
 struct perf__doh_socket {
     struct perf_net_socket base;
@@ -87,12 +87,23 @@ struct perf__doh_socket {
     uint64_t            conn_ts;
     perf_socket_event_t conn_event, conning_event;
 
-    perf__doh_http2_ctx_t* http2; // http2 context
+    perf__doh_http2_session_data_t* http2; // http2 session data
 };
+
+// TODO: alloc stream data
+// TODO: free stream data
+
+// TODO: alloc session data
+// TODO: free session data
+
+/* nghttp2 callbacks */
 
 static ssize_t _perf_on_http2_send(nghttp2_session* session, const uint8_t* data, size_t length, int flags, void* user_data)
 {
     // TODO:
+    perf__doh_http2_session_data_t *session_data = (perf__doh_http2_session_data_t *) user_data;
+    assert(session_data);
+
     return 0;
 }
 
@@ -104,7 +115,15 @@ static ssize_t _perf_on_http2_data_provider_read(nghttp2_session* session, int32
 
 static int _perf_on_http2_header(nghttp2_session* session, const nghttp2_frame* frame, const uint8_t* name, size_t namelen, const uint8_t* value, size_t valuelen, uint8_t flags, void* user_data)
 {
-    // TODO:
+    perf__doh_http2_session_data_t *session_data = (perf__doh_http2_session_data_t *) user_data;
+    switch (frame->hd.type) {
+    case NGHTTP2_HEADERS:
+        if (frame->headers.cat == NGHTTP2_HCAT_RESPONSE &&
+            session_data->stream_data->stream_id == frame->hd.stream_id) {
+            // TODO: 
+            break;
+        }
+    }
     return 0;
 }
 
@@ -137,7 +156,7 @@ int perf__doh_https2_init(struct perf__doh_socket* sock)
     nghttp2_session_callbacks* callbacks;
     nghttp2_option*            option;
   
-    self->http2 = calloc(1, sizeof(perf__doh_http2_ctx_t));
+    self->http2 = calloc(1, sizeof(perf__doh_http2_session_data_t));
     self->http2->max_concurrent_streams = DEFAULT_MAX_CONCURRENT_STREAMS;
 
     /* sets HTTP/2 callbacks */
@@ -162,6 +181,18 @@ int perf__doh_https2_init(struct perf__doh_socket* sock)
     }
 
     return ret;
+}
+
+static void perf__doh_send_connection_header(perf__doh_http2_session_data_t *session_data) {
+    nghttp2_settings_entry iv[1] = {
+        {NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, DEFAULT_MAX_CONCURRENT_STREAMS}};
+    int ret = -1;
+
+    ret = nghttp2_submit_settings(session_data->session, NGHTTP2_FLAG_NONE, iv,
+                               sizeof(iv) / sizeof(iv[0]));
+    if (ret != 0) {
+        perf_log_fatal("Could not submit https2 SETTINGS: %s", nghttp2_strerror(ret));
+    }
 }
 
 static void perf__doh_connect(struct perf_net_socket* sock)
@@ -511,11 +542,25 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
         return 0;
     }
     self->is_ready = true;
+
+    // TODO: verify negotiated proto -> should be h2
+    // init http/2 session
+    ret = perf__doh_https2_init(self);
+    if (ret < 0) {
+        // failed to initialise https2
+        PERF_UNLOCK(&self->lock);
+        return 0;
+    }
+    
+    // send connection header
+    perf__doh_send_connection_header(self->http2);
+
     PERF_UNLOCK(&self->lock);
     if (sock->event) {
         sock->event(sock, self->conn_event, perf_get_time() - self->conn_ts);
         self->conn_event = perf_socket_event_reconnected;
     }
+
     if (self->is_sending) {
         return 0;
     }
@@ -597,12 +642,6 @@ struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, c
     #endif // OPENSSL_VERSION_NUMBER >= 0x10002000L
     }
 
-    ret = perf__doh_https2_init(self);
-
-    if (ret < 0) {
-        perf_log_fatal("Unable to initialize the HTTPS2 connection");
-    }
-    
     perf__doh_connect(sock);
 
     return sock;
