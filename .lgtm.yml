@@ -10,6 +10,7 @@ extraction:
         - libssl-dev
         - libldns-dev
         - libck-dev
+        - libnghttp2-dev
     configure:
       command:
         - ./autogen.sh
