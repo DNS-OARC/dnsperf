@@ -527,6 +527,22 @@ static bool perf__doh_have_more(struct perf_net_socket* sock)
     return self->have_more;
 }
 
+#ifndef OPENSSL_NO_NEXTPROTONEG
+/* NPN TLS extension check */
+static int select_next_proto_cb(SSL *ssl, unsigned char **out,
+                                unsigned char *outlen, const unsigned char *in,
+                                unsigned int inlen, void *arg) {
+  (void)ssl;
+  (void)arg;
+
+  if (nghttp2_select_next_protocol(out, outlen, in, inlen) <= 0) {
+    perf_log_fatal("Server did not advertise %u", NGHTTP2_PROTO_VERSION_ID);
+  }
+
+  return SSL_TLSEXT_ERR_OK;
+}
+#endif /* !OPENSSL_NO_NEXTPROTONEG */
+
 struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, const perf_sockaddr_t* local, size_t bufsize)
 {
     struct perf__doh_socket* tmp  = calloc(1, sizeof(struct perf__doh_socket)); // clang scan-build
@@ -568,6 +584,13 @@ struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, c
         perf_log_fatal("DNS-over-HTTPS (DoH) is supported only over TLS 1.2+");
 #endif
         SSL_CTX_set_mode(ssl_ctx, SSL_MODE_ENABLE_PARTIAL_WRITE);
+        SSL_CTX_set_options(ssl_ctx,
+                      SSL_OP_ALL | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 |
+                          SSL_OP_NO_COMPRESSION |
+                          SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION);
+    #ifndef OPENSSL_NO_NEXTPROTONEG
+        SSL_CTX_set_next_proto_select_cb(ssl_ctx, select_next_proto_cb, NULL);
+    #endif /* !OPENSSL_NO_NEXTPROTONEG */
 
     #if OPENSSL_VERSION_NUMBER >= 0x10002000L
         SSL_CTX_set_alpn_protos(ssl_ctx, (const unsigned char *)"\x02h2", 3);
