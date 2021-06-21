@@ -77,6 +77,15 @@ PKG_CHECK_MODULES([libldns], [libldns >= 1.7.0], [AC_DEFINE([HAVE_LDNS], [1], [D
   ])
 ])
 
+# Check for nghttp2
+PKG_CHECK_MODULES([libnghttp2], [libnghttp2 >= 0], [
+  AS_VAR_APPEND([CFLAGS], [" $nghttp2_CFLAGS"])
+  AS_VAR_APPEND([LIBS], [" $nghttp2_LIBS"])
+], [
+  AC_CHECK_HEADERS([nghttp2.h],, [AC_MSG_ERROR([nghttp2 headers not found])])
+  AC_CHECK_LIB([nghttp2], [nghttp2_session],, [AC_MSG_ERROR([nghttp2 not found])])
+])
+
 # Output Makefiles
 AC_CONFIG_FILES([
   Makefile
