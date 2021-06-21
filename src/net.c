@@ -39,6 +39,8 @@ enum perf_net_mode perf_net_parsemode(const char* mode)
         return sock_tcp;
     } else if (!strcmp(mode, "tls") || !strcmp(mode, "dot")) {
         return sock_dot;
+    } else if (!strcmp(mode, "doh")) {
+        return sock_doh;
     }
 
     perf_log_warning("invalid socket mode");
@@ -214,6 +216,8 @@ struct perf_net_socket* perf_net_opensocket(enum perf_net_mode mode, const perf_
         return perf_net_tcp_opensocket(server, &tmp, bufsize);
     case sock_dot:
         return perf_net_dot_opensocket(server, &tmp, bufsize);
+    case sock_doh:
+        return perf_net_doh_opensocket(server, &tmp, bufsize);
     default:
         perf_log_fatal("perf_net_opensocket(): invalid mode");
     }
