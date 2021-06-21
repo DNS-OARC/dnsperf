@@ -18,8 +18,6 @@
  */
 
 #include "config.h"
-#include "perf_assert.h"
-
 #include "net.h"
 
 #include "log.h"
@@ -28,6 +26,7 @@
 #include "os.h"
 
 #include <errno.h>
+#include <assert.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <openssl/err.h>
@@ -129,10 +128,10 @@ static int _perf_on_http2_frame_recv(nghttp2_session* session, const nghttp2_fra
 
 int perf__doh_https2_init(struct perf__doh_socket* sock)
 {
-    mlassert(self, "socket is nil");
-    mlassert(self->ssl == NULL, "socket already has tls context");
-    mlassert(self->http2 == NULL, "socket already has http2 context");
-    mlassert(self->http2->session == NULL, "socket already has http2 session");
+    assert(self);
+    assert(self->ssl == NULL);
+    assert(self->http2 == NULL);
+    assert(self->http2->session == NULL);
 
     int                        ret = -1;
     nghttp2_session_callbacks* callbacks;
@@ -141,15 +140,15 @@ int perf__doh_https2_init(struct perf__doh_socket* sock)
     self->http2 = calloc(1, sizeof(perf__doh_http2_ctx_t));
     self->http2->max_concurrent_streams = DEFAULT_MAX_CONCURRENT_STREAMS;
 
-    /* HTTP/2 callbacks and client. */
-    lassert(nghttp2_session_callbacks_new(&callbacks) == 0, "out of memory");
+    /* sets HTTP/2 callbacks */
+    assert(nghttp2_session_callbacks_new(&callbacks) == 0);
     nghttp2_session_callbacks_set_send_callback(callbacks, _perf_on_http2_send);
     nghttp2_session_callbacks_set_on_header_callback(callbacks, _perf_on_http2_header);
     nghttp2_session_callbacks_set_on_data_chunk_recv_callback(callbacks, _perf_on_http2_data_recv);
     nghttp2_session_callbacks_set_on_frame_recv_callback(callbacks, _perf_on_http2_frame_recv);
     nghttp2_session_callbacks_set_on_stream_close_callback(callbacks, _perf_on_http2_stream_close);
 
-    lassert(nghttp2_option_new(&option) == 0, "out of memory");
+    assert(nghttp2_option_new(&option) != 0);
     nghttp2_option_set_peer_max_concurrent_streams(option, self->http2->max_concurrent_streams);
 
     ret = nghttp2_session_client_new2(&self->http2->session, callbacks, self, option);
