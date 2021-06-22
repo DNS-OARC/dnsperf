@@ -30,10 +30,11 @@ typedef enum {
     perf_opt_port,
 } perf_opttype_t;
 
-void perf_opt_add(char c, perf_opttype_t type, const char* desc, const char* help,
-    const char* defval, void* valp);
+void perf_opt_add(char c, perf_opttype_t type, const char* desc, const char* help, const char* defval, void* valp);
+void perf_long_opt_add(const char* name, perf_opttype_t type, const char* desc, const char* help, const char* defval, void* valp);
 
 void perf_opt_usage(void);
+void perf_long_opt_usage(void);
 
 void perf_opt_parse(int argc, char** argv);
 
