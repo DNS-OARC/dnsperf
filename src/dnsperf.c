@@ -486,9 +486,9 @@ setup(int argc, char** argv, config_t* config)
     perf_opt_add('v', perf_opt_boolean, NULL,
         "verbose: report each query and additional information to stdout",
         NULL, &config->verbose);
-    perf_opt_add('U', perf_opt_string, "doh_uri",
+    perf_long_opt_add("--doh-uri", perf_opt_string, "doh_uri",
         "DoH URI", DEFAULT_DOH_URI, &doh_uri);
-    perf_opt_add('M', perf_opt_string, "doh_method",
+    perf_long_opt_add("--doh-method", perf_opt_string, "doh_method",
         "DoH Method", DEFAULT_DOH_METHOD, &doh_method);
 
     bool log_stdout = false;
