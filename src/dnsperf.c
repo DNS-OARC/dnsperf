@@ -504,10 +504,16 @@ setup(int argc, char** argv, config_t* config)
         config->mode = perf_net_parsemode(mode);
 
     if (!server_port) {
-        if (config->mode == sock_doh) {
+        switch (config->mode) {
+        sock_doh: 
             server_port = DEFAULT_SERVER_DOH_PORT;
-        } else {
-            server_port = config->mode == sock_dot ? DEFAULT_SERVER_DOT_PORT : DEFAULT_SERVER_PORT;
+            break;
+        sock_dot: 
+            server_port = DEFAULT_SERVER_DOT_PORT;
+            break;
+        default:
+            server_port = DEFAULT_SERVER_PORT;
+            break;
         }
     }
 
