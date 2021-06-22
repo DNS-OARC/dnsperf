@@ -44,7 +44,7 @@ typedef struct {
     const char*    desc;
     const char*    help;
     const char*    defval;
-    char           defvalbuf[32];
+    char           defvalbuf[128];
     union {
         void*         valp;
         char**        stringp;
@@ -56,7 +56,28 @@ typedef struct {
     } u;
 } opt_t;
 
+typedef struct long_opt long_opt_t;
+struct long_opt {
+    long_opt_t*    next;
+    const char*    name;
+    perf_opttype_t type;
+    const char*    desc;
+    const char*    help;
+    const char*    defval;
+    char           defvalbuf[128];
+    union {
+        void*         valp;
+        char**        stringp;
+        bool*         boolp;
+        unsigned int* uintp;
+        uint64_t*     uint64p;
+        double*       doublep;
+        in_port_t*    portp;
+    } u;
+};
+
 static opt_t        opts[MAX_OPTS];
+static long_opt_t*  longopts = 0;
 static unsigned int nopts;
 static char         optstr[MAX_OPTS * 2 + 2 + 1] = { 0 };
 extern const char*  progname;
@@ -76,13 +97,13 @@ void perf_opt_add(char c, perf_opttype_t type, const char* desc, const char* hel
     opt->desc = desc;
     opt->help = help;
     if (defval != NULL) {
-        opt->defvalbuf[sizeof(opt->defvalbuf) - 1] = 0;
-        strncpy(opt->defvalbuf, defval, sizeof(opt->defvalbuf));
-        if (opt->defvalbuf[sizeof(opt->defvalbuf) - 1]) {
+        if (strlen(defval) > sizeof(opt->defvalbuf) - 1) {
             perf_log_fatal("perf_opt_add(): defval too large");
             return;
         }
-        opt->defval = opt->defvalbuf;
+        strncpy(opt->defvalbuf, defval, sizeof(opt->defvalbuf));
+        opt->defvalbuf[sizeof(opt->defvalbuf) - 1] = 0;
+        opt->defval                                = opt->defvalbuf;
     } else {
         opt->defval = NULL;
     }
@@ -92,6 +113,37 @@ void perf_opt_add(char c, perf_opttype_t type, const char* desc, const char* hel
     snprintf(newoptstr, sizeof(newoptstr), "%s%c%s", optstr, c, (type == perf_opt_boolean ? "" : ":"));
     memcpy(optstr, newoptstr, sizeof(optstr) - 1);
     optstr[sizeof(optstr) - 1] = 0;
+}
+
+void perf_long_opt_add(const char* name, perf_opttype_t type, const char* desc, const char* help, const char* defval, void* valp)
+{
+    long_opt_t* opt = calloc(1, sizeof(long_opt_t));
+
+    if (!opt) {
+        perf_log_fatal("perf_long_opt_add(): out of memory");
+        return;
+    }
+
+    opt->name = name;
+    opt->type = type;
+    opt->desc = desc;
+    opt->help = help;
+    if (defval != NULL) {
+        if (strlen(defval) > sizeof(opt->defvalbuf) - 1) {
+            perf_log_fatal("perf_opt_add(): defval too large");
+            free(opt); // fix clang scan-build
+            return;
+        }
+        strncpy(opt->defvalbuf, defval, sizeof(opt->defvalbuf));
+        opt->defvalbuf[sizeof(opt->defvalbuf) - 1] = 0;
+        opt->defval                                = opt->defvalbuf;
+    } else {
+        opt->defval = NULL;
+    }
+    opt->u.valp = valp;
+
+    opt->next = longopts;
+    longopts  = opt;
 }
 
 void perf_opt_usage(void)
@@ -181,6 +233,70 @@ parse_timeval(const char* desc, const char* str)
     return MILLION * parse_double(desc, str);
 }
 
+static int perf_opt_long_parse(char* optarg)
+{
+    ssize_t optlen;
+    char*   arg;
+
+    // TODO: Allow boolean not to have =/value
+    if (!(arg = strchr(optarg, '='))) {
+        return -1;
+    }
+    optlen = arg - optarg;
+    if (optlen < 1) {
+        return -1;
+    }
+    arg++;
+
+    long_opt_t* opt = longopts;
+    while (opt) {
+        if (!strncmp(optarg, opt->name, optlen)) {
+            switch (opt->type) {
+            case perf_opt_string:
+                *opt->u.stringp = arg;
+                break;
+            case perf_opt_boolean:
+                *opt->u.boolp = true;
+                break;
+            case perf_opt_uint:
+                *opt->u.uintp = parse_uint(opt->desc, arg, 1, 0xFFFFFFFF);
+                break;
+            case perf_opt_zpint:
+                *opt->u.uintp = parse_uint(opt->desc, arg, 0, 0xFFFFFFFF);
+                break;
+            case perf_opt_timeval:
+                *opt->u.uint64p = parse_timeval(opt->desc, arg);
+                break;
+            case perf_opt_double:
+                *opt->u.doublep = parse_double(opt->desc, arg);
+                break;
+            case perf_opt_port:
+                *opt->u.portp = parse_uint(opt->desc, arg, 0, 0xFFFF);
+                break;
+            }
+            return 0;
+        }
+        opt = opt->next;
+    }
+
+    return -1;
+}
+
+void perf_long_opt_usage(void)
+{
+    fprintf(stderr, "Usage: %s ... -O <name>=<value> ...\n\nAvailable long options:\n", progname);
+    long_opt_t* opt = longopts;
+    while (opt) {
+        fprintf(stderr, "  %s: %s", opt->name, opt->help);
+        if (opt->defval) {
+            fprintf(stderr, " (default: %s)", opt->defval);
+        }
+        fprintf(stderr, "\n");
+
+        opt = opt->next;
+    }
+}
+
 void perf_opt_parse(int argc, char** argv)
 {
     int          c;
@@ -188,6 +304,8 @@ void perf_opt_parse(int argc, char** argv)
     unsigned int i;
 
     perf_opt_add('h', perf_opt_boolean, NULL, "print this help", NULL, NULL);
+    perf_opt_add('H', perf_opt_boolean, NULL, "print long options help", NULL, NULL);
+    perf_opt_add('O', perf_opt_string, NULL, "set long options: <name>=<value>", NULL, NULL);
 
     while ((c = getopt(argc, argv, optstr)) != -1) {
         for (i = 0; i < nopts; i++) {
@@ -201,6 +319,18 @@ void perf_opt_parse(int argc, char** argv)
         if (c == 'h') {
             perf_opt_usage();
             exit(0);
+        }
+        if (c == 'H') {
+            perf_long_opt_usage();
+            exit(0);
+        }
+        if (c == 'O') {
+            if (perf_opt_long_parse(optarg)) {
+                fprintf(stderr, "invalid long option: %s\n", optarg);
+                perf_opt_usage();
+                exit(1);
+            }
+            continue;
         }
         opt = &opts[i];
         switch (opt->type) {
