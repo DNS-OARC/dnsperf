@@ -486,9 +486,9 @@ setup(int argc, char** argv, config_t* config)
     perf_opt_add('v', perf_opt_boolean, NULL,
         "verbose: report each query and additional information to stdout",
         NULL, &config->verbose);
-    perf_long_opt_add("--doh-uri", perf_opt_string, "doh_uri",
+    perf_long_opt_add("doh-uri", perf_opt_string, "doh_uri",
         "DoH URI", DEFAULT_DOH_URI, &doh_uri);
-    perf_long_opt_add("--doh-method", perf_opt_string, "doh_method",
+    perf_long_opt_add("doh-method", perf_opt_string, "doh_method",
         "DoH Method", DEFAULT_DOH_METHOD, &doh_method);
 
     bool log_stdout = false;
@@ -505,10 +505,10 @@ setup(int argc, char** argv, config_t* config)
 
     if (!server_port) {
         switch (config->mode) {
-        sock_doh: 
+        case sock_doh: 
             server_port = DEFAULT_SERVER_DOH_PORT;
             break;
-        sock_dot: 
+        case sock_dot: 
             server_port = DEFAULT_SERVER_DOT_PORT;
             break;
         default:
@@ -685,6 +685,7 @@ do_send(void* arg)
         q->timestamp = UINT64_MAX;
 
         i        = tinfo->nsocks * 2;
+        // TODO: debugx("do_send - i: %d", i);
         all_fail = true;
         while (i--) {
             q->sock = tinfo->socks[tinfo->current_sock++ % tinfo->nsocks];
