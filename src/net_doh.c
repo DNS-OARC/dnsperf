@@ -62,7 +62,7 @@ static SSL_CTX* ssl_ctx = 0;
 
 #define DNS_GET_REQUEST_VAR "dns="
 
-#define debug(format, args...) fprintf(stderr, format "\n", ##args)
+#define debugx(format, args...) fprintf(stderr, format "\n", ##args)
 
 typedef struct {
   const char *uri;
@@ -324,7 +324,7 @@ static void _submit_dns_query(struct perf_net_socket* sock, const void* buf, siz
 
     // TODO: optimise vvv
     const size_t path_len = strlen(self->http2->stream->path) + 
-                            sizeof(DNS_GET_REQUEST_VAR) +
+                            strlen(DNS_GET_REQUEST_VAR) +
                             ret;
 
     // TODO: check URI path len < MAX vvv
@@ -332,13 +332,13 @@ static void _submit_dns_query(struct perf_net_socket* sock, const void* buf, siz
     memcpy(full_path, self->http2->stream->path, strlen(self->http2->stream->path));
     memcpy(&full_path[strlen(self->http2->stream->path)], 
            DNS_GET_REQUEST_VAR,  
-           sizeof(DNS_GET_REQUEST_VAR) - 1);
-    memcpy(&full_path[strlen(self->http2->stream->path) + sizeof(DNS_GET_REQUEST_VAR)],
+           strlen(DNS_GET_REQUEST_VAR));
+    memcpy(&full_path[strlen(self->http2->stream->path) + strlen(DNS_GET_REQUEST_VAR)],
            base64_dns_msg,
            out_len // or out_len
            );
     fprintf(stderr, "|");
-    fwrite(full_path, 1, strlen(self->http2->stream->path) + sizeof(DNS_GET_REQUEST_VAR) + out_len, stderr);
+    fwrite(full_path, 1, strlen(self->http2->stream->path) + strlen(DNS_GET_REQUEST_VAR) + out_len, stderr);
     fprintf(stderr, "|\n");
     // TODO: optimise ^^^
 
@@ -346,7 +346,7 @@ static void _submit_dns_query(struct perf_net_socket* sock, const void* buf, siz
                                 MAKE_NV(":method", "GET"),
                                 MAKE_NV(":scheme", "https"),
                                 MAKE_NV_CS(":authority", self->http2->stream->authority),
-                                MAKE_NV_LEN(":path", full_path, strlen(self->http2->stream->path) + sizeof(DNS_GET_REQUEST_VAR) + out_len),
+                                MAKE_NV_LEN(":path", full_path, strlen(self->http2->stream->path) + strlen(DNS_GET_REQUEST_VAR) + out_len),
                                 MAKE_NV("accept", "application/dns-message"),
                                 MAKE_NV("user-agent", "nghttp2-dnsperf/" NGHTTP2_VERSION)};
     
@@ -457,7 +457,7 @@ static ssize_t _http2_send_cb(nghttp2_session* session,
         return NGHTTP2_ERR_CALLBACK_FAILURE;
     }
 
-    debug("SSL_write - len: %d", length);
+    debugx("SSL_write - len: %d", length);
 
     n = SSL_write(self->ssl, data, length);
     if (n < 1) {
@@ -571,6 +571,13 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
             debugx("END_STREAM");
             // TODO: read data -> do _chunk_recv_callback
             // TODO: hand over status back to calling routines
+        }
+        break;
+    case NGHTTP2_SETTINGS:
+        if (frame->hd.flags & NGHTTP2_FLAG_ACK) {
+            debugx("Settings ACK received\n");
+        } else {
+            debugx("Settings FRAME received\n");
         }
         break;
     case NGHTTP2_RST_STREAM:
@@ -824,7 +831,7 @@ static ssize_t perf__doh_sendto(struct perf_net_socket* sock, uint16_t qid, cons
     PERF_LOCK(&self->lock);
 
     self->qid = qid;
-    debug("sendto - is_ready: %d", self->is_ready);
+    debugx("sendto - is_ready: %d", self->is_ready);
     if (self->is_ready) {
         debugx("submit_dns_query");
         _submit_dns_query(sock, buf, len);
@@ -853,7 +860,7 @@ static int perf__doh_sockeq(struct perf_net_socket* sock_a, struct perf_net_sock
 
 static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_t timeout)
 {
-    debugx("sockready - pipe fd: %d, timeout: %d", pipe_fd, timeout);
+    // debugx("sockready - pipe fd: %d, timeout: %d", pipe_fd, timeout);
 
     PERF_LOCK(&self->lock);
 
