@@ -376,6 +376,7 @@ static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, 
                                 MAKE_NV("accept", "application/dns-message"),
                                 MAKE_NV("user-agent", "nghttp2-dnsperf/" NGHTTP2_VERSION)};
     
+    /* TODO: remove
     for (size_t i = 0; i < sizeof(hdrs) / sizeof(hdrs[0]); ++i) {
         fwrite(hdrs[i].name, 1, hdrs[i].namelen, stderr);
         fprintf(stderr, ": |");
@@ -383,6 +384,7 @@ static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, 
         fprintf(stderr, "|");
         fprintf(stderr, "\n");
     }
+    */
     
     stream_id = nghttp2_submit_request(self->http2->session,
                                         NULL,
@@ -542,15 +544,16 @@ static int _http2_header_cb(nghttp2_session* session, const nghttp2_frame* frame
 
     switch (frame->hd.type) {
     case NGHTTP2_HEADERS:
+        /* TODO: remove
         if (frame->headers.cat == NGHTTP2_HCAT_RESPONSE &&
             self->http2->stream->stream_id == frame->hd.stream_id) {
             fwrite(name, 1, namelen, stderr);
             fprintf(stderr, ": ");
             fwrite(value, 1, valuelen, stderr);
-            fprintf(stderr, "\n");
-            
-            break;
+            fprintf(stderr, "\n");        
         }
+        */
+       break;
     }
     return 0;
 }
@@ -584,6 +587,7 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
     // debugx("frame_recv_cb - type: %d, stream_id: %d", frame->hd.type, frame->hd.stream_id);
     switch (frame->hd.type) {
     case NGHTTP2_HEADERS:
+        /* TODO: remove
         if (frame->headers.cat == NGHTTP2_HCAT_RESPONSE) {
             const nghttp2_nv *nva = frame->headers.nva;
             if (nghttp2_session_get_stream_user_data(session, frame->hd.stream_id)) {
@@ -595,6 +599,7 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
                 }
             }
         }
+        */
         break;
     case NGHTTP2_DATA: 
         // debugx("DATA frame received - flags: %d", frame->hd.flags);
@@ -645,6 +650,7 @@ static int _http2_frame_send_cb(nghttp2_session* session, const nghttp2_frame* f
     switch (frame->hd.type) {
     case NGHTTP2_HEADERS:
         // debugx("headers cat: %d", frame->headers.cat);
+        /* TODO: remove
         if (frame->headers.cat == NGHTTP2_HCAT_RESPONSE ||
             frame->headers.cat == NGHTTP2_HCAT_REQUEST) {
             const nghttp2_nv *nva = frame->headers.nva;
@@ -657,11 +663,14 @@ static int _http2_frame_send_cb(nghttp2_session* session, const nghttp2_frame* f
                 }
             }
         }
+        */
         break;
     case NGHTTP2_SETTINGS:
-        debugx("frame_send: nghttp2_settings, stream_id: %d", frame->hd.stream_id);
+        // debugx("frame_send: nghttp2_settings, stream_id: %d", frame->hd.stream_id);
+        /* TODO: remove
         const nghttp2_nv *nva = frame->headers.nva;
         if (nghttp2_session_get_stream_user_data(session, frame->hd.stream_id)) {
+            
             for (size_t i = 0; i < frame->headers.nvlen; ++i) {
                 fwrite(nva[i].name, 1, nva[i].namelen, stderr);
                 fprintf(stderr, ": ");
@@ -669,6 +678,7 @@ static int _http2_frame_send_cb(nghttp2_session* session, const nghttp2_frame* f
                 fprintf(stderr, "\n");
             }
         }
+        */
         break;
 
     case NGHTTP2_RST_STREAM:
