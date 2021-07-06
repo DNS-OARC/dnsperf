@@ -40,7 +40,7 @@
 static SSL_CTX* ssl_ctx = 0;
 
 #define self ((struct perf__doh_socket*)sock)
-#define DEFAULT_MAX_CONCURRENT_STREAMS 1
+#define DEFAULT_MAX_CONCURRENT_STREAMS 100
 
 #define MAKE_NV(NAME, VALUE)                                                   \
   {                                                                            \
@@ -60,9 +60,13 @@ static SSL_CTX* ssl_ctx = 0;
         NGHTTP2_NV_FLAG_NONE                                                   \
   }
 
-#define DNS_GET_REQUEST_VAR "dns="
+#define DOH_TEMPLATE_URI_MAX_SIZE 1024
+#define DOH_METHOD_MAX_SIZE 16
 
-#define debugx(format, args...) fprintf(stderr, format "\n", ##args)
+#define DNS_GET_REQUEST_VAR "dns="
+#define DNS_MSG_MAX_SIZE 65535 // TODO: review TCP bufsize is only 16 x 1024
+
+#define debugx(format, args...) fprintf(stderr, "> " format "\n", ##args)
 
 typedef struct {
   const char *uri;
@@ -75,6 +79,10 @@ typedef struct {
     nghttp2_session* session;
     http2_stream_t* stream;
     uint32_t max_concurrent_streams;
+    bool settings_sent;
+    char dnsmsg[DNS_MSG_MAX_SIZE];
+    size_t dnsmsg_at;
+    bool dnsmsg_completed;
 } http2_session_t;
 
 struct perf__doh_socket {
@@ -84,7 +92,6 @@ struct perf__doh_socket {
     SSL*            ssl;
 
     char   recvbuf[TCP_RECV_BUF_SIZE], sendbuf[TCP_SEND_BUF_SIZE];
-    size_t recvbuf_at;
     size_t at, sending;
     bool   is_ready, is_conn_ready, have_more, is_sending, do_reconnect;
 
@@ -95,6 +102,9 @@ struct perf__doh_socket {
 
     uint64_t            conn_ts;
     perf_socket_event_t conn_event, conning_event;
+
+    uint8_t doh_uri[DOH_TEMPLATE_URI_MAX_SIZE];
+    uint8_t doh_method[DOH_METHOD_MAX_SIZE];
 
     http2_session_t* http2; // http2 session data
 };
@@ -199,13 +209,22 @@ static int parse_uri(struct URI *res, const char *uri) {
 }
 // --- ^^^ ----
 
-// use base64_{encode/decode} based on OpenSSL's EVP as
-// we already use it library
+// use base64_{encode/decode} based on OpenSSL's EVP
 
-int base64_encode(const uint8_t *in, const uint8_t len,
-                            uint8_t *out) {
-  int ret = EVP_EncodeBlock((unsigned char *) out, in, len);
-  return ret;
+int base64_encode(const uint8_t *in, 
+                  const uint8_t len,
+                  uint8_t *out) 
+{
+    int ret = EVP_EncodeBlock((unsigned char *) out, in, len);
+    return ret;
+}
+
+int base64_decode(const uint8_t *in, 
+                  const uint8_t len,
+                  uint8_t *out) 
+{
+    int ret = EVP_DecodeBlock((unsigned char *) out, in, len);
+    return ret;
 }
 
 // TODO: move
@@ -213,6 +232,7 @@ static void perf__doh_connect(struct perf_net_socket* sock)
 {
     int ret;
 
+    debugx("doh_connect - qid: %d", self->qid);
     self->is_ready = true;
 
     int fd = socket(self->server.sa.sa.sa_family, SOCK_STREAM, 0);
@@ -292,10 +312,7 @@ static void perf__doh_reconnect(struct perf_net_socket* sock)
     perf__doh_connect(sock);
 }
 
-// TODO: static void _build_dns_query_get(...)
-
-// TODO: separate GET + POST requests implementations
-static void _submit_dns_query(struct perf_net_socket* sock, const void* buf, size_t len)
+static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, size_t len)
 {
     int32_t stream_id;
     int ret = -1;
@@ -309,8 +326,6 @@ static void _submit_dns_query(struct perf_net_socket* sock, const void* buf, siz
     fwrite(buf, 1, len, stderr);
     fprintf(stderr, "\n");
 
-    debugx("encoding with base64 - out_len: %d", out_len);
-
     ret = base64_encode(buf, len, base64_dns_msg);
     if (ret < 0) {
         free(base64_dns_msg);
@@ -318,35 +333,53 @@ static void _submit_dns_query(struct perf_net_socket* sock, const void* buf, siz
         perf_log_fatal("base64_encode() failed");
     }
 
-    debugx("ret: %d", ret);
     base64_dns_msg[ret] = '\0';
-    debugx("base64_dns_msg: %s", base64_dns_msg);
 
-    // TODO: optimise vvv
+    fprintf(stderr, "base64: |%s|\n", base64_dns_msg);
+
+    // RFC8484 requires base64url (RFC4648)
+    // and Padding characters (=) for base64url MUST NOT be included.
+    // TODO: subst
+
+    uint8_t* base64url_dns_msg = NULL;
+    uint32_t base64url_dns_msg_len;
+
+    if (memcmp("==", base64_dns_msg + ret - 2, 2) == 0) {
+        base64url_dns_msg_len = ret - 2;
+        base64url_dns_msg = calloc(1, base64url_dns_msg_len);
+        memcpy(base64url_dns_msg, base64_dns_msg, base64url_dns_msg_len);
+    } else if (memcmp("=", base64_dns_msg + ret - 1, 1) == 0) {
+        base64url_dns_msg_len = ret - 1;
+        base64url_dns_msg = calloc(1, base64url_dns_msg_len);
+        memcpy(base64url_dns_msg, base64_dns_msg, base64url_dns_msg_len);
+    } else {
+        base64url_dns_msg_len = ret;
+        base64url_dns_msg = calloc(1, base64url_dns_msg_len);
+        memcpy(base64url_dns_msg, base64_dns_msg, base64url_dns_msg_len);
+
+    }
+
+    fprintf(stderr, "base64url: |%s|\n", base64url_dns_msg);
+    
     const size_t path_len = strlen(self->http2->stream->path) + 
-                            strlen(DNS_GET_REQUEST_VAR) +
-                            ret;
+                            sizeof(DNS_GET_REQUEST_VAR) - 1 +
+                            base64url_dns_msg_len;
 
-    // TODO: check URI path len < MAX vvv
     char full_path[path_len];
     memcpy(full_path, self->http2->stream->path, strlen(self->http2->stream->path));
     memcpy(&full_path[strlen(self->http2->stream->path)], 
            DNS_GET_REQUEST_VAR,  
-           strlen(DNS_GET_REQUEST_VAR));
-    memcpy(&full_path[strlen(self->http2->stream->path) + strlen(DNS_GET_REQUEST_VAR)],
-           base64_dns_msg,
-           out_len // or out_len
+           sizeof(DNS_GET_REQUEST_VAR) - 1);
+    memcpy(&full_path[strlen(self->http2->stream->path) + sizeof(DNS_GET_REQUEST_VAR) - 1],
+           base64url_dns_msg,
+           base64url_dns_msg_len
            );
-    fprintf(stderr, "|");
-    fwrite(full_path, 1, strlen(self->http2->stream->path) + strlen(DNS_GET_REQUEST_VAR) + out_len, stderr);
-    fprintf(stderr, "|\n");
-    // TODO: optimise ^^^
 
     const nghttp2_nv hdrs[] = {
                                 MAKE_NV(":method", "GET"),
                                 MAKE_NV(":scheme", "https"),
                                 MAKE_NV_CS(":authority", self->http2->stream->authority),
-                                MAKE_NV_LEN(":path", full_path, strlen(self->http2->stream->path) + strlen(DNS_GET_REQUEST_VAR) + out_len),
+                                MAKE_NV_LEN(":path", full_path, strlen(self->http2->stream->path) + sizeof(DNS_GET_REQUEST_VAR) - 1 + base64url_dns_msg_len),
                                 MAKE_NV("accept", "application/dns-message"),
                                 MAKE_NV("user-agent", "nghttp2-dnsperf/" NGHTTP2_VERSION)};
     
@@ -368,16 +401,29 @@ static void _submit_dns_query(struct perf_net_socket* sock, const void* buf, siz
         perf_log_fatal("Failed to submit HTTP2 request: %s", nghttp2_strerror(stream_id));
     }
 
-    debugx("_submit - stream_id: %d", stream_id);
     self->http2->stream->stream_id = stream_id;
+
+    debugx("qid: %d, stream_id: %d", self->qid, stream_id);
+
+    ret = nghttp2_session_send(self->http2->session);
+    if (ret < 0) {
+        perf_log_warning("nghttp2_session_send failed: %d", ret);
+        return -1;
+    }
+
+    return 0;
+}
+
+static int _submit_dns_query_post(struct perf_net_socket* sock, const void* buf, size_t len)
+{
+    return 0;
 }
 
 static http2_stream_t* http2_stream_init(struct URI* uri)
 {
     debugx("http2 stream init");
     http2_stream_t *stream_data = calloc(1, sizeof(http2_stream_t));
-    
-    // TODO: review parsing and authority part!
+
     stream_data->path = calloc(1, uri->pathlen + 1);
     memcpy(stream_data->path, uri->path, uri->pathlen);
     stream_data->path[uri->pathlen] = '\0';
@@ -385,7 +431,6 @@ static http2_stream_t* http2_stream_init(struct URI* uri)
     stream_data->authority = calloc(1, uri->hostportlen + 1);
     memcpy(stream_data->authority, uri->hostport, uri->hostportlen);
     stream_data->authority[uri->hostportlen] = '\0';
-    // TODO ^^
 
     return stream_data;
 }
@@ -399,7 +444,7 @@ static void http2_stream_free(http2_stream_t *stream_data) {
 http2_session_t* http2_session_init()
 {
     debugx("http2_session_init");
-    http2_session_t *session_data = malloc(sizeof(http2_session_t));
+    http2_session_t *session_data = calloc(1, sizeof(http2_session_t));
     memset(session_data, 0, sizeof(http2_session_t));
     return session_data;
 }
@@ -434,7 +479,7 @@ static ssize_t _http2_recv_cb(nghttp2_session* session,
                           void* user_data)
 {
     // TODO:
-    // debugx("recv_cb - stream_id: %d, len: %d", stream_id, len);
+    debugx("http2_recv_cb - len: %d", len);
     return 0;
 }
 
@@ -452,12 +497,9 @@ static ssize_t _http2_send_cb(nghttp2_session* session,
     (void)session;
     (void)flags;
 
-    debugx("send_cb - self->is_ready: %d", self->is_ready);
     if (!self->is_ready) {
         return NGHTTP2_ERR_CALLBACK_FAILURE;
     }
-
-    debugx("SSL_write - len: %d", length);
 
     n = SSL_write(self->ssl, data, length);
     if (n < 1) {
@@ -492,13 +534,13 @@ static ssize_t _http2_send_cb(nghttp2_session* session,
         return NGHTTP2_ERR_CALLBACK_FAILURE;
     }
 
-    debugx("SSL_write - written: %d", n);
     return n;
 }
 
 static ssize_t _http2_data_provider_read_cb(nghttp2_session* session, int32_t stream_id, uint8_t* buf, size_t length, uint32_t* data_flags, nghttp2_data_source* source, void* user_data)
 {
     // TODO:
+    debugx("provider_read_cb - len: %d, stream_id: %d", length, stream_id);
     return 0;
 }
 
@@ -507,7 +549,7 @@ static int _http2_header_cb(nghttp2_session* session, const nghttp2_frame* frame
     perf__doh_socket_t *sock = (perf__doh_socket_t *)user_data;
     (void)flags;
 
-    debugx("header_cb - type: %d", frame->hd.type);
+    // // debugx("header_cb - type: %d, session_id: %d", frame->hd.type, frame->hd.stream_id);
 
     switch (frame->hd.type) {
     case NGHTTP2_HEADERS:
@@ -529,10 +571,11 @@ static int _http2_stream_close_cb(nghttp2_session* session, int32_t stream_id, u
     (void)user_data;
 
     // TODO:
-    debugx("close_cb - stream_id: %d", stream_id);
+    // // debugx("close_cb - stream_id: %d", stream_id);
+    
     if (nghttp2_session_get_stream_user_data(session, stream_id)) {
-        debugx("http2 session closed - stream_id: %d, error_code: %d", 
-                stream_id, error_code);
+        // debugx("http2 session closed - stream_id: %d, error_code: %d", 
+        //        stream_id, error_code);
         int ret;
         ret = nghttp2_session_terminate_session(session, NGHTTP2_NO_ERROR);
 
@@ -549,7 +592,7 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
     perf__doh_socket_t *sock = (perf__doh_socket_t *)user_data;
 
     // TODO:
-    debugx("frame_recv_cb");
+    // debugx("frame_recv_cb - type: %d, stream_id: %d", frame->hd.type, frame->hd.stream_id);
     switch (frame->hd.type) {
     case NGHTTP2_HEADERS:
         if (frame->headers.cat == NGHTTP2_HCAT_RESPONSE) {
@@ -565,26 +608,40 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
         }
         break;
     case NGHTTP2_DATA: 
+        // debugx("DATA frame received - flags: %d", frame->hd.flags);
         // we are interested in DATA frame which will carry the DNS response
         // NGHTTP2_FLAG_END_STREAM indicates that we have the data in full
         if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
-            debugx("END_STREAM");
-            // TODO: read data -> do _chunk_recv_callback
-            // TODO: hand over status back to calling routines
+            // debugx("END_STREAM - copying to recvbuf\n");
+            if (self->http2->dnsmsg_at > TCP_RECV_BUF_SIZE) {
+                perf_log_warning("DNS response > TCP_RECV_BUF_SIZE");
+                break;
+            }
+
+            /*
+            fprintf(stderr, "dnsmsg: ");
+            fwrite(self->http2->dnsmsg, 1, self->http2->dnsmsg_at, stderr);
+            fprintf(stderr, "\n");
+            */
+
+            memset(self->http2->dnsmsg, 0, DNS_MSG_MAX_SIZE);
+            self->http2->dnsmsg_completed = true;
+            self->have_more = false;
         }
         break;
     case NGHTTP2_SETTINGS:
+        // TODO: check if we need to set remote settings (only first SETTINGs frame)
         if (frame->hd.flags & NGHTTP2_FLAG_ACK) {
-            debugx("Settings ACK received\n");
+            // debugx("Settings ACK received\n");
         } else {
-            debugx("Settings FRAME received\n");
+            // debugx("Settings FRAME received\n");
         }
         break;
     case NGHTTP2_RST_STREAM:
-        debugx(": RST_STREAM\n");
+        // debugx(": RST_STREAM\n");
         break;
     case NGHTTP2_GOAWAY:
-        debugx(": GOAWAY\n");
+        // debugx(": GOAWAY\n");
         break;
     }
     
@@ -595,10 +652,10 @@ static int _http2_frame_send_cb(nghttp2_session* session, const nghttp2_frame* f
 {
     (void)user_data;
     // TODO:
-    debugx("frame_send_cb - frame type: %d", frame->hd.type);
+    // debugx("frame_send_cb - frame type: %d, stream_id: %d", frame->hd.type, frame->hd.stream_id);
     switch (frame->hd.type) {
     case NGHTTP2_HEADERS:
-        debugx("headers cat: %d", frame->headers.cat);
+        // debugx("headers cat: %d", frame->headers.cat);
         if (frame->headers.cat == NGHTTP2_HCAT_RESPONSE ||
             frame->headers.cat == NGHTTP2_HCAT_REQUEST) {
             const nghttp2_nv *nva = frame->headers.nva;
@@ -613,23 +670,23 @@ static int _http2_frame_send_cb(nghttp2_session* session, const nghttp2_frame* f
         }
         break;
     case NGHTTP2_SETTINGS:
-        debugx("frame_send: nghttp2_settings");
-            const nghttp2_nv *nva = frame->headers.nva;
-            if (nghttp2_session_get_stream_user_data(session, frame->hd.stream_id)) {
-                for (size_t i = 0; i < frame->headers.nvlen; ++i) {
-                    fwrite(nva[i].name, 1, nva[i].namelen, stderr);
-                    fprintf(stderr, ": ");
-                    fwrite(nva[i].value, 1, nva[i].valuelen, stderr);
-                    fprintf(stderr, "\n");
-                }
+        debugx("frame_send: nghttp2_settings, stream_id: %d", frame->hd.stream_id);
+        const nghttp2_nv *nva = frame->headers.nva;
+        if (nghttp2_session_get_stream_user_data(session, frame->hd.stream_id)) {
+            for (size_t i = 0; i < frame->headers.nvlen; ++i) {
+                fwrite(nva[i].name, 1, nva[i].namelen, stderr);
+                fprintf(stderr, ": ");
+                fwrite(nva[i].value, 1, nva[i].valuelen, stderr);
+                fprintf(stderr, "\n");
             }
+        }
         break;
 
     case NGHTTP2_RST_STREAM:
-        debugx(": RST_STREAM\n");
+        // debugx(": RST_STREAM\n");
         break;
     case NGHTTP2_GOAWAY:
-        debugx(": GOAWAY\n");
+        // debugx(": GOAWAY\n");
         break;
     }
     
@@ -646,25 +703,21 @@ static int _http2_data_chunk_recv_cb(nghttp2_session* session,
     (void)flags;
 
     int ret;
-    debugx("data_chunk_recv_cb");
+    // debugx("data_chunk_recv_cb");
     if (nghttp2_session_get_stream_user_data(session, stream_id)) {
-        debugx("data_chunk length: %d\n", len);
-        fwrite(data, 1, len, stderr);
-        debugx("\n");
+        // debugx("data_chunk length: %d\n", len);
+        // fwrite(data, 1, len, stderr);
+        // debugx("\n");
 
-        if (self->recvbuf_at == 0) {
+        if (self->http2->dnsmsg_at == 0) {
             // TODO: upper boundary check
-            memcpy(self->recvbuf, data, len);
-            self->recvbuf_at = len;
+            memcpy(self->http2->dnsmsg, data, len);
+            self->http2->dnsmsg_at = len;
         } else {
             // TODO: boundary checks for self->recvbuf_at + len
-            memcpy(self->recvbuf + self->recvbuf_at, data, len);
-            self->recvbuf_at += len;
+            memcpy(self->http2->dnsmsg + self->http2->dnsmsg_at, data, len);
+            self->http2->dnsmsg_at += len;
         }
-        
-        fprintf(stderr, "response: ");
-        fwrite(self->recvbuf, 1, self->recvbuf_at, stderr);
-        fprintf(stderr, "\n");
     }
     
     // TODO: read incoming data and append to buf
@@ -673,6 +726,7 @@ static int _http2_data_chunk_recv_cb(nghttp2_session* session,
 
 static int _http2_init(struct perf__doh_socket* sock)
 {
+    debugx("_http2_init for qid: %d", sock->qid);
     // TODO: populate uri from upstream 
     const char* doh_uri = "https://doh.dnslify.com/dns-query?";
     struct URI uri;
@@ -717,30 +771,38 @@ static int _http2_init(struct perf__doh_socket* sock)
         self->http2 = NULL;
     }
 
-    // set recvbuf_at to zero: needed for callback data frame reads
-    self->recvbuf_at = 0;
+    memset(self->http2->dnsmsg, 0, DNS_MSG_MAX_SIZE);
+    self->http2->dnsmsg_at = 0;
+    self->http2->settings_sent = 0;
+    self->http2->dnsmsg_completed = false;
 
     return ret;
 }
 
-static void _http2_send_connection_header(http2_session_t *session_data) {
-    nghttp2_settings_entry iv[1] = {
-        {NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, DEFAULT_MAX_CONCURRENT_STREAMS}};
+static int _http2_send_settings(http2_session_t *session_data) {
+    nghttp2_settings_entry iv[] = {
+        {NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, DEFAULT_MAX_CONCURRENT_STREAMS},
+        {NGHTTP2_SETTINGS_ENABLE_PUSH, 0},
+        {NGHTTP2_SETTINGS_INITIAL_WINDOW_SIZE, 65535}
+    };
     int ret = -1;
 
     ret = nghttp2_submit_settings(session_data->session, NGHTTP2_FLAG_NONE, iv,
-                               sizeof(iv) / sizeof(iv[0]));
+                               sizeof(iv) / sizeof(*iv));
     if (ret != 0) {
-        perf_log_fatal("Could not submit https2 SETTINGS: %s", nghttp2_strerror(ret));
+        perf_log_warning("Could not submit https2 SETTINGS: %s", nghttp2_strerror(ret));
+        return ret;
     }
+
+     debugx("sent connection headers/settings");
+
+    return 0;
 }
 
 static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t len, int flags)
 {
     ssize_t n;
     ssize_t ret = 0;
-
-    // debugx("_recv - len: %d, have_more: %d, is_ready: %d", len, self->have_more, self->is_ready);
 
     // read TLS data here instead of nghttp2_recv_callback
     if (!self->have_more) {
@@ -792,53 +854,68 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
         }
     }
 
-    // TODO: the above SSL read op can be abstracted in the nghttp2 recv_callback? ^
-    debugx("recv - bytes read: %d", n);
-
     // make sure we can process data
     if (self->is_ready &&
         self->http2 != NULL) {
         // this will be processed by nghttp2 callbacks
         // self->recvbuf holds the payload
-        ret = nghttp2_session_mem_recv(self->http2->session, (uint8_t*)self->recvbuf, len);
-        debugx("nghttp2_mem_recv - ret: %d", ret);
+        PERF_LOCK(&self->lock);
+        ret = nghttp2_session_mem_recv(self->http2->session, 
+                                       (uint8_t*) self->recvbuf + (self->at - n), 
+                                       n);
+ 
+        memset(self->recvbuf, 0, len);
+    
         if (ret < 0) {
-            perf_log_printf("nghttp2_session_mem_recv failed: %s", 
+            perf_log_warning("nghttp2_session_mem_recv failed: %s", 
                             nghttp2_strerror((int) ret));
+
             http2_session_free(sock);       
             return -1;
         }
 
-        // need to execute send if the receive triggered data frames
-        // http2_send
+        // need to execute nghttp2_session_send if the receive ops triggered data frames 
         ret = nghttp2_session_send(self->http2->session);
-        if (ret != 0) {
+        if (ret < 0) {
             http2_session_free(sock);
+            PERF_UNLOCK(&self->lock);
             return -1;
         }
+
+        PERF_UNLOCK(&self->lock);
     }
     
+    PERF_LOCK(&self->lock);
 
-    self->have_more = false;
-    return n;
+    if (self->http2 &&
+        self->http2->dnsmsg_completed) {
+        // debugx("copying to recv buf - len: %d", self->http2->dnsmsg_at);
+        memcpy(buf, self->http2->dnsmsg, self->http2->dnsmsg_at);
+        PERF_UNLOCK(&self->lock);
+        return self->http2->dnsmsg_at;
+    } else {
+        PERF_UNLOCK(&self->lock);
+        errno = EAGAIN;
+        return -1;
+    }
 }
 
 static ssize_t perf__doh_sendto(struct perf_net_socket* sock, uint16_t qid, const void* buf, size_t len, int flags, const struct sockaddr* dest_addr, socklen_t addrlen)
 {
     int ret = -1;
 
-    debugx("sendto - send: %d", len);
     PERF_LOCK(&self->lock);
-
     self->qid = qid;
-    debugx("sendto - is_ready: %d", self->is_ready);
+ 
     if (self->is_ready) {
-        debugx("submit_dns_query");
-        _submit_dns_query(sock, buf, len);
-        ret = nghttp2_session_send(self->http2->session);
-        if (ret != 0) {
-            http2_session_free(sock);
-            return -1;
+        // TODO: check doh_method and do *_{get,post}()
+        ret = _submit_dns_query_get(sock, buf, len);
+        PERF_UNLOCK(&self->lock);
+
+        if (ret == 0) { // success
+            return len;
+        } else {
+            return ret;
         }
     }
 
@@ -860,8 +937,6 @@ static int perf__doh_sockeq(struct perf_net_socket* sock_a, struct perf_net_sock
 
 static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_t timeout)
 {
-    // debugx("sockready - pipe fd: %d, timeout: %d", pipe_fd, timeout);
-
     PERF_LOCK(&self->lock);
 
     if (self->do_reconnect) {
@@ -873,9 +948,10 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
         self->http2 != NULL) {
         // do nghttp2 I/O send to flush outstanding frames
         int ret;
+    
         ret = nghttp2_session_send(self->http2->session);
         if (ret != 0) {
-            perf_log_printf("nghttp2_session_send: %s", nghttp2_strerror(ret));
+            perf_log_printf("nghttp2_session_send failed: %s", nghttp2_strerror(ret));
             http2_session_free(sock);
             PERF_UNLOCK(&self->lock);
             return 0;
@@ -919,7 +995,6 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
     }
 
     int ret = SSL_connect(self->ssl);
-    debugx("ssl connect ret: %d", ret);
     if (!ret) {
         // unrecoverable error, reconnect
         self->do_reconnect = true;
@@ -941,38 +1016,35 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
 
     self->is_ready = true;
 
-    debugx("SSL/TLS connection is up");
-    
-    // ready to do the http2 handshake
-    // TODO: verify negotiated proto -> should be h2
     const uint8_t *alpn = NULL;
     uint32_t alpn_len = 0;
-    // TODO ^^
+ #ifndef OPENSSL_NO_NEXTPROTONEG
+    SSL_get0_next_proto_negotiated(self->ssl, &alpn, &alpn_len);
+#endif /* !OPENSSL_NO_NEXTPROTONEG */
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+    if (alpn == NULL) {
+        SSL_get0_alpn_selected(self->ssl, &alpn, &alpn_len);
+    }
+#endif /* OPENSSL_VERSION_NUMBER >= 0x10002000L */
+
+    if (alpn == NULL || 
+        alpn_len != 2 || 
+        memcmp("h2", alpn, 2) != 0) {
+        http2_session_free(sock);
+        perf_log_fatal("failed to negotiate h2 proto.");
+    }
 
     // guard against re-entrant http2_init
-    if (self->http2 == NULL) {
-        // init http/2 session
-        int ret;
-        ret = _http2_init(self);
-        if (ret < 0) {
-            // failed to initialise http2
-            perf_log_printf("nghttp2_init() failed to initialize: %d", ret);
-            PERF_UNLOCK(&self->lock);
-            return 0;
-        }
-
-        // send connection header
-        _http2_send_connection_header(self->http2);
-        debugx("sent connection headers");
-        ret = nghttp2_session_send(self->http2->session);
-        debugx("session_send - ret: %d", ret);
+    if (!self->http2->settings_sent) {
+        // send settings
+        ret = _http2_send_settings(self->http2);
         if (ret != 0) {
-            perf_log_fatal("nghttp2_session_send failed: %s", nghttp2_strerror(ret));
-            http2_session_free(sock);
+            perf_log_printf("nghttp2_submit_settings failed: %s", nghttp2_strerror(ret));
             PERF_UNLOCK(&self->lock);
             return 0;
         }
 
+        self->http2->settings_sent = true;
         // once we have TLS + http2 set, then we are ready to operate
     }
     
@@ -1059,6 +1131,13 @@ struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, c
     #if OPENSSL_VERSION_NUMBER >= 0x10002000L
         SSL_CTX_set_alpn_protos(ssl_ctx, (const unsigned char *)"\x02h2", 3);
     #endif // OPENSSL_VERSION_NUMBER >= 0x10002000L
+    }
+
+    // init http/2 session
+    ret = _http2_init(self);
+    if (ret < 0) {
+        // failed to initialise http2
+        perf_log_fatal("nghttp2_init() failed to initialize: %d", ret);
     }
 
     perf__doh_connect(sock);
