@@ -320,22 +320,14 @@ static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, 
     // GET -> convert to base64
     uint32_t out_len = 4 * ((len + 2) / 3);
     uint8_t* base64_dns_msg = calloc(1, out_len + 1);
-    // TODO: boundary checks for length
-
-    fprintf(stderr, "original_dns_query: ");
-    fwrite(buf, 1, len, stderr);
-    fprintf(stderr, "\n");
 
     ret = base64_encode(buf, len, base64_dns_msg);
     if (ret < 0) {
         free(base64_dns_msg);
-        // *base64_dns_msg = NULL;
         perf_log_fatal("base64_encode() failed");
     }
 
     base64_dns_msg[ret] = '\0';
-
-    fprintf(stderr, "base64: |%s|\n", base64_dns_msg);
 
     // RFC8484 requires base64url (RFC4648)
     // and Padding characters (=) for base64url MUST NOT be included.
@@ -346,21 +338,14 @@ static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, 
 
     if (memcmp("==", base64_dns_msg + ret - 2, 2) == 0) {
         base64url_dns_msg_len = ret - 2;
-        base64url_dns_msg = calloc(1, base64url_dns_msg_len);
-        memcpy(base64url_dns_msg, base64_dns_msg, base64url_dns_msg_len);
     } else if (memcmp("=", base64_dns_msg + ret - 1, 1) == 0) {
         base64url_dns_msg_len = ret - 1;
-        base64url_dns_msg = calloc(1, base64url_dns_msg_len);
-        memcpy(base64url_dns_msg, base64_dns_msg, base64url_dns_msg_len);
     } else {
         base64url_dns_msg_len = ret;
-        base64url_dns_msg = calloc(1, base64url_dns_msg_len);
-        memcpy(base64url_dns_msg, base64_dns_msg, base64url_dns_msg_len);
-
     }
 
-    fprintf(stderr, "base64url: |%s|\n", base64url_dns_msg);
-    
+    base64_dns_msg[base64url_dns_msg_len] = '\0';
+
     const size_t path_len = strlen(self->http2->stream->path) + 
                             sizeof(DNS_GET_REQUEST_VAR) - 1 +
                             base64url_dns_msg_len;
@@ -371,9 +356,11 @@ static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, 
            DNS_GET_REQUEST_VAR,  
            sizeof(DNS_GET_REQUEST_VAR) - 1);
     memcpy(&full_path[strlen(self->http2->stream->path) + sizeof(DNS_GET_REQUEST_VAR) - 1],
-           base64url_dns_msg,
+           base64_dns_msg,
            base64url_dns_msg_len
            );
+
+    free(base64_dns_msg);
 
     const nghttp2_nv hdrs[] = {
                                 MAKE_NV(":method", "GET"),
