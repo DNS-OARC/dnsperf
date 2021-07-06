@@ -315,11 +315,16 @@ static void perf__doh_reconnect(struct perf_net_socket* sock)
 static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, size_t len)
 {
     int32_t stream_id;
+    char *cp;
     int ret = -1;
    
     // GET -> convert to base64
     uint32_t out_len = 4 * ((len + 2) / 3);
     uint8_t* base64_dns_msg = calloc(1, out_len + 1);
+
+    if (!base64_dns_msg) {
+        perf_log_fatal("failed to allocate memory");
+    }
 
     ret = base64_encode(buf, len, base64_dns_msg);
     if (ret < 0) {
@@ -331,24 +336,29 @@ static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, 
 
     // RFC8484 requires base64url (RFC4648)
     // and Padding characters (=) for base64url MUST NOT be included.
-    // TODO: subst
-
-    uint8_t* base64url_dns_msg = NULL;
-    uint32_t base64url_dns_msg_len;
-
-    if (memcmp("==", base64_dns_msg + ret - 2, 2) == 0) {
-        base64url_dns_msg_len = ret - 2;
-    } else if (memcmp("=", base64_dns_msg + ret - 1, 1) == 0) {
-        base64url_dns_msg_len = ret - 1;
-    } else {
-        base64url_dns_msg_len = ret;
+    // base64url alphabet is the same as base64 except + is - and / is _
+    cp = base64_dns_msg + ret - 2;
+    if (*cp == '=') {
+        *cp = '\0';
+        ret -= 2;
+    } else if (*++cp == '=') {
+        *cp = '\0';
+        ret --;
     }
-
-    base64_dns_msg[base64url_dns_msg_len] = '\0';
+    
+    cp = base64_dns_msg;
+    while (*cp) {
+        if (*cp == '+') {
+            *cp = '-';
+        } else if (*cp == '/') {
+            *cp = '_';
+        }
+        cp ++;
+    }
 
     const size_t path_len = strlen(self->http2->stream->path) + 
                             sizeof(DNS_GET_REQUEST_VAR) - 1 +
-                            base64url_dns_msg_len;
+                            ret;
 
     char full_path[path_len];
     memcpy(full_path, self->http2->stream->path, strlen(self->http2->stream->path));
@@ -357,7 +367,7 @@ static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, 
            sizeof(DNS_GET_REQUEST_VAR) - 1);
     memcpy(&full_path[strlen(self->http2->stream->path) + sizeof(DNS_GET_REQUEST_VAR) - 1],
            base64_dns_msg,
-           base64url_dns_msg_len
+           ret
            );
 
     free(base64_dns_msg);
@@ -366,7 +376,7 @@ static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, 
                                 MAKE_NV(":method", "GET"),
                                 MAKE_NV(":scheme", "https"),
                                 MAKE_NV_CS(":authority", self->http2->stream->authority),
-                                MAKE_NV_LEN(":path", full_path, strlen(self->http2->stream->path) + sizeof(DNS_GET_REQUEST_VAR) - 1 + base64url_dns_msg_len),
+                                MAKE_NV_LEN(":path", full_path, strlen(self->http2->stream->path) + sizeof(DNS_GET_REQUEST_VAR) - 1 + ret),
                                 MAKE_NV("accept", "application/dns-message"),
                                 MAKE_NV("user-agent", "nghttp2-dnsperf/" NGHTTP2_VERSION)};
     
