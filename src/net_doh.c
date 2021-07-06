@@ -38,6 +38,8 @@
 #include <openssl/evp.h>
 
 static SSL_CTX* ssl_ctx = 0;
+char net_doh_uri[DOH_TEMPLATE_URI_MAX_SIZE];
+char net_doh_method[DOH_METHOD_MAX_SIZE];
 
 #define self ((struct perf__doh_socket*)sock)
 #define DEFAULT_MAX_CONCURRENT_STREAMS 100
@@ -59,9 +61,6 @@ static SSL_CTX* ssl_ctx = 0;
     (uint8_t *)NAME, (uint8_t *)VALUE, sizeof(NAME) - 1, VALUELEN,             \
         NGHTTP2_NV_FLAG_NONE                                                   \
   }
-
-#define DOH_TEMPLATE_URI_MAX_SIZE 1024
-#define DOH_METHOD_MAX_SIZE 16
 
 #define DNS_GET_REQUEST_VAR "dns="
 #define DNS_MSG_MAX_SIZE 65535 // TODO: review TCP bufsize is only 16 x 1024
@@ -103,9 +102,6 @@ struct perf__doh_socket {
     uint64_t            conn_ts;
     perf_socket_event_t conn_event, conning_event;
 
-    uint8_t doh_uri[DOH_TEMPLATE_URI_MAX_SIZE];
-    uint8_t doh_method[DOH_METHOD_MAX_SIZE];
-
     http2_session_t* http2; // http2 session data
 };
 
@@ -126,7 +122,7 @@ struct URI {
   uint16_t port;
 };
 
-static int parse_uri(struct URI *res, const char *uri) {
+static int parse_uri(struct URI *res, char *uri) {
   /* We only interested in https */
   size_t len, i, offset;
   int ipv6addr = 0;
@@ -418,7 +414,6 @@ static int _submit_dns_query_post(struct perf_net_socket* sock, const void* buf,
 
 static http2_stream_t* http2_stream_init(struct URI* uri)
 {
-    debugx("http2 stream init");
     http2_stream_t *stream_data = calloc(1, sizeof(http2_stream_t));
 
     stream_data->path = calloc(1, uri->pathlen + 1);
@@ -440,7 +435,6 @@ static void http2_stream_free(http2_stream_t *stream_data) {
 
 http2_session_t* http2_session_init()
 {
-    debugx("http2_session_init");
     http2_session_t *session_data = calloc(1, sizeof(http2_session_t));
     memset(session_data, 0, sizeof(http2_session_t));
     return session_data;
@@ -448,8 +442,6 @@ http2_session_t* http2_session_init()
 
 static void http2_session_free(struct perf_net_socket* sock) 
 {
-    debugx("http2_session_free");
-
     if (self->ssl) {
         SSL_shutdown(self->ssl);
     }
@@ -724,17 +716,12 @@ static int _http2_data_chunk_recv_cb(nghttp2_session* session,
 static int _http2_init(struct perf__doh_socket* sock)
 {
     debugx("_http2_init for qid: %d", sock->qid);
-    // TODO: populate uri from upstream 
-    const char* doh_uri = "https://doh.dnslify.com/dns-query?";
     struct URI uri;
-    // TODO ^^^
     int ret = -1;
     nghttp2_session_callbacks* callbacks;
     nghttp2_option* option;
 
-    debugx("http2_init");
-
-    ret = parse_uri(&uri, doh_uri);
+    ret = parse_uri(&uri, net_doh_uri);
 
     if (ret != 0) {
         perf_log_fatal("Failed to parse https URI");

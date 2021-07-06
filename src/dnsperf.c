@@ -517,6 +517,11 @@ setup(int argc, char** argv, config_t* config)
         }
     }
 
+    if (config->mode == sock_doh) {
+        memcpy(net_doh_uri, doh_uri, strlen(doh_uri));
+        memcpy(net_doh_method, doh_method, strlen(doh_method));
+    }
+
     if (family != NULL)
         config->family = perf_net_parsefamily(family);
     perf_net_parseserver(config->family, server_name, server_port,
