@@ -595,8 +595,7 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
             // debugx("END_STREAM - copying to recvbuf\n");
             if (self->http2->dnsmsg_at > DNS_MSG_MAX_SIZE) {
                 perf_log_warning("DNS response > DNS message maximum size");
-                // we cannot handle 
-                break;
+                return NGHTTP2_ERR_CALLBACK_FAILURE;
             }
 
             /*
