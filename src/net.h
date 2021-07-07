@@ -169,7 +169,7 @@ struct perf_net_socket* perf_net_tcp_opensocket(const perf_sockaddr_t*, const pe
 struct perf_net_socket* perf_net_dot_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t);
 struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t);
 
-extern char net_doh_uri[DOH_TEMPLATE_URI_MAX_SIZE];
-extern char net_doh_method[DOH_METHOD_MAX_SIZE];
+extern const char* net_doh_uri;
+extern const char* net_doh_method;
 
 #endif
