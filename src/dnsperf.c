@@ -57,9 +57,6 @@
 #define DEFAULT_LOCAL_PORT 0
 #define DEFAULT_MAX_OUTSTANDING 100
 #define DEFAULT_TIMEOUT 5
-#define DEFAULT_DOH_URI "https://localhost/dns-query?"
-#define DEFAULT_DOH_METHOD "GET"
-
 
 #define TIMEOUT_CHECK_TIME 100000
 
@@ -404,8 +401,6 @@ setup(int argc, char** argv, config_t* config)
 {
     const char* family      = NULL;
     const char* server_name = DEFAULT_SERVER_NAME;
-    const char* doh_uri     = DEFAULT_DOH_URI;
-    const char* doh_method  = DEFAULT_DOH_METHOD;
     in_port_t   server_port = 0;
     const char* local_name  = NULL;
     in_port_t   local_port  = DEFAULT_LOCAL_PORT;
@@ -487,9 +482,9 @@ setup(int argc, char** argv, config_t* config)
         "verbose: report each query and additional information to stdout",
         NULL, &config->verbose);
     perf_long_opt_add("doh-uri", perf_opt_string, "doh_uri",
-        "DoH URI", DEFAULT_DOH_URI, &doh_uri);
+        "DoH URI", NULL, &net_doh_uri);
     perf_long_opt_add("doh-method", perf_opt_string, "doh_method",
-        "DoH Method", DEFAULT_DOH_METHOD, &doh_method);
+        "DoH Method", NULL, &net_doh_method);
 
     bool log_stdout = false;
     perf_opt_add('W', perf_opt_boolean, NULL, "log warnings and errors to stdout instead of stderr", NULL, &log_stdout);
@@ -515,11 +510,6 @@ setup(int argc, char** argv, config_t* config)
             server_port = DEFAULT_SERVER_PORT;
             break;
         }
-    }
-
-    if (config->mode == sock_doh) {
-        memcpy(net_doh_uri, doh_uri, strlen(doh_uri));
-        memcpy(net_doh_method, doh_method, strlen(doh_method));
     }
 
     if (family != NULL)
