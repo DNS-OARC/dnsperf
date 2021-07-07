@@ -715,13 +715,11 @@ static int _http2_data_chunk_recv_cb(nghttp2_session* session,
 
 static int _http2_init(struct perf__doh_socket* sock)
 {
-    debugx("_http2_init for qid: %d", sock->qid);
+    // debugx("_http2_init for qid: %d", sock->qid);
     struct URI uri;
     int ret = -1;
     nghttp2_session_callbacks* callbacks;
     nghttp2_option* option;
-
-    debugx("doh_uri: %s", net_doh_uri);
 
     ret = parse_uri(&uri, net_doh_uri);
 
@@ -852,6 +850,7 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
         memset(self->recvbuf, 0, len);
     
         if (ret < 0) {
+            // 
             perf_log_warning("nghttp2_session_mem_recv failed: %s", 
                             nghttp2_strerror((int) ret));
 
@@ -874,6 +873,12 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
 
     if (self->http2 &&
         self->http2->dnsmsg_completed) {
+        if (self->http2->dnsmsg_at > len) {
+            perf_log_warning("failed to process result - DNS response size");
+            PERF_UNLOCK(&self->lock);
+            return -1;
+        }
+
         // debugx("copying to recv buf - len: %d", self->http2->dnsmsg_at);
         memcpy(buf, self->http2->dnsmsg, self->http2->dnsmsg_at);
         PERF_UNLOCK(&self->lock);
@@ -937,7 +942,7 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
         ret = nghttp2_session_send(self->http2->session);
         if (ret != 0) {
             perf_log_printf("nghttp2_session_send failed: %s", nghttp2_strerror(ret));
-            http2_session_free(sock);
+            self->do_reconnect = true;
             PERF_UNLOCK(&self->lock);
             return 0;
         }
@@ -1015,8 +1020,9 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
     if (alpn == NULL || 
         alpn_len != 2 || 
         memcmp("h2", alpn, 2) != 0) {
-        http2_session_free(sock);
-        perf_log_fatal("failed to negotiate h2 proto.");
+        self->do_reconnect = true;
+        PERF_UNLOCK(&self->lock);
+        return 0;
     }
 
     // guard against re-entrant http2_init
@@ -1025,6 +1031,7 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
         ret = _http2_send_settings(self->http2);
         if (ret != 0) {
             perf_log_printf("nghttp2_submit_settings failed: %s", nghttp2_strerror(ret));
+            self->do_reconnect = true;
             PERF_UNLOCK(&self->lock);
             return 0;
         }
@@ -1105,7 +1112,6 @@ struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, c
 #else
         perf_log_fatal("DNS-over-HTTPS (DoH) is supported only over TLS 1.2+");
 #endif
-        SSL_CTX_set_mode(ssl_ctx, SSL_MODE_ENABLE_PARTIAL_WRITE);
         SSL_CTX_set_options(ssl_ctx,
                       SSL_OP_ALL | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 |
                           SSL_OP_NO_COMPRESSION |
