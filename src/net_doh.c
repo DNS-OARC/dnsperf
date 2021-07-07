@@ -66,7 +66,7 @@ const char* net_doh_method = DEFAULT_DOH_METHOD;
   }
 
 #define DNS_GET_REQUEST_VAR "dns="
-#define DNS_MSG_MAX_SIZE 65535 // TODO: review TCP bufsize is only 16 x 1024
+#define DNS_MSG_MAX_SIZE 65535
 
 #define debugx(format, args...) fprintf(stderr, format "\n", ##args)
 
@@ -110,7 +110,6 @@ struct perf__doh_socket {
 
 typedef struct perf__doh_socket perf__doh_socket_t;
 
-// TODO: re-implement or use this - TBD. Out of scope for the project
 // From: https://github.com/nghttp2/nghttp2/blob/master/examples/client.c
 // Copyright (c) 2013 Tatsuhiro Tsujikawa
 // --- vvv ---
@@ -553,9 +552,6 @@ static int _http2_stream_close_cb(nghttp2_session* session, int32_t stream_id, u
 {
     (void)user_data;
 
-    // TODO:
-    // // debugx("close_cb - stream_id: %d", stream_id);
-    
     if (nghttp2_session_get_stream_user_data(session, stream_id)) {
         // debugx("http2 session closed - stream_id: %d, error_code: %d", 
         //        stream_id, error_code);
@@ -574,7 +570,6 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
 {
     perf__doh_socket_t *sock = (perf__doh_socket_t *)user_data;
 
-    // TODO:
     // debugx("frame_recv_cb - type: %d, stream_id: %d", frame->hd.type, frame->hd.stream_id);
     switch (frame->hd.type) {
     case NGHTTP2_HEADERS:
@@ -598,8 +593,9 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
         // NGHTTP2_FLAG_END_STREAM indicates that we have the data in full
         if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
             // debugx("END_STREAM - copying to recvbuf\n");
-            if (self->http2->dnsmsg_at > TCP_RECV_BUF_SIZE) {
-                perf_log_warning("DNS response > TCP_RECV_BUF_SIZE");
+            if (self->http2->dnsmsg_at > DNS_MSG_MAX_SIZE) {
+                perf_log_warning("DNS response > DNS message maximum size");
+                // we cannot handle 
                 break;
             }
 
@@ -615,7 +611,6 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
         }
         break;
     case NGHTTP2_SETTINGS:
-        // TODO: check if we need to set remote settings (only first SETTINGs frame)
         if (frame->hd.flags & NGHTTP2_FLAG_ACK) {
             // debugx("Settings ACK received\n");
         } else {
@@ -636,7 +631,6 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
 static int _http2_frame_send_cb(nghttp2_session* session, const nghttp2_frame* frame, void* user_data)
 {
     (void)user_data;
-    // TODO:
     // debugx("frame_send_cb - frame type: %d, stream_id: %d", frame->hd.type, frame->hd.stream_id);
     switch (frame->hd.type) {
     case NGHTTP2_HEADERS:
