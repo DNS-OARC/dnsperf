@@ -692,11 +692,17 @@ static int _http2_data_chunk_recv_cb(nghttp2_session* session,
         // debugx("\n");
 
         if (self->http2->dnsmsg_at == 0) {
-            // TODO: upper boundary check
+            if (len > DNS_MSG_MAX_SIZE) {
+                perf_log_warning("http2 chunk data exceeds DNS message max size");
+                return NGHTTP2_ERR_CALLBACK_FAILURE;
+            }
             memcpy(self->http2->dnsmsg, data, len);
             self->http2->dnsmsg_at = len;
         } else {
-            // TODO: boundary checks for self->recvbuf_at + len
+            if (self->http2->dnsmsg_at + len > DNS_MSG_MAX_SIZE) {
+                perf_log_warning("http2 chunk data exceeds DNS message max size");
+                return NGHTTP2_ERR_CALLBACK_FAILURE;
+            }
             memcpy(self->http2->dnsmsg + self->http2->dnsmsg_at, data, len);
             self->http2->dnsmsg_at += len;
         }
