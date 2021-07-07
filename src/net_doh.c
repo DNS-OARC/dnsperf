@@ -742,10 +742,8 @@ static int _http2_init(struct perf__doh_socket* sock)
     nghttp2_session_callbacks_del(callbacks);
     nghttp2_option_del(option);
 
-    debugx("http2 session client ret: %d", ret);
     if (ret < 0) {
-        free(self->http2);
-        self->http2 = NULL;
+        perf_log_fatal("Failed to initialize http2 session: %s", nghttp2_strerror(ret));
     }
 
     memset(self->http2->dnsmsg, 0, DNS_MSG_MAX_SIZE);
