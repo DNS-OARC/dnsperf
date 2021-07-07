@@ -707,8 +707,7 @@ static int _http2_data_chunk_recv_cb(nghttp2_session* session,
             self->http2->dnsmsg_at += len;
         }
     }
-    
-    // TODO: read incoming data and append to buf
+ 
     return 0;
 }
 
@@ -851,7 +850,8 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
             perf_log_warning("nghttp2_session_mem_recv failed: %s", 
                             nghttp2_strerror((int) ret));
 
-            http2_session_free(sock);       
+            http2_session_free(sock);
+            PERF_UNLOCK(&self->lock);     
             return -1;
         }
 
