@@ -1112,10 +1112,6 @@ struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, c
 #else
         perf_log_fatal("DNS-over-HTTPS (DoH) is supported only over TLS 1.2+");
 #endif
-        SSL_CTX_set_options(ssl_ctx,
-                      SSL_OP_ALL | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 |
-                          SSL_OP_NO_COMPRESSION |
-                          SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION);
     #ifndef OPENSSL_NO_NEXTPROTONEG
         SSL_CTX_set_next_proto_select_cb(ssl_ctx, select_next_proto_cb, NULL);
     #endif /* !OPENSSL_NO_NEXTPROTONEG */
