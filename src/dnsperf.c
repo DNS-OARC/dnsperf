@@ -690,7 +690,7 @@ do_send(void* arg)
         q->timestamp = UINT64_MAX;
 
         i        = tinfo->nsocks * 2;
-        // TODO: debugx("do_send - i: %d", i);
+       
         all_fail = true;
         while (i--) {
             q->sock = tinfo->socks[tinfo->current_sock++ % tinfo->nsocks];
