@@ -37,9 +37,12 @@
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 
+#define DEFAULT_DOH_URI "https://localhost/dns-query?"
+#define DEFAULT_DOH_METHOD "GET"
+
 static SSL_CTX* ssl_ctx = 0;
-char net_doh_uri[DOH_TEMPLATE_URI_MAX_SIZE];
-char net_doh_method[DOH_METHOD_MAX_SIZE];
+const char* net_doh_uri = DEFAULT_DOH_URI;
+const char* net_doh_method = DEFAULT_DOH_METHOD;
 
 #define self ((struct perf__doh_socket*)sock)
 #define DEFAULT_MAX_CONCURRENT_STREAMS 100
@@ -122,7 +125,7 @@ struct URI {
   uint16_t port;
 };
 
-static int parse_uri(struct URI *res, char *uri) {
+static int parse_uri(struct URI* res, const char* uri) {
   /* We only interested in https */
   size_t len, i, offset;
   int ipv6addr = 0;
@@ -228,7 +231,7 @@ static void perf__doh_connect(struct perf_net_socket* sock)
 {
     int ret;
 
-    debugx("doh_connect - qid: %d", self->qid);
+    // debugx("doh_connect - qid: %d", self->qid);
     self->is_ready = true;
 
     int fd = socket(self->server.sa.sa.sa_family, SOCK_STREAM, 0);
@@ -372,7 +375,7 @@ static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, 
                                 MAKE_NV(":method", "GET"),
                                 MAKE_NV(":scheme", "https"),
                                 MAKE_NV_CS(":authority", self->http2->stream->authority),
-                                MAKE_NV_LEN(":path", full_path, strlen(self->http2->stream->path) + sizeof(DNS_GET_REQUEST_VAR) - 1 + ret),
+                                MAKE_NV_LEN(":path", full_path, path_len),
                                 MAKE_NV("accept", "application/dns-message"),
                                 MAKE_NV("user-agent", "nghttp2-dnsperf/" NGHTTP2_VERSION)};
     
@@ -730,6 +733,8 @@ static int _http2_init(struct perf__doh_socket* sock)
     int ret = -1;
     nghttp2_session_callbacks* callbacks;
     nghttp2_option* option;
+
+    debugx("doh_uri: %s", net_doh_uri);
 
     ret = parse_uri(&uri, net_doh_uri);
 
