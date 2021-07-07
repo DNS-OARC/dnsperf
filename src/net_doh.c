@@ -400,7 +400,7 @@ static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, 
 
     self->http2->stream->stream_id = stream_id;
 
-    debugx("qid: %d, stream_id: %d", self->qid, stream_id);
+    // debugx("qid: %d, stream_id: %d", self->qid, stream_id);
 
     ret = nghttp2_session_send(self->http2->session);
     if (ret < 0) {
@@ -599,16 +599,15 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
                 return NGHTTP2_ERR_CALLBACK_FAILURE;
             }
 
-            
+            /*
             fprintf(stderr, "dnsmsg: ");
             fwrite(self->http2->dnsmsg, 1, self->http2->dnsmsg_at, stderr);
             fprintf(stderr, "\n");
-            
-
-            memset(self->http2->dnsmsg, 0, DNS_MSG_MAX_SIZE);
+            */
+        
             self->http2->dnsmsg_completed = true;
             self->have_more = false;
-            debugx("response done: %d; stream_id: %d", sock->qid, frame->hd.stream_id);
+            // debugx("response done: %d; stream_id: %d", sock->qid, frame->hd.stream_id);
         }
         break;
     case NGHTTP2_SETTINGS:
@@ -775,7 +774,7 @@ static int _http2_send_settings(http2_session_t *session_data) {
         return ret;
     }
 
-     debugx("sent connection headers/settings");
+    // debugx("sent connection headers/settings");
 
     return 0;
 }
@@ -872,16 +871,20 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
 
     if (self->http2 &&
         self->http2->dnsmsg_completed) {
-        if (self->http2->dnsmsg_at > len) {
+        if (self->http2->dnsmsg_at + 2 > len) {
             perf_log_warning("failed to process result - DNS response size");
             PERF_UNLOCK(&self->lock);
             return -1;
         }
 
-        // debugx("copying to recv buf - len: %d", self->http2->dnsmsg_at);
-        memcpy(buf, self->http2->dnsmsg, self->http2->dnsmsg_at);
+        // debugx("copying to recv buf - len: %ld", self->http2->dnsmsg_at);
+        uint16_t qid = htons(self->qid);
+        memcpy(buf, &qid, 2);
+        memcpy(buf+2, self->http2->dnsmsg+2, self->http2->dnsmsg_at);
+        memset(self->http2->dnsmsg, 0, DNS_MSG_MAX_SIZE);
+
         self->http2->dnsmsg_completed = false;
-        int response_len = self->http2->dnsmsg_at;
+        int response_len = self->http2->dnsmsg_at + 2;
         self->http2->dnsmsg_at = 0;
         self->response_sent = true;
         PERF_UNLOCK(&self->lock);
@@ -898,17 +901,18 @@ static ssize_t perf__doh_sendto(struct perf_net_socket* sock, uint16_t qid, cons
     int ret = -1;
 
     PERF_LOCK(&self->lock);
+
     if (self->request_sent) {
         PERF_UNLOCK(&self->lock);
-        return -1;
+        return 0;
     }
 
-    debugx("sendto - qid: %d", qid);
+    // debugx("sendto - qid: %d", qid);
 
     self->qid = qid;
  
     if (self->is_ready) {
-        // TODO: check doh_method and do *_{get,post}()
+        // TODO: check net_doh_method and do *_{get,post}()
         ret = _submit_dns_query_get(sock, buf, len);
         self->request_sent = true;
         PERF_UNLOCK(&self->lock);
@@ -941,13 +945,15 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
     PERF_LOCK(&self->lock);
 
     if (self->do_reconnect) {
-        debugx("reconnecting..");
         perf__doh_reconnect(sock);
+        // we need to re-initialise the http2 session as 
+        // state on reconnect does not allow proper functionality
         if (self->http2) {
             http2_session_free(sock);
             _http2_init(self);
         }
         self->do_reconnect = false;
+        // debugx("reconnect - qid: %d", self->qid);
     }
 
     if (self->is_ready &&
@@ -973,7 +979,6 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
         self->http2->settings_sent = false;
         self->do_reconnect = true;
         PERF_UNLOCK(&self->lock);
-        debugx("next request ->");
         return 0;
     }
 
@@ -1043,8 +1048,6 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
         PERF_UNLOCK(&self->lock);
         return 0;
     }
-
-    debugx("socket is ready - request_sent: %d", self->request_sent);
 
     const uint8_t *alpn = NULL;
     uint32_t alpn_len = 0;
