@@ -68,7 +68,7 @@ const char* net_doh_method = DEFAULT_DOH_METHOD;
 #define DNS_GET_REQUEST_VAR "dns="
 #define DNS_MSG_MAX_SIZE 65535 // TODO: review TCP bufsize is only 16 x 1024
 
-#define debugx(format, args...) fprintf(stderr, "> " format "\n", ##args)
+#define debugx(format, args...) fprintf(stderr, format "\n", ##args)
 
 typedef struct {
   const char *uri;
@@ -314,7 +314,7 @@ static void perf__doh_reconnect(struct perf_net_socket* sock)
 static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, size_t len)
 {
     int32_t stream_id;
-    char *cp;
+    uint8_t *cp;
     int ret = -1;
    
     // GET -> convert to base64
@@ -327,7 +327,6 @@ static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, 
 
     ret = base64_encode(buf, len, base64_dns_msg);
     if (ret < 0) {
-        free(base64_dns_msg);
         perf_log_fatal("base64_encode() failed");
     }
 
@@ -422,12 +421,18 @@ static http2_stream_t* http2_stream_init(struct URI* uri)
     http2_stream_t *stream_data = calloc(1, sizeof(http2_stream_t));
 
     stream_data->path = calloc(1, uri->pathlen + 1);
+    if (!stream_data->path) {
+        perf_log_fatal("out of memory");
+    }
+
     memcpy(stream_data->path, uri->path, uri->pathlen);
-    stream_data->path[uri->pathlen] = '\0';
 
     stream_data->authority = calloc(1, uri->hostportlen + 1);
+    if (!stream_data->authority) {
+        perf_log_fatal("out of memory");
+    }
+
     memcpy(stream_data->authority, uri->hostport, uri->hostportlen);
-    stream_data->authority[uri->hostportlen] = '\0';
 
     return stream_data;
 }
@@ -441,7 +446,10 @@ static void http2_stream_free(http2_stream_t *stream_data) {
 http2_session_t* http2_session_init()
 {
     http2_session_t *session_data = calloc(1, sizeof(http2_session_t));
-    memset(session_data, 0, sizeof(http2_session_t));
+    if (!session_data) {
+        perf_log_fatal("out of memory");
+    }
+
     return session_data;
 }
 
@@ -465,18 +473,6 @@ static void http2_session_free(struct perf_net_socket* sock)
 
 /* nghttp2 callbacks */
 
-// TODO: remove - we handle TLS read upstream
-static ssize_t _http2_recv_cb(nghttp2_session* session,
-                          const uint8_t* data, 
-                          size_t len, 
-                          int flags,
-                          void* user_data)
-{
-    // TODO:
-    debugx("http2_recv_cb - len: %d", len);
-    return 0;
-}
-
 static ssize_t _http2_send_cb(nghttp2_session* session, 
                                     const uint8_t* data, 
                                     size_t length, 
@@ -488,8 +484,6 @@ static ssize_t _http2_send_cb(nghttp2_session* session,
     (void)flags;
 
     struct perf_net_socket *sock = (struct perf_net_socket *)user_data;
-    (void)session;
-    (void)flags;
 
     if (!self->is_ready) {
         return NGHTTP2_ERR_CALLBACK_FAILURE;
@@ -531,16 +525,10 @@ static ssize_t _http2_send_cb(nghttp2_session* session,
     return n;
 }
 
-static ssize_t _http2_data_provider_read_cb(nghttp2_session* session, int32_t stream_id, uint8_t* buf, size_t length, uint32_t* data_flags, nghttp2_data_source* source, void* user_data)
-{
-    // TODO:
-    debugx("provider_read_cb - len: %d, stream_id: %d", length, stream_id);
-    return 0;
-}
-
 static int _http2_header_cb(nghttp2_session* session, const nghttp2_frame* frame, const uint8_t* name, size_t namelen, const uint8_t* value, size_t valuelen, uint8_t flags, void* user_data)
 {
-    perf__doh_socket_t *sock = (perf__doh_socket_t *)user_data;
+    // perf__doh_socket_t *sock = (perf__doh_socket_t *)user_data;
+    (void)user_data;
     (void)flags;
 
     // // debugx("header_cb - type: %d, session_id: %d", frame->hd.type, frame->hd.stream_id);
@@ -704,7 +692,6 @@ static int _http2_data_chunk_recv_cb(nghttp2_session* session,
     perf__doh_socket_t *sock = (perf__doh_socket_t *)user_data;
     (void)flags;
 
-    int ret;
     // debugx("data_chunk_recv_cb");
     if (nghttp2_session_get_stream_user_data(session, stream_id)) {
         // debugx("data_chunk length: %d\n", len);
@@ -749,7 +736,6 @@ static int _http2_init(struct perf__doh_socket* sock)
     /* sets HTTP/2 callbacks */
     assert(nghttp2_session_callbacks_new(&callbacks) == 0);
     nghttp2_session_callbacks_set_send_callback(callbacks, _http2_send_cb);
-    // nghttp2_session_callbacks_set_recv_callback(callbacks, _http2_recv_cb); // TODO: remove past debug
     nghttp2_session_callbacks_set_on_header_callback(callbacks, _http2_header_cb);
     nghttp2_session_callbacks_set_on_data_chunk_recv_callback(callbacks, _http2_data_chunk_recv_cb);
     nghttp2_session_callbacks_set_on_frame_recv_callback(callbacks, _http2_frame_recv_cb);
@@ -800,7 +786,7 @@ static int _http2_send_settings(http2_session_t *session_data) {
 
 static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t len, int flags)
 {
-    ssize_t n;
+    ssize_t n = 0;
     ssize_t ret = 0;
 
     // read TLS data here instead of nghttp2_recv_callback
@@ -1067,12 +1053,13 @@ static bool perf__doh_have_more(struct perf_net_socket* sock)
 static int select_next_proto_cb(SSL *ssl, unsigned char **out,
                                 unsigned char *outlen, const unsigned char *in,
                                 unsigned int inlen, void *arg) {
-  (void)ssl;
-  (void)arg;
+    (void)ssl;
+    (void)arg;
 
-  if (nghttp2_select_next_protocol(out, outlen, in, inlen) <= 0) {
-    perf_log_fatal("Server did not advertise %u", NGHTTP2_PROTO_VERSION_ID);
-  }
+    if (nghttp2_select_next_protocol(out, outlen, in, inlen) <= 0) {
+        perf_log_warning("Server did not advertise %u", NGHTTP2_PROTO_VERSION_ID);
+        return SSL_TLSEXT_ERR_ALERT_WARNING;
+    }
 
   return SSL_TLSEXT_ERR_OK;
 }
