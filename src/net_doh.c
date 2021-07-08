@@ -377,17 +377,7 @@ static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, 
                                 MAKE_NV_LEN(":path", full_path, path_len),
                                 MAKE_NV("accept", "application/dns-message"),
                                 MAKE_NV("user-agent", "nghttp2-dnsperf/" NGHTTP2_VERSION)};
-    
-    /* TODO: remove
-    for (size_t i = 0; i < sizeof(hdrs) / sizeof(hdrs[0]); ++i) {
-        fwrite(hdrs[i].name, 1, hdrs[i].namelen, stderr);
-        fprintf(stderr, ": |");
-        fwrite(hdrs[i].value, 1, hdrs[i].valuelen, stderr);
-        fprintf(stderr, "|");
-        fprintf(stderr, "\n");
-    }
-    */
-    
+        
     stream_id = nghttp2_submit_request(self->http2->session,
                                         NULL,
                                         hdrs,
@@ -527,23 +517,12 @@ static ssize_t _http2_send_cb(nghttp2_session* session,
 
 static int _http2_header_cb(nghttp2_session* session, const nghttp2_frame* frame, const uint8_t* name, size_t namelen, const uint8_t* value, size_t valuelen, uint8_t flags, void* user_data)
 {
-    // perf__doh_socket_t *sock = (perf__doh_socket_t *)user_data;
     (void)user_data;
     (void)flags;
 
-    // // debugx("header_cb - type: %d, session_id: %d", frame->hd.type, frame->hd.stream_id);
-
+    // // debugx("header_cb - type: %d, session_id: %d", frame->hd.type, frame->hd.stream_i
     switch (frame->hd.type) {
     case NGHTTP2_HEADERS:
-        /* TODO: remove
-        if (frame->headers.cat == NGHTTP2_HCAT_RESPONSE &&
-            self->http2->stream->stream_id == frame->hd.stream_id) {
-            fwrite(name, 1, namelen, stderr);
-            fprintf(stderr, ": ");
-            fwrite(value, 1, valuelen, stderr);
-            fprintf(stderr, "\n");        
-        }
-        */
        break;
     }
     return 0;
@@ -554,8 +533,6 @@ static int _http2_stream_close_cb(nghttp2_session* session, int32_t stream_id, u
     (void)user_data;
 
     if (nghttp2_session_get_stream_user_data(session, stream_id)) {
-        // debugx("http2 session closed - stream_id: %d, error_code: %d", 
-        //        stream_id, error_code);
         int ret;
         ret = nghttp2_session_terminate_session(session, NGHTTP2_NO_ERROR);
 
@@ -571,43 +548,20 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
 {
     perf__doh_socket_t *sock = (perf__doh_socket_t *)user_data;
 
-    // debugx("frame_recv_cb - type: %d, stream_id: %d", frame->hd.type, frame->hd.stream_id);
     switch (frame->hd.type) {
     case NGHTTP2_HEADERS:
-        /* TODO: remove
-        if (frame->headers.cat == NGHTTP2_HCAT_RESPONSE) {
-            const nghttp2_nv *nva = frame->headers.nva;
-            if (nghttp2_session_get_stream_user_data(session, frame->hd.stream_id)) {
-                for (size_t i = 0; i < frame->headers.nvlen; ++i) {
-                    fwrite(nva[i].name, 1, nva[i].namelen, stderr);
-                    fprintf(stderr, ": ");
-                    fwrite(nva[i].value, 1, nva[i].valuelen, stderr);
-                    fprintf(stderr, "\n");
-                }
-            }
-        }
-        */
         break;
     case NGHTTP2_DATA: 
-        // debugx("DATA frame received - flags: %d", frame->hd.flags);
         // we are interested in DATA frame which will carry the DNS response
         // NGHTTP2_FLAG_END_STREAM indicates that we have the data in full
         if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
-            // debugx("END_STREAM - copying to recvbuf\n");
             if (self->http2->dnsmsg_at > DNS_MSG_MAX_SIZE) {
                 perf_log_warning("DNS response > DNS message maximum size");
                 return NGHTTP2_ERR_CALLBACK_FAILURE;
             }
-
-            /*
-            fprintf(stderr, "dnsmsg: ");
-            fwrite(self->http2->dnsmsg, 1, self->http2->dnsmsg_at, stderr);
-            fprintf(stderr, "\n");
-            */
-        
+ 
             self->http2->dnsmsg_completed = true;
             self->have_more = false;
-            // debugx("response done: %d; stream_id: %d", sock->qid, frame->hd.stream_id);
         }
         break;
     case NGHTTP2_SETTINGS:
@@ -618,10 +572,8 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
         }
         break;
     case NGHTTP2_RST_STREAM:
-        // debugx(": RST_STREAM\n");
         break;
     case NGHTTP2_GOAWAY:
-        // debugx(": GOAWAY\n");
         break;
     }
     
@@ -631,46 +583,16 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
 static int _http2_frame_send_cb(nghttp2_session* session, const nghttp2_frame* frame, void* user_data)
 {
     (void)user_data;
-    // debugx("frame_send_cb - frame type: %d, stream_id: %d", frame->hd.type, frame->hd.stream_id);
+    
     switch (frame->hd.type) {
     case NGHTTP2_HEADERS:
-        // debugx("headers cat: %d", frame->headers.cat);
-        /* TODO: remove
-        if (frame->headers.cat == NGHTTP2_HCAT_RESPONSE ||
-            frame->headers.cat == NGHTTP2_HCAT_REQUEST) {
-            const nghttp2_nv *nva = frame->headers.nva;
-            if (nghttp2_session_get_stream_user_data(session, frame->hd.stream_id)) {
-                for (size_t i = 0; i < frame->headers.nvlen; ++i) {
-                    fwrite(nva[i].name, 1, nva[i].namelen, stderr);
-                    fprintf(stderr, ": ");
-                    fwrite(nva[i].value, 1, nva[i].valuelen, stderr);
-                    fprintf(stderr, "\n");
-                }
-            }
-        }
-        */
         break;
     case NGHTTP2_SETTINGS:
-        // debugx("frame_send: nghttp2_settings, stream_id: %d", frame->hd.stream_id);
-        /* TODO: remove
-        const nghttp2_nv *nva = frame->headers.nva;
-        if (nghttp2_session_get_stream_user_data(session, frame->hd.stream_id)) {
-            
-            for (size_t i = 0; i < frame->headers.nvlen; ++i) {
-                fwrite(nva[i].name, 1, nva[i].namelen, stderr);
-                fprintf(stderr, ": ");
-                fwrite(nva[i].value, 1, nva[i].valuelen, stderr);
-                fprintf(stderr, "\n");
-            }
-        }
-        */
         break;
 
     case NGHTTP2_RST_STREAM:
-        // debugx(": RST_STREAM\n");
         break;
     case NGHTTP2_GOAWAY:
-        // debugx(": GOAWAY\n");
         break;
     }
     
@@ -686,12 +608,7 @@ static int _http2_data_chunk_recv_cb(nghttp2_session* session,
     perf__doh_socket_t *sock = (perf__doh_socket_t *)user_data;
     (void)flags;
 
-    // debugx("data_chunk_recv_cb");
     if (nghttp2_session_get_stream_user_data(session, stream_id)) {
-        // debugx("data_chunk length: %d\n", len);
-        // fwrite(data, 1, len, stderr);
-        // debugx("\n");
-
         if (self->http2->dnsmsg_at == 0) {
             if (len > DNS_MSG_MAX_SIZE) {
                 perf_log_warning("http2 chunk data exceeds DNS message max size");
@@ -714,7 +631,6 @@ static int _http2_data_chunk_recv_cb(nghttp2_session* session,
 
 static int _http2_init(struct perf__doh_socket* sock)
 {
-    // debugx("_http2_init for qid: %d", sock->qid);
     struct URI uri;
     int ret = -1;
     nghttp2_session_callbacks* callbacks;
@@ -773,8 +689,6 @@ static int _http2_send_settings(http2_session_t *session_data) {
         perf_log_warning("Could not submit https2 SETTINGS: %s", nghttp2_strerror(ret));
         return ret;
     }
-
-    // debugx("sent connection headers/settings");
 
     return 0;
 }
@@ -871,20 +785,17 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
 
     if (self->http2 &&
         self->http2->dnsmsg_completed) {
-        if (self->http2->dnsmsg_at + 2 > len) {
+        if (self->http2->dnsmsg_at > len) {
             perf_log_warning("failed to process result - DNS response size");
             PERF_UNLOCK(&self->lock);
             return -1;
         }
 
-        // debugx("copying to recv buf - len: %ld", self->http2->dnsmsg_at);
-        uint16_t qid = htons(self->qid);
-        memcpy(buf, &qid, 2);
-        memcpy(buf+2, self->http2->dnsmsg+2, self->http2->dnsmsg_at);
+        memcpy(buf, self->http2->dnsmsg, self->http2->dnsmsg_at);
         memset(self->http2->dnsmsg, 0, DNS_MSG_MAX_SIZE);
 
         self->http2->dnsmsg_completed = false;
-        int response_len = self->http2->dnsmsg_at + 2;
+        int response_len = self->http2->dnsmsg_at;
         self->http2->dnsmsg_at = 0;
         self->response_sent = true;
         PERF_UNLOCK(&self->lock);
@@ -906,8 +817,6 @@ static ssize_t perf__doh_sendto(struct perf_net_socket* sock, uint16_t qid, cons
         PERF_UNLOCK(&self->lock);
         return 0;
     }
-
-    // debugx("sendto - qid: %d", qid);
 
     self->qid = qid;
  
@@ -953,7 +862,6 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
             _http2_init(self);
         }
         self->do_reconnect = false;
-        // debugx("reconnect - qid: %d", self->qid);
     }
 
     if (self->is_ready &&
