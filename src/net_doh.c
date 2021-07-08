@@ -71,10 +71,15 @@ const char* net_doh_method = DEFAULT_DOH_METHOD;
 #define debugx(format, args...) fprintf(stderr, format "\n", ##args)
 
 typedef struct {
-  const char *uri;
-  char *authority;
-  char *path;
-  int32_t stream_id; // stream ID
+    const uint8_t* buf;
+    size_t len;
+} http2_data_provider_t;
+
+typedef struct {
+    const char *uri;
+    char *authority;
+    char *path;
+    int32_t stream_id; // stream ID
 } http2_stream_t;
 
 typedef struct {
@@ -341,7 +346,7 @@ static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, 
         ret -= 2;
     } else if (*++cp == '=') {
         *cp = '\0';
-        ret --;
+        ret--;
     }
     
     cp = base64_dns_msg;
@@ -351,7 +356,7 @@ static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, 
         } else if (*cp == '/') {
             *cp = '_';
         }
-        cp ++;
+        cp++;
     }
 
     const size_t path_len = strlen(self->http2->stream->path) + 
@@ -401,8 +406,87 @@ static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, 
     return 0;
 }
 
+static ssize_t _payload_read_cb(nghttp2_session *session,
+                                int32_t stream_id, uint8_t *buf,
+                                size_t length, uint32_t *data_flags,
+                                nghttp2_data_source *source,
+                                void *user_data) {
+    http2_data_provider_t* payload = source->ptr;
+    
+    ssize_t payload_size = length < payload->len ? length : payload->len;
+
+    memcpy(buf, payload->buf, payload_size);
+    payload->buf += payload_size;
+    payload->len -= payload_size;
+    // check for EOF
+    if (payload->len == 0) {
+        *data_flags |= NGHTTP2_DATA_FLAG_EOF;
+    }
+
+    return payload_size;
+}
+
 static int _submit_dns_query_post(struct perf_net_socket* sock, const void* buf, size_t len)
 {
+    int32_t stream_id;
+    int ret = -1;
+
+    // POST requires DATA flow-controlled payload that local endpoint
+    // can send across without issuing WINDOW_UPDATE
+    // we need to check for this and bounce back the request if the
+    // payload > remote window size
+    int remote_window_size = nghttp2_session_get_remote_window_size(self->http2->session);
+    if (remote_window_size < 0) {
+        perf_log_warning("failed to get http2 session remote window size");
+        return 0;
+    }
+
+    if (len > remote_window_size) {
+        perf_log_warning("remote window size is too small for POST payload");
+        return 0;
+    }
+
+    // compose content-length
+    char payload_size[6];
+    int  payload_size_len = snprintf(payload_size, 6, "%ld", len);
+              
+    const nghttp2_nv hdrs[] = {
+                                MAKE_NV(":method", "POST"),
+                                MAKE_NV(":scheme", "https"),
+                                MAKE_NV_CS(":authority", self->http2->stream->authority),
+                                MAKE_NV_CS(":path", self->http2->stream->path),
+                                MAKE_NV("accept", "application/dns-message"),
+                                MAKE_NV("content-type", "application/dns-message"),
+                                MAKE_NV_LEN("content-length", payload_size, payload_size_len),
+                                MAKE_NV("user-agent", "nghttp2-dnsperf/" NGHTTP2_VERSION)};
+
+    http2_data_provider_t payload;
+    payload.buf = buf;
+    payload.len = len;
+
+    // we need data provider to pass to submit()
+    nghttp2_data_provider data_provider;
+    data_provider.source.ptr = &payload;
+    data_provider.read_callback = _payload_read_cb;
+
+    stream_id = nghttp2_submit_request(self->http2->session,
+                                        NULL,
+                                        hdrs,
+                                        sizeof(hdrs) / sizeof(hdrs[0]),
+                                        &data_provider,
+                                        self->http2->stream);
+    if (stream_id < 0) {
+        perf_log_fatal("Failed to submit HTTP2 request: %s", nghttp2_strerror(stream_id));
+    }
+
+    self->http2->stream->stream_id = stream_id;
+
+    ret = nghttp2_session_send(self->http2->session);
+    if (ret < 0) {
+        perf_log_warning("nghttp2_session_send failed: %d", ret);
+        return -1;
+    }
+
     return 0;
 }
 
@@ -821,8 +905,14 @@ static ssize_t perf__doh_sendto(struct perf_net_socket* sock, uint16_t qid, cons
     self->qid = qid;
  
     if (self->is_ready) {
-        // TODO: check net_doh_method and do *_{get,post}()
-        ret = _submit_dns_query_get(sock, buf, len);
+        if (memcmp(net_doh_method, "GET", 3) == 0) {
+            ret = _submit_dns_query_get(sock, buf, len);
+        } else if (memcmp(net_doh_method, "POST", 4) == 0) {
+            ret = _submit_dns_query_post(sock, buf, len);
+        } else {
+            perf_log_fatal("failed to determine DoH method");
+        }
+
         self->request_sent = true;
         PERF_UNLOCK(&self->lock);
 
