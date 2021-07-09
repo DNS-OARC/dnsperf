@@ -37,7 +37,7 @@
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 
-#define DEFAULT_DOH_URI "https://localhost/dns-query?"
+#define DEFAULT_DOH_URI "https://localhost/dns-query"
 #define DEFAULT_DOH_METHOD "GET"
 
 static SSL_CTX* ssl_ctx = 0;
@@ -65,7 +65,7 @@ const char* net_doh_method = DEFAULT_DOH_METHOD;
         NGHTTP2_NV_FLAG_NONE                                                   \
   }
 
-#define DNS_GET_REQUEST_VAR "dns="
+#define DNS_GET_REQUEST_VAR "?dns="
 #define DNS_MSG_MAX_SIZE 65535
 
 #define debugx(format, args...) fprintf(stderr, format "\n", ##args)
