@@ -81,6 +81,7 @@ typedef struct {
     char *path;
     int32_t stream_id;
 } http2_stream_t;
+
 typedef struct {
     nghttp2_session* session;
     http2_stream_t* stream;
@@ -90,6 +91,7 @@ typedef struct {
     size_t dnsmsg_at;
     bool dnsmsg_completed;
 } http2_session_t;
+
 struct perf__doh_socket {
     struct perf_net_socket base;
 
