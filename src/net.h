@@ -31,6 +31,9 @@
 #define TCP_RECV_BUF_SIZE (16 * 1024)
 #define TCP_SEND_BUF_SIZE (4 * 1024)
 
+#define DOH_TEMPLATE_URI_MAX_SIZE 1024
+#define DOH_METHOD_MAX_SIZE 16
+
 struct perf_sockaddr {
     union {
         struct sockaddr     sa;
@@ -47,7 +50,8 @@ enum perf_net_mode {
     sock_pipe,
     sock_udp,
     sock_tcp,
-    sock_dot
+    sock_dot,
+    sock_doh
 };
 
 struct perf_net_socket;
@@ -163,5 +167,9 @@ struct perf_net_socket* perf_net_opensocket(enum perf_net_mode mode, const perf_
 struct perf_net_socket* perf_net_udp_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t);
 struct perf_net_socket* perf_net_tcp_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t);
 struct perf_net_socket* perf_net_dot_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t);
+struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t);
+
+extern const char* net_doh_uri;
+extern const char* net_doh_method;
 
 #endif

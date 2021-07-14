@@ -46,10 +46,11 @@ environment with autoconf, automake, libtool and pkgconfig.
 - [OpenSSL](https://www.openssl.org/) - for TSIG support
 - [Concurrency Kit](http://concurrencykit.org/) - for atomic operations
 - [LDNS](https://nlnetlabs.nl/projects/ldns/about/) - optional for dynamic update support
+- [nghttp2](https://nghttp2.org) - for HTTP/2 (DoH) support
 
 To install the dependencies under Debian/Ubuntu:
 ```
-apt-get install -y libssl-dev libldns-dev libck-dev
+apt-get install -y libssl-dev libldns-dev libck-dev libnghttp2-dev
 ```
 
 To install the dependencies under CentOS (with EPEL enabled):
