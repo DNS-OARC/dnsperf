@@ -500,6 +500,10 @@ static http2_stream_t* http2_stream_init(struct URI* uri)
 {
     http2_stream_t *stream_data = calloc(1, sizeof(http2_stream_t));
 
+    if (!stream_data) {
+        perf_log_fatal("out of memory");
+    }
+
     stream_data->path = calloc(1, uri->pathlen + 1);
     if (!stream_data->path) {
         perf_log_fatal("out of memory");
@@ -526,6 +530,7 @@ static void http2_stream_free(http2_stream_t *stream_data) {
 http2_session_t* http2_session_init()
 {
     http2_session_t *session_data = calloc(1, sizeof(http2_session_t));
+    
     if (!session_data) {
         perf_log_fatal("out of memory");
     }
