@@ -805,34 +805,35 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
             return -1;
         }
 
-        PERF_UNLOCK(&self->lock);
-    }
-    
-    PERF_LOCK(&self->lock);
+        if (self->http2 &&
+            self->http2->dnsmsg_completed) {
+            if (self->http2->dnsmsg_at > len) {
+                perf_log_warning("failed to process result - DNS response size");
+                PERF_UNLOCK(&self->lock);
+                return -1;
+            }
 
-    if (self->http2 &&
-        self->http2->dnsmsg_completed) {
-        if (self->http2->dnsmsg_at > len) {
-            perf_log_warning("failed to process result - DNS response size");
+            memcpy(buf, self->http2->dnsmsg, self->http2->dnsmsg_at);
+
+            self->http2->dnsmsg_completed = false;
+            int response_len = self->http2->dnsmsg_at;
+            self->http2->dnsmsg_at = 0;
+
+            self->have_more = false;
             PERF_UNLOCK(&self->lock);
+            return response_len;
+        } else {
+            self->have_more = true;
+            PERF_UNLOCK(&self->lock);
+            errno = EAGAIN;
             return -1;
         }
 
-        memcpy(buf, self->http2->dnsmsg, self->http2->dnsmsg_at);
-
-        self->http2->dnsmsg_completed = false;
-        int response_len = self->http2->dnsmsg_at;
-        self->http2->dnsmsg_at = 0;
-
-        self->have_more = false;
         PERF_UNLOCK(&self->lock);
-        return response_len;
-    } else {
-        self->have_more = true;
-        PERF_UNLOCK(&self->lock);
-        errno = EAGAIN;
-        return -1;
+        return n;
     }
+    
+    return n;
 }
 
 static ssize_t perf__doh_sendto(struct perf_net_socket* sock, uint16_t qid, const void* buf, size_t len, int flags, const struct sockaddr* dest_addr, socklen_t addrlen)
