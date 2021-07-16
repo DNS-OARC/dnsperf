@@ -19,6 +19,7 @@
 
 #include "config.h"
 #include "net.h"
+#include "edns.h"
 
 #include "log.h"
 #include "strerror.h"
@@ -67,6 +68,7 @@ const char* net_doh_method = DEFAULT_DOH_METHOD;
 
 #define DNS_GET_REQUEST_VAR "?dns="
 #define DNS_MSG_MAX_SIZE 65535
+#define DNS_MAX_QUESTION
 
 #define debugx(format, args...) fprintf(stderr, format "\n", ##args)
 
@@ -113,7 +115,7 @@ struct perf__doh_socket {
     uint64_t            conn_ts;
     perf_socket_event_t conn_event, conning_event;
 
-    uint8_t base64_dns_msg[512];
+    uint8_t base64_dns_msg[4 * ((MAX_EDNS_PACKET + 2) / 3)];
 
     http2_session_t* http2; // http2 session data
 };
@@ -339,6 +341,11 @@ static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, 
     uint8_t *cp;
     int ret = -1;
     uint8_t* base64_dns_msg = self->base64_dns_msg;
+    
+    if (4 * ((len + 2) / 3) >= sizeof(self->base64_dns_msg)) {
+        perf_log_warning("DNS payload exceeds base64 allocation");
+        return -1;
+    }
 
     ret = base64_encode(buf, len, base64_dns_msg);
     if (ret < 0) {
@@ -791,8 +798,6 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
             // 
             perf_log_warning("nghttp2_session_mem_recv failed: %s", 
                             nghttp2_strerror((int) ret));
-
-            http2_session_free(sock);
             PERF_UNLOCK(&self->lock);     
             return -1;
         }
@@ -876,6 +881,7 @@ static ssize_t perf__doh_sendto(struct perf_net_socket* sock, uint16_t qid, cons
 static int perf__doh_close(struct perf_net_socket* sock)
 {
     // TODO
+    http2_session_free(sock);
     return close(sock->fd);
 }
 
