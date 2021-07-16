@@ -31,9 +31,6 @@
 #define TCP_RECV_BUF_SIZE (16 * 1024)
 #define TCP_SEND_BUF_SIZE (4 * 1024)
 
-#define DOH_TEMPLATE_URI_MAX_SIZE 1024
-#define DOH_METHOD_MAX_SIZE 16
-
 struct perf_sockaddr {
     union {
         struct sockaddr     sa;
