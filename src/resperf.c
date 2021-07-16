@@ -234,6 +234,7 @@ setup(int argc, char** argv)
     unsigned int i;
     const char*  _mode           = 0;
     const char*  edns_option_str = NULL;
+    const char*  doh_method = NULL;
 
     sock_family     = AF_UNSPEC;
     server_port     = 0;
@@ -314,7 +315,7 @@ setup(int argc, char** argv)
     perf_long_opt_add("doh-uri", perf_opt_string, "doh_uri",
         "DoH URI", NULL, &net_doh_uri);
     perf_long_opt_add("doh-method", perf_opt_string, "doh_method",
-        "DoH Method", NULL, &net_doh_method);
+        "DoH Method", NULL, &doh_method);
 
     perf_opt_parse(argc, argv);
 
@@ -337,6 +338,14 @@ setup(int argc, char** argv)
             server_port = DEFAULT_SERVER_PORT;
             break;
         }
+    }
+
+    if (memcmp(doh_method, "GET", 3) == 0) {
+        net_doh_method = doh_get;
+    } else if (memcmp(doh_method, "POST", 4) == 0) {
+        net_doh_method = doh_post;
+    } else {
+        perf_log_fatal("failed to determine DoH method");
     }
 
     if (max_outstanding > nsocks * DEFAULT_MAX_OUTSTANDING)

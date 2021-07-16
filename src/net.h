@@ -166,7 +166,12 @@ struct perf_net_socket* perf_net_tcp_opensocket(const perf_sockaddr_t*, const pe
 struct perf_net_socket* perf_net_dot_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t);
 struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t);
 
+enum perf_doh_method {
+    doh_get,
+    doh_post
+};
+
 extern const char* net_doh_uri;
-extern const char* net_doh_method;
+extern enum perf_doh_method net_doh_method;
 
 #endif

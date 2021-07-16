@@ -408,6 +408,7 @@ setup(int argc, char** argv, config_t* config)
     const char* edns_option = NULL;
     const char* tsigkey     = NULL;
     const char* mode        = 0;
+    const char* doh_method  = NULL;
 
     memset(config, 0, sizeof(*config));
     config->argc = argc;
@@ -484,7 +485,7 @@ setup(int argc, char** argv, config_t* config)
     perf_long_opt_add("doh-uri", perf_opt_string, "doh_uri",
         "DoH URI", NULL, &net_doh_uri);
     perf_long_opt_add("doh-method", perf_opt_string, "doh_method",
-        "DoH Method", NULL, &net_doh_method);
+        "DoH Method", NULL, &doh_method);
 
     bool log_stdout = false;
     perf_opt_add('W', perf_opt_boolean, NULL, "log warnings and errors to stdout instead of stderr", NULL, &log_stdout);
@@ -510,6 +511,14 @@ setup(int argc, char** argv, config_t* config)
             server_port = DEFAULT_SERVER_PORT;
             break;
         }
+    }
+
+    if (memcmp(doh_method, "GET", 3) == 0) {
+        net_doh_method = doh_get;
+    } else if (memcmp(doh_method, "POST", 4) == 0) {
+        net_doh_method = doh_post;
+    } else {
+        perf_log_fatal("failed to determine DoH method");
     }
 
     if (family != NULL)
