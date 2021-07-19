@@ -368,13 +368,10 @@ setup(int argc, char** argv)
         perf_log_fatal("out of memory");
     }
     for (i = 0; i < nsocks; i++) {
-        socks[i] = perf_net_opensocket(mode, &server_addr, &local_addr, i, bufsize);
+        socks[i] = perf_net_opensocket(mode, &server_addr, &local_addr, i, bufsize, (void*)(intptr_t)i, perf__net_sent, perf__net_event);
         if (!socks[i]) {
             perf_log_fatal("perf_net_opensocket(): no socket returned, out of memory?");
         }
-        socks[i]->data  = (void*)(intptr_t)i;
-        socks[i]->sent  = perf__net_sent;
-        socks[i]->event = perf__net_event;
     }
 }
 

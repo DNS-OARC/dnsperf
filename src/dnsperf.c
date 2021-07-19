@@ -1181,13 +1181,11 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
         tinfo->socks[i] = perf_net_opensocket(config->mode, &config->server_addr,
             &config->local_addr,
             socket_offset++,
-            config->bufsize);
+            config->bufsize,
+            tinfo, perf__net_sent, perf__net_event);
         if (!tinfo->socks[i]) {
             perf_log_fatal("perf_net_opensocket(): no socket returned, out of memory?");
         }
-        tinfo->socks[i]->data  = tinfo;
-        tinfo->socks[i]->sent  = perf__net_sent;
-        tinfo->socks[i]->event = perf__net_event;
     }
     tinfo->current_sock = 0;
 

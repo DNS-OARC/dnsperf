@@ -158,10 +158,10 @@ static inline int perf_sockaddr_isinet6(const perf_sockaddr_t* sockaddr)
     return sockaddr->sa.sa.sa_family == AF_INET6;
 }
 
-struct perf_net_socket* perf_net_opensocket(enum perf_net_mode mode, const perf_sockaddr_t* server, const perf_sockaddr_t* local, unsigned int offset, size_t bufsize);
+struct perf_net_socket* perf_net_opensocket(enum perf_net_mode mode, const perf_sockaddr_t* server, const perf_sockaddr_t* local, unsigned int offset, size_t bufsize, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event);
 
-struct perf_net_socket* perf_net_udp_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t);
-struct perf_net_socket* perf_net_tcp_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t);
-struct perf_net_socket* perf_net_dot_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t);
+struct perf_net_socket* perf_net_udp_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event);
+struct perf_net_socket* perf_net_tcp_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event);
+struct perf_net_socket* perf_net_dot_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event);
 
 #endif

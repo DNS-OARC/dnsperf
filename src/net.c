@@ -189,7 +189,7 @@ void perf_net_parselocal(int family, const char* name, unsigned int port,
     exit(1);
 }
 
-struct perf_net_socket* perf_net_opensocket(enum perf_net_mode mode, const perf_sockaddr_t* server, const perf_sockaddr_t* local, unsigned int offset, size_t bufsize)
+struct perf_net_socket* perf_net_opensocket(enum perf_net_mode mode, const perf_sockaddr_t* server, const perf_sockaddr_t* local, unsigned int offset, size_t bufsize, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event)
 {
     int             port;
     perf_sockaddr_t tmp;
@@ -209,11 +209,11 @@ struct perf_net_socket* perf_net_opensocket(enum perf_net_mode mode, const perf_
 
     switch (mode) {
     case sock_udp:
-        return perf_net_udp_opensocket(server, &tmp, bufsize);
+        return perf_net_udp_opensocket(server, &tmp, bufsize, data, sent, event);
     case sock_tcp:
-        return perf_net_tcp_opensocket(server, &tmp, bufsize);
+        return perf_net_tcp_opensocket(server, &tmp, bufsize, data, sent, event);
     case sock_dot:
-        return perf_net_dot_opensocket(server, &tmp, bufsize);
+        return perf_net_dot_opensocket(server, &tmp, bufsize, data, sent, event);
     default:
         perf_log_fatal("perf_net_opensocket(): invalid mode");
     }
