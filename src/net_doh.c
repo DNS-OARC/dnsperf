@@ -85,15 +85,15 @@ typedef struct {
 } http2_stream_t;
 
 typedef struct {
-    nghttp2_session*       session;
-    http2_stream_t*        stream;
-    http2_data_provider_t* payload;
-    nghttp2_data_provider* data_provider;
-    uint32_t               max_concurrent_streams;
-    bool                   settings_sent;
-    char                   dnsmsg[DNS_MSG_MAX_SIZE];
-    size_t                 dnsmsg_at;
-    bool                   dnsmsg_completed;
+    nghttp2_session*      session;
+    http2_stream_t        stream;
+    http2_data_provider_t payload;
+    nghttp2_data_provider data_provider;
+    uint32_t              max_concurrent_streams;
+    bool                  settings_sent;
+    char                  dnsmsg[DNS_MSG_MAX_SIZE];
+    size_t                dnsmsg_at;
+    bool                  dnsmsg_completed;
 } http2_session_t;
 
 struct perf__doh_socket {
@@ -118,8 +118,11 @@ struct perf__doh_socket {
 
     uint8_t base64_dns_msg[4 * ((MAX_EDNS_PACKET + 2) / 3)];
 
-    http2_session_t* http2; // http2 session data
+    http2_session_t http2; // http2 session data
 };
+
+static nghttp2_session_callbacks* _nghttp2_callbacks = 0;
+static nghttp2_option*            _nghttp2_option    = 0;
 
 #ifndef OPENSSL_NO_NEXTPROTONEG
 /* NPN TLS extension check */
@@ -142,6 +145,26 @@ static int select_next_proto_cb(SSL* ssl, unsigned char** out,
 static void perf__doh_connect(struct perf_net_socket* sock)
 {
     int ret;
+
+    // TODO: remove all of this stream, uri is static data
+    free(self->http2.stream.path);
+    if (!(self->http2.stream.path = calloc(1, doh_uri.pathlen + 1))) {
+        perf_log_fatal("out of memory");
+    }
+    memcpy(self->http2.stream.path, doh_uri.path, doh_uri.pathlen);
+
+    free(self->http2.stream.authority);
+    self->http2.stream.authority = calloc(1, doh_uri.hostportlen + 1);
+    if (!self->http2.stream.authority) {
+        perf_log_fatal("out of memory");
+    }
+    memcpy(self->http2.stream.authority, doh_uri.hostport, doh_uri.hostportlen);
+
+    nghttp2_session_del(self->http2.session);
+    ret = nghttp2_session_client_new2(&self->http2.session, _nghttp2_callbacks, self, _nghttp2_option);
+    if (ret < 0) {
+        perf_log_fatal("Failed to initialize http2 session: %s", nghttp2_strerror(ret));
+    }
 
     int fd = socket(self->server.sa.sa.sa_family, SOCK_STREAM, 0);
     if (fd == -1) {
@@ -214,10 +237,13 @@ static void perf__doh_reconnect(struct perf_net_socket* sock)
     close(sock->fd);
     // self->have_more = false; TODO
 
-    self->http2->settings_sent = false;
-    self->is_ready             = false;
-    self->is_conn_ready        = false;
-    self->is_ssl_ready         = false;
+    self->http2.settings_sent = false;
+    self->is_ready            = false;
+    self->is_conn_ready       = false;
+    self->is_ssl_ready        = false;
+
+    self->http2.dnsmsg_at        = 0;
+    self->http2.dnsmsg_completed = false;
 
     perf__doh_connect(sock);
 }
@@ -264,39 +290,39 @@ static int _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, 
         cp++;
     }
 
-    const size_t path_len = strlen(self->http2->stream->path) + sizeof(DNS_GET_REQUEST_VAR) - 1 + ret;
+    const size_t path_len = strlen(self->http2.stream.path) + sizeof(DNS_GET_REQUEST_VAR) - 1 + ret;
 
     char full_path[path_len];
-    memcpy(full_path, self->http2->stream->path, strlen(self->http2->stream->path));
-    memcpy(&full_path[strlen(self->http2->stream->path)],
+    memcpy(full_path, self->http2.stream.path, strlen(self->http2.stream.path));
+    memcpy(&full_path[strlen(self->http2.stream.path)],
         DNS_GET_REQUEST_VAR,
         sizeof(DNS_GET_REQUEST_VAR) - 1);
-    memcpy(&full_path[strlen(self->http2->stream->path) + sizeof(DNS_GET_REQUEST_VAR) - 1],
+    memcpy(&full_path[strlen(self->http2.stream.path) + sizeof(DNS_GET_REQUEST_VAR) - 1],
         self->base64_dns_msg,
         ret);
 
     const nghttp2_nv hdrs[] = {
         MAKE_NV(":method", "GET"),
         MAKE_NV(":scheme", "https"),
-        MAKE_NV_CS(":authority", self->http2->stream->authority),
+        MAKE_NV_CS(":authority", self->http2.stream.authority),
         MAKE_NV_LEN(":path", full_path, path_len),
         MAKE_NV("accept", "application/dns-message"),
         MAKE_NV("user-agent", "nghttp2-dnsperf/" NGHTTP2_VERSION)
     };
 
-    stream_id = nghttp2_submit_request(self->http2->session,
+    stream_id = nghttp2_submit_request(self->http2.session,
         NULL,
         hdrs,
         sizeof(hdrs) / sizeof(hdrs[0]),
         NULL,
-        self->http2->stream);
+        &self->http2.stream);
     if (stream_id < 0) {
         perf_log_fatal("Failed to submit HTTP2 request: %s", nghttp2_strerror(stream_id));
     }
 
-    self->http2->stream->stream_id = stream_id;
+    self->http2.stream.stream_id = stream_id;
 
-    ret = nghttp2_session_send(self->http2->session);
+    ret = nghttp2_session_send(self->http2.session);
     if (ret < 0) {
         perf_log_warning("nghttp2_session_send failed: %d", ret);
         return -1;
@@ -335,7 +361,7 @@ static int _submit_dns_query_post(struct perf_net_socket* sock, const void* buf,
     // can send across without issuing WINDOW_UPDATE
     // we need to check for this and bounce back the request if the
     // payload > remote window size
-    int remote_window_size = nghttp2_session_get_remote_window_size(self->http2->session);
+    int remote_window_size = nghttp2_session_get_remote_window_size(self->http2.session);
     if (remote_window_size < 0) {
         perf_log_warning("failed to get http2 session remote window size");
         return 0;
@@ -353,8 +379,8 @@ static int _submit_dns_query_post(struct perf_net_socket* sock, const void* buf,
     const nghttp2_nv hdrs[] = {
         MAKE_NV(":method", "POST"),
         MAKE_NV(":scheme", "https"),
-        MAKE_NV_CS(":authority", self->http2->stream->authority),
-        MAKE_NV_CS(":path", self->http2->stream->path),
+        MAKE_NV_CS(":authority", self->http2.stream.authority),
+        MAKE_NV_CS(":path", self->http2.stream.path),
         MAKE_NV("accept", "application/dns-message"),
         MAKE_NV("content-type", "application/dns-message"),
         MAKE_NV_LEN("content-length", payload_size, payload_size_len),
@@ -362,138 +388,33 @@ static int _submit_dns_query_post(struct perf_net_socket* sock, const void* buf,
     };
 
     // TODO: use of stack based memory `buf`
-    self->http2->payload->buf = buf;
-    self->http2->payload->len = len;
+    self->http2.payload.buf = buf;
+    self->http2.payload.len = len;
 
     // we need data provider to pass to submit()
 
-    self->http2->data_provider->source.ptr    = self->http2->payload;
-    self->http2->data_provider->read_callback = _payload_read_cb;
+    self->http2.data_provider.source.ptr    = &self->http2.payload;
+    self->http2.data_provider.read_callback = _payload_read_cb;
 
-    stream_id = nghttp2_submit_request(self->http2->session,
+    stream_id = nghttp2_submit_request(self->http2.session,
         NULL,
         hdrs,
         sizeof(hdrs) / sizeof(hdrs[0]),
-        self->http2->data_provider,
-        self->http2->stream);
+        &self->http2.data_provider,
+        &self->http2.stream);
     if (stream_id < 0) {
         perf_log_fatal("Failed to submit HTTP2 request: %s", nghttp2_strerror(stream_id));
     }
 
-    self->http2->stream->stream_id = stream_id;
+    self->http2.stream.stream_id = stream_id;
 
-    ret = nghttp2_session_send(self->http2->session);
+    ret = nghttp2_session_send(self->http2.session);
     if (ret < 0) {
         perf_log_warning("nghttp2_session_send failed: %d", ret);
         return -1;
     }
 
     return 0;
-}
-
-static http2_stream_t* http2_stream_init(struct URI* uri)
-{
-    http2_stream_t* stream_data = calloc(1, sizeof(http2_stream_t));
-
-    if (!stream_data) {
-        perf_log_fatal("out of memory");
-    }
-
-    stream_data->path = calloc(1, uri->pathlen + 1);
-    if (!stream_data->path) {
-        perf_log_fatal("out of memory");
-    }
-
-    memcpy(stream_data->path, uri->path, uri->pathlen);
-
-    stream_data->authority = calloc(1, uri->hostportlen + 1);
-    if (!stream_data->authority) {
-        perf_log_fatal("out of memory");
-    }
-
-    memcpy(stream_data->authority, uri->hostport, uri->hostportlen);
-
-    return stream_data;
-}
-
-static void http2_stream_free(http2_stream_t* stream_data)
-{
-    free(stream_data->path);
-    free(stream_data->authority);
-    free(stream_data);
-}
-
-static http2_session_t* http2_session_init()
-{
-    http2_session_t* session_data = calloc(1, sizeof(http2_session_t));
-
-    if (!session_data) {
-        perf_log_fatal("out of memory");
-    }
-
-    return session_data;
-}
-
-static nghttp2_data_provider* http2_data_provider_init()
-{
-    nghttp2_data_provider* data_provider = calloc(1, sizeof(nghttp2_data_provider));
-
-    if (!data_provider) {
-        perf_log_fatal("out of memory");
-    }
-
-    return data_provider;
-}
-
-static void nghttp2_data_provider_free(http2_session_t* session)
-{
-    if (session->data_provider) {
-        free(session->data_provider);
-    }
-}
-
-static http2_data_provider_t* http2_dp_payload_init()
-{
-    http2_data_provider_t* payload = calloc(1, sizeof(http2_data_provider_t));
-
-    if (!payload) {
-        perf_log_fatal("out of memory");
-    }
-
-    return payload;
-}
-
-static void http2_dp_payload_free(http2_session_t* session)
-{
-    if (session->payload) {
-        free(session->payload);
-    }
-}
-
-static void http2_session_free(struct perf_net_socket* sock)
-{
-    if (self->ssl) {
-        SSL_shutdown(self->ssl);
-    }
-
-    nghttp2_session_del(self->http2->session);
-    self->http2->session = NULL;
-
-    if (self->http2->stream) {
-        http2_stream_free(self->http2->stream);
-        self->http2->stream = NULL;
-    }
-
-    if (self->http2->payload) {
-        http2_dp_payload_free(self->http2);
-    }
-
-    if (self->http2->data_provider) {
-        nghttp2_data_provider_free(self->http2);
-    }
-
-    free(self->http2);
-    self->http2 = NULL;
 }
 
 /* nghttp2 callbacks */
@@ -555,12 +476,12 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
         // we are interested in DATA frame which will carry the DNS response
         // NGHTTP2_FLAG_END_STREAM indicates that we have the data in full
         if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
-            if (self->http2->dnsmsg_at > DNS_MSG_MAX_SIZE) {
+            if (self->http2.dnsmsg_at > DNS_MSG_MAX_SIZE) {
                 perf_log_warning("DNS response > DNS message maximum size");
                 return NGHTTP2_ERR_CALLBACK_FAILURE;
             }
 
-            self->http2->dnsmsg_completed = true;
+            self->http2.dnsmsg_completed = true;
             // self->have_more               = false; TODO
         }
         break;
@@ -584,68 +505,12 @@ static int _http2_data_chunk_recv_cb(nghttp2_session* session,
     (void)flags;
 
     if (nghttp2_session_get_stream_user_data(session, stream_id)) {
-        if (self->http2->dnsmsg_at + len > DNS_MSG_MAX_SIZE) {
+        if (self->http2.dnsmsg_at + len > DNS_MSG_MAX_SIZE) {
             perf_log_warning("http2 chunk data exceeds DNS message max size");
             return NGHTTP2_ERR_CALLBACK_FAILURE;
         }
-        memcpy(self->http2->dnsmsg + self->http2->dnsmsg_at, data, len);
-        self->http2->dnsmsg_at += len;
-    }
-
-    return 0;
-}
-
-static int _http2_init(struct perf__doh_socket* sock)
-{
-    int                        ret;
-    nghttp2_session_callbacks* callbacks;
-    nghttp2_option*            option;
-
-    self->http2                         = http2_session_init();
-    self->http2->stream                 = http2_stream_init(&doh_uri);
-    self->http2->max_concurrent_streams = DEFAULT_MAX_CONCURRENT_STREAMS;
-
-    self->http2->data_provider = http2_data_provider_init();
-    self->http2->payload       = http2_dp_payload_init();
-
-    /* sets HTTP/2 callbacks */
-    assert(nghttp2_session_callbacks_new(&callbacks) == 0);
-    nghttp2_session_callbacks_set_send_callback(callbacks, _http2_send_cb);
-    nghttp2_session_callbacks_set_on_data_chunk_recv_callback(callbacks, _http2_data_chunk_recv_cb);
-    nghttp2_session_callbacks_set_on_frame_recv_callback(callbacks, _http2_frame_recv_cb);
-
-    assert(nghttp2_option_new(&option) == 0);
-    nghttp2_option_set_peer_max_concurrent_streams(option, self->http2->max_concurrent_streams);
-
-    ret = nghttp2_session_client_new2(&self->http2->session, callbacks, self, option);
-
-    nghttp2_session_callbacks_del(callbacks);
-    nghttp2_option_del(option);
-
-    if (ret < 0) {
-        perf_log_fatal("Failed to initialize http2 session: %s", nghttp2_strerror(ret));
-    }
-
-    self->http2->dnsmsg_at        = 0;
-    self->http2->dnsmsg_completed = false;
-
-    return ret;
-}
-
-static int _http2_send_settings(http2_session_t* session_data)
-{
-    nghttp2_settings_entry iv[] = {
-        { NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, DEFAULT_MAX_CONCURRENT_STREAMS },
-        { NGHTTP2_SETTINGS_ENABLE_PUSH, 0 },
-        { NGHTTP2_SETTINGS_INITIAL_WINDOW_SIZE, 65535 }
-    };
-    int ret = -1;
-
-    ret = nghttp2_submit_settings(session_data->session, NGHTTP2_FLAG_NONE, iv,
-        sizeof(iv) / sizeof(*iv));
-    if (ret != 0) {
-        perf_log_warning("Could not submit https2 SETTINGS: %s", nghttp2_strerror(ret));
-        return ret;
+        memcpy(self->http2.dnsmsg + self->http2.dnsmsg_at, data, len);
+        self->http2.dnsmsg_at += len;
     }
 
     return 0;
@@ -700,7 +565,7 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
     // this will be processed by nghttp2 callbacks
     // self->recvbuf holds the payload
     // TODO: handle partial mem_recv
-    ret = nghttp2_session_mem_recv(self->http2->session,
+    ret = nghttp2_session_mem_recv(self->http2.session,
         (uint8_t*)self->recvbuf,
         n);
     if (ret < 0) {
@@ -711,7 +576,7 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
     }
 
     // need to execute nghttp2_session_send if the receive ops triggered data frames
-    ret = nghttp2_session_send(self->http2->session);
+    ret = nghttp2_session_send(self->http2.session);
     if (ret < 0) {
         // TODO: reconnect?
         perf_log_warning("nghttp2_session_send failed: %s", nghttp2_strerror((int)ret));
@@ -719,19 +584,19 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
         return -1;
     }
 
-    if (self->http2->dnsmsg_completed) {
-        if (self->http2->dnsmsg_at > len) {
+    if (self->http2.dnsmsg_completed) {
+        if (self->http2.dnsmsg_at > len) {
             perf_log_warning("failed to process result - DNS response size");
-            self->http2->dnsmsg_at = 0;
+            self->http2.dnsmsg_at = 0;
             PERF_UNLOCK(&self->lock);
             return -1;
         }
 
-        memcpy(buf, self->http2->dnsmsg, self->http2->dnsmsg_at);
+        memcpy(buf, self->http2.dnsmsg, self->http2.dnsmsg_at);
 
-        self->http2->dnsmsg_completed = false;
-        ssize_t response_len          = self->http2->dnsmsg_at;
-        self->http2->dnsmsg_at        = 0;
+        self->http2.dnsmsg_completed = false;
+        ssize_t response_len         = self->http2.dnsmsg_at;
+        self->http2.dnsmsg_at        = 0;
 
         // self->have_more = false; TODO
         PERF_UNLOCK(&self->lock);
@@ -772,7 +637,7 @@ static ssize_t perf__doh_sendto(struct perf_net_socket* sock, uint16_t qid, cons
         break;
     }
 
-    if (nghttp2_session_want_write(self->http2->session)) {
+    if (nghttp2_session_want_write(self->http2.session)) {
         self->is_sending = true;
         PERF_UNLOCK(&self->lock);
         errno = EINPROGRESS;
@@ -809,7 +674,7 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
 
     if (self->is_ready) {
         // do nghttp2 I/O send to flush outstanding frames
-        int ret = nghttp2_session_send(self->http2->session);
+        int ret = nghttp2_session_send(self->http2.session);
         if (ret != 0) {
             perf_log_warning("nghttp2_session_send failed: %s", nghttp2_strerror(ret));
             self->do_reconnect = true;
@@ -819,12 +684,12 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
 
         bool sent = false;
         if (self->is_sending) {
-            if (nghttp2_session_want_write(self->http2->session)) {
+            if (nghttp2_session_want_write(self->http2.session)) {
                 PERF_UNLOCK(&self->lock);
                 return 0;
             }
             self->is_sending = false;
-            sent = true;
+            sent             = true;
         }
         PERF_UNLOCK(&self->lock);
         if (sent && sock->sent) {
@@ -906,17 +771,23 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
         self->is_ssl_ready = true;
     }
 
-    if (!self->http2->settings_sent) {
+    if (!self->http2.settings_sent) {
         // send settings
         // TODO: does sending settings need session_send()?
-        int ret = _http2_send_settings(self->http2);
+        nghttp2_settings_entry iv[] = {
+            { NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, DEFAULT_MAX_CONCURRENT_STREAMS },
+            { NGHTTP2_SETTINGS_ENABLE_PUSH, 0 },
+            { NGHTTP2_SETTINGS_INITIAL_WINDOW_SIZE, 65535 }
+        };
+        int ret = nghttp2_submit_settings(self->http2.session, NGHTTP2_FLAG_NONE, iv,
+            sizeof(iv) / sizeof(*iv));
         if (ret != 0) {
-            perf_log_warning("nghttp2_submit_settings failed: %s", nghttp2_strerror(ret));
+            perf_log_warning("Could not submit https2 SETTINGS: %s", nghttp2_strerror(ret));
             self->do_reconnect = true;
             PERF_UNLOCK(&self->lock);
             return 0;
         }
-        self->http2->settings_sent = true;
+        self->http2.settings_sent = true;
     }
 
     self->is_ready = true;
@@ -936,12 +807,10 @@ static bool perf__doh_have_more(struct perf_net_socket* sock)
     return false;
 }
 
-struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, const perf_sockaddr_t* local, size_t bufsize)
+struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, const perf_sockaddr_t* local, size_t bufsize, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event)
 {
     struct perf__doh_socket* tmp  = calloc(1, sizeof(struct perf__doh_socket)); // clang scan-build
     struct perf_net_socket*  sock = (struct perf_net_socket*)tmp;
-
-    int ret = -1;
 
     if (!sock) {
         perf_log_fatal("perf_net_doh_opensocket() out of memory");
@@ -954,6 +823,10 @@ struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, c
     sock->sockeq    = perf__doh_sockeq;
     sock->sockready = perf__doh_sockready;
     sock->have_more = perf__doh_have_more;
+
+    sock->data  = data;
+    sock->sent  = sent;
+    sock->event = event;
 
     self->server  = *server;
     self->local   = *local;
@@ -987,11 +860,22 @@ struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, c
 #endif // OPENSSL_VERSION_NUMBER >= 0x10002000L
     }
 
-    // init http/2 session
-    ret = _http2_init(self);
-    if (ret < 0) {
-        // failed to initialise http2
-        perf_log_fatal("nghttp2_init() failed to initialize: %d", ret);
+    /* setup HTTP/2 callbacks */
+    if (!_nghttp2_callbacks) {
+        if (nghttp2_session_callbacks_new(&_nghttp2_callbacks)) {
+            perf_log_fatal("Unable to create nghttp2 callbacks: out of memory");
+        }
+        nghttp2_session_callbacks_set_send_callback(_nghttp2_callbacks, _http2_send_cb);
+        nghttp2_session_callbacks_set_on_data_chunk_recv_callback(_nghttp2_callbacks, _http2_data_chunk_recv_cb);
+        nghttp2_session_callbacks_set_on_frame_recv_callback(_nghttp2_callbacks, _http2_frame_recv_cb);
+    }
+
+    /* setup HTTP/2 options */
+    if (!_nghttp2_option) {
+        if (nghttp2_option_new(&_nghttp2_option)) {
+            perf_log_fatal("Unable to create nghttp2 options: out of memory");
+        }
+        nghttp2_option_set_peer_max_concurrent_streams(_nghttp2_option, DEFAULT_MAX_CONCURRENT_STREAMS);
     }
 
     perf__doh_connect(sock);
