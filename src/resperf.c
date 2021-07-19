@@ -234,7 +234,8 @@ setup(int argc, char** argv)
     unsigned int i;
     const char*  _mode           = 0;
     const char*  edns_option_str = NULL;
-    const char*  doh_method      = NULL;
+    const char*  doh_uri         = 0;
+    const char*  doh_method      = 0;
 
     sock_family     = AF_UNSPEC;
     server_port     = 0;
@@ -313,9 +314,9 @@ setup(int argc, char** argv)
     perf_opt_add('F', perf_opt_zpint, "fall_behind", "the maximum number of queries that is allowed to fall behind, zero to disable",
         stringify(DEFAULT_MAX_FALL_BEHIND, 0), &max_fall_behind);
     perf_long_opt_add("doh-uri", perf_opt_string, "doh_uri",
-        "DoH URI", NULL, &net_doh_uri);
+        "the URI to use for DNS-over-HTTPS", DEFAULT_DOH_URI, &doh_uri);
     perf_long_opt_add("doh-method", perf_opt_string, "doh_method",
-        "DoH Method", NULL, &doh_method);
+        "the HTTP method to use for DNS-over-HTTPS: GET or POST", DEFAULT_DOH_METHOD, &doh_method);
 
     perf_opt_parse(argc, argv);
 
@@ -340,12 +341,11 @@ setup(int argc, char** argv)
         }
     }
 
-    if (memcmp(doh_method, "GET", 3) == 0) {
-        net_doh_method = doh_get;
-    } else if (memcmp(doh_method, "POST", 4) == 0) {
-        net_doh_method = doh_post;
-    } else {
-        perf_log_fatal("failed to determine DoH method");
+    if (doh_uri) {
+        perf_net_doh_parse_uri(doh_uri);
+    }
+    if (doh_method) {
+        perf_net_doh_parse_method(doh_method);
     }
 
     if (max_outstanding > nsocks * DEFAULT_MAX_OUTSTANDING)

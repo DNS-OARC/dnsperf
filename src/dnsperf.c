@@ -408,7 +408,8 @@ setup(int argc, char** argv, config_t* config)
     const char* edns_option = NULL;
     const char* tsigkey     = NULL;
     const char* mode        = 0;
-    const char* doh_method  = NULL;
+    const char* doh_uri     = 0;
+    const char* doh_method  = 0;
 
     memset(config, 0, sizeof(*config));
     config->argc = argc;
@@ -483,9 +484,9 @@ setup(int argc, char** argv, config_t* config)
         "verbose: report each query and additional information to stdout",
         NULL, &config->verbose);
     perf_long_opt_add("doh-uri", perf_opt_string, "doh_uri",
-        "DoH URI", NULL, &net_doh_uri);
+        "the URI to use for DNS-over-HTTPS", DEFAULT_DOH_URI, &doh_uri);
     perf_long_opt_add("doh-method", perf_opt_string, "doh_method",
-        "DoH Method", NULL, &doh_method);
+        "the HTTP method to use for DNS-over-HTTPS: GET or POST", DEFAULT_DOH_METHOD, &doh_method);
 
     bool log_stdout = false;
     perf_opt_add('W', perf_opt_boolean, NULL, "log warnings and errors to stdout instead of stderr", NULL, &log_stdout);
@@ -513,12 +514,11 @@ setup(int argc, char** argv, config_t* config)
         }
     }
 
-    if (memcmp(doh_method, "GET", 3) == 0) {
-        net_doh_method = doh_get;
-    } else if (memcmp(doh_method, "POST", 4) == 0) {
-        net_doh_method = doh_post;
-    } else {
-        perf_log_fatal("failed to determine DoH method");
+    if (doh_uri) {
+        perf_net_doh_parse_uri(doh_uri);
+    }
+    if (doh_method) {
+        perf_net_doh_parse_method(doh_method);
     }
 
     if (family != NULL)
@@ -688,8 +688,7 @@ do_send(void* arg)
         query_move(tinfo, q, prepend_outstanding);
         q->timestamp = UINT64_MAX;
 
-        i = tinfo->nsocks * 2;
-
+        i        = tinfo->nsocks * 2;
         all_fail = true;
         while (i--) {
             q->sock = tinfo->socks[tinfo->current_sock++ % tinfo->nsocks];

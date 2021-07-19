@@ -30,9 +30,9 @@ bin_PROGRAMS = dnsperf resperf
 dist_bin_SCRIPTS = resperf-report
 
 _libperf_sources = datafile.c dns.c log.c net.c opt.c os.c strerror.c qtype.c \
-  edns.c tsig.c net_udp.c net_tcp.c net_dot.c net_doh.c
+  edns.c tsig.c net_udp.c net_tcp.c net_dot.c net_doh.c parse_uri.c
 _libperf_headers = datafile.h dns.h log.h net.h opt.h os.h util.h strerror.h \
-  list.h result.h buffer.h qtype.h edns.h tsig.h
+  list.h result.h buffer.h qtype.h edns.h tsig.h parse_uri.h
 
 dnsperf_SOURCES = $(_libperf_sources) dnsperf.c
 dist_dnsperf_SOURCES = $(_libperf_headers)

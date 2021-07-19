@@ -166,12 +166,10 @@ struct perf_net_socket* perf_net_tcp_opensocket(const perf_sockaddr_t*, const pe
 struct perf_net_socket* perf_net_dot_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event);
 struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event);
 
-enum perf_doh_method {
-    doh_get,
-    doh_post
-};
+#define DEFAULT_DOH_URI "https://localhost/dns-query"
+#define DEFAULT_DOH_METHOD "GET"
 
-extern const char*          net_doh_uri;
-extern enum perf_doh_method net_doh_method;
+void perf_net_doh_parse_uri(const char*);
+void perf_net_doh_parse_method(const char*);
 
 #endif
