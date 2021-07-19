@@ -367,7 +367,7 @@ static bool perf__tcp_have_more(struct perf_net_socket* sock)
     return self->have_more;
 }
 
-struct perf_net_socket* perf_net_tcp_opensocket(const perf_sockaddr_t* server, const perf_sockaddr_t* local, size_t bufsize)
+struct perf_net_socket* perf_net_tcp_opensocket(const perf_sockaddr_t* server, const perf_sockaddr_t* local, size_t bufsize, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event)
 {
     struct perf__tcp_socket* tmp  = calloc(1, sizeof(struct perf__tcp_socket)); // clang scan-build
     struct perf_net_socket*  sock = (struct perf_net_socket*)tmp;
@@ -383,6 +383,10 @@ struct perf_net_socket* perf_net_tcp_opensocket(const perf_sockaddr_t* server, c
     sock->sockeq    = perf__tcp_sockeq;
     sock->sockready = perf__tcp_sockready;
     sock->have_more = perf__tcp_have_more;
+
+    sock->data  = data;
+    sock->sent  = sent;
+    sock->event = event;
 
     self->server  = *server;
     self->local   = *local;
