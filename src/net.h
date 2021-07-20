@@ -47,7 +47,8 @@ enum perf_net_mode {
     sock_pipe,
     sock_udp,
     sock_tcp,
-    sock_dot
+    sock_dot,
+    sock_doh
 };
 
 struct perf_net_socket;
@@ -163,5 +164,12 @@ struct perf_net_socket* perf_net_opensocket(enum perf_net_mode mode, const perf_
 struct perf_net_socket* perf_net_udp_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event);
 struct perf_net_socket* perf_net_tcp_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event);
 struct perf_net_socket* perf_net_dot_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event);
+struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event);
+
+#define DEFAULT_DOH_URI "https://localhost/dns-query"
+#define DEFAULT_DOH_METHOD "GET"
+
+void perf_net_doh_parse_uri(const char*);
+void perf_net_doh_parse_method(const char*);
 
 #endif

@@ -44,7 +44,7 @@ typedef struct {
     const char*    desc;
     const char*    help;
     const char*    defval;
-    char           defvalbuf[128];
+    char           defvalbuf[512];
     union {
         void*         valp;
         char**        stringp;
@@ -64,7 +64,7 @@ struct long_opt {
     const char*    desc;
     const char*    help;
     const char*    defval;
-    char           defvalbuf[128];
+    char           defvalbuf[512];
     union {
         void*         valp;
         char**        stringp;

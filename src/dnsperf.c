@@ -52,7 +52,8 @@
 #define DEFAULT_SERVER_NAME "127.0.0.1"
 #define DEFAULT_SERVER_PORT 53
 #define DEFAULT_SERVER_DOT_PORT 853
-#define DEFAULT_SERVER_PORTS "udp/tcp 53 or DoT 853"
+#define DEFAULT_SERVER_DOH_PORT 443
+#define DEFAULT_SERVER_PORTS "udp/tcp 53, DoT 853 or DoH 443"
 #define DEFAULT_LOCAL_PORT 0
 #define DEFAULT_MAX_OUTSTANDING 100
 #define DEFAULT_TIMEOUT 5
@@ -407,6 +408,8 @@ setup(int argc, char** argv, config_t* config)
     const char* edns_option = NULL;
     const char* tsigkey     = NULL;
     const char* mode        = 0;
+    const char* doh_uri     = 0;
+    const char* doh_method  = 0;
 
     memset(config, 0, sizeof(*config));
     config->argc = argc;
@@ -422,7 +425,7 @@ setup(int argc, char** argv, config_t* config)
     perf_opt_add('f', perf_opt_string, "family",
         "address family of DNS transport, inet or inet6", "any",
         &family);
-    perf_opt_add('m', perf_opt_string, "mode", "set transport mode: udp, tcp or dot", "udp", &mode);
+    perf_opt_add('m', perf_opt_string, "mode", "set transport mode: udp, tcp, dot or doh", "udp", &mode);
     perf_opt_add('s', perf_opt_string, "server_addr",
         "the server to query", DEFAULT_SERVER_NAME, &server_name);
     perf_opt_add('p', perf_opt_port, "port",
@@ -480,6 +483,11 @@ setup(int argc, char** argv, config_t* config)
     perf_opt_add('v', perf_opt_boolean, NULL,
         "verbose: report each query and additional information to stdout",
         NULL, &config->verbose);
+    perf_long_opt_add("doh-uri", perf_opt_string, "doh_uri",
+        "the URI to use for DNS-over-HTTPS", DEFAULT_DOH_URI, &doh_uri);
+    perf_long_opt_add("doh-method", perf_opt_string, "doh_method",
+        "the HTTP method to use for DNS-over-HTTPS: GET or POST", DEFAULT_DOH_METHOD, &doh_method);
+
     bool log_stdout = false;
     perf_opt_add('W', perf_opt_boolean, NULL, "log warnings and errors to stdout instead of stderr", NULL, &log_stdout);
 
@@ -493,7 +501,24 @@ setup(int argc, char** argv, config_t* config)
         config->mode = perf_net_parsemode(mode);
 
     if (!server_port) {
-        server_port = config->mode == sock_dot ? DEFAULT_SERVER_DOT_PORT : DEFAULT_SERVER_PORT;
+        switch (config->mode) {
+        case sock_doh:
+            server_port = DEFAULT_SERVER_DOH_PORT;
+            break;
+        case sock_dot:
+            server_port = DEFAULT_SERVER_DOT_PORT;
+            break;
+        default:
+            server_port = DEFAULT_SERVER_PORT;
+            break;
+        }
+    }
+
+    if (doh_uri) {
+        perf_net_doh_parse_uri(doh_uri);
+    }
+    if (doh_method) {
+        perf_net_doh_parse_method(doh_method);
     }
 
     if (family != NULL)
@@ -1244,6 +1269,7 @@ int main(int argc, char** argv)
     switch (config.mode) {
     case sock_tcp:
     case sock_dot:
+    case sock_doh:
         // block SIGPIPE for TCP/DOT mode, if connection is closed it will generate a signal
         perf_os_blocksignal(SIGPIPE, true);
         break;
