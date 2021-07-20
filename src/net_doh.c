@@ -407,7 +407,7 @@ static void _submit_dns_query_post(struct perf_net_socket* sock, const void* buf
 
     // compose content-length
     char payload_size[20];
-    int  payload_size_len = snprintf(payload_size, sizeof(payload_size), "%ld", len);
+    int  payload_size_len = snprintf(payload_size, sizeof(payload_size), "%zu", len);
     // TODO: check snprintf()
 
     const nghttp2_nv hdrs[] = {
@@ -427,7 +427,11 @@ static void _submit_dns_query_post(struct perf_net_socket* sock, const void* buf
             perf_log_fatal("perf_net_doh: out of memory");
         }
     }
-    memcpy(self->http2.payload.buf, buf, len);
+    if (self && self->http2.payload.buf && buf) { // fix clang scan-build
+        memcpy(self->http2.payload.buf, buf, len);
+    } else {
+        perf_log_fatal("_submit_dns_query_post(): payload.buf is null");
+    }
     self->http2.payload.bufp = self->http2.payload.buf;
     self->http2.payload.len  = len;
     self->is_post_sending    = true;
