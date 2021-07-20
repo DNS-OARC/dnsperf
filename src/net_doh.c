@@ -128,23 +128,29 @@ struct perf__doh_socket {
 static nghttp2_session_callbacks* _nghttp2_callbacks = 0;
 static nghttp2_option*            _nghttp2_option    = 0;
 
-#ifndef OPENSSL_NO_NEXTPROTONEG
-/* NPN TLS extension check */
-static int select_next_proto_cb(SSL* ssl, unsigned char** out,
-    unsigned char* outlen, const unsigned char* in,
-    unsigned int inlen, void* arg)
+void perf_net_doh_parse_uri(const char* uri)
 {
-    (void)ssl;
-    (void)arg;
+    if (parse_uri(&doh_uri, uri)) {
+        perf_log_warning("invalid DNS-over-HTTPS URI");
+        perf_opt_usage();
+        exit(1);
+    }
+}
 
-    if (nghttp2_select_next_protocol(out, outlen, in, inlen) <= 0) {
-        perf_log_warning("Server did not advertise %u", NGHTTP2_PROTO_VERSION_ID);
-        return SSL_TLSEXT_ERR_ALERT_WARNING;
+void perf_net_doh_parse_method(const char* method)
+{
+    if (!strcmp(method, "GET")) {
+        doh_method = doh_method_get;
+        return;
+    } else if (!strcmp(method, "POST")) {
+        doh_method = doh_method_post;
+        return;
     }
 
-    return SSL_TLSEXT_ERR_OK;
+    perf_log_warning("invalid DNS-over-HTTPS method");
+    perf_opt_usage();
+    exit(1);
 }
-#endif /* !OPENSSL_NO_NEXTPROTONEG */
 
 static void perf__doh_connect(struct perf_net_socket* sock)
 {
@@ -250,6 +256,96 @@ static void perf__doh_reconnect(struct perf_net_socket* sock)
     self->http2.dnsmsg_completed = false;
 
     perf__doh_connect(sock);
+}
+
+static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t len, int flags)
+{
+    ssize_t n   = 0;
+    ssize_t ret = 0;
+
+    // read TLS data here instead of nghttp2_recv_callback
+    PERF_LOCK(&self->lock);
+    if (!self->is_ready) {
+        PERF_UNLOCK(&self->lock);
+        errno = EAGAIN;
+        return -1;
+    }
+
+    n = SSL_read(self->ssl, self->recvbuf, TCP_RECV_BUF_SIZE);
+    if (!n) {
+        perf__doh_reconnect(sock);
+        PERF_UNLOCK(&self->lock);
+        errno = EAGAIN;
+        return -1;
+    }
+    if (n < 0) {
+        int err = SSL_get_error(self->ssl, n);
+        switch (err) {
+        case SSL_ERROR_WANT_READ:
+            errno = EAGAIN;
+            break;
+        case SSL_ERROR_SYSCALL:
+            switch (errno) {
+            case ECONNREFUSED:
+            case ECONNRESET:
+            case ENOTCONN:
+                perf__doh_reconnect(sock);
+                errno = EAGAIN;
+                break;
+            default:
+                break;
+            }
+            break;
+        default:
+            errno = EBADF;
+            break;
+        }
+        PERF_UNLOCK(&self->lock);
+        return -1;
+    }
+
+    // this will be processed by nghttp2 callbacks
+    // self->recvbuf holds the payload
+    ret = nghttp2_session_mem_recv(self->http2.session,
+        (uint8_t*)self->recvbuf,
+        n);
+    if (ret < 0) {
+        perf_log_warning("nghttp2_session_mem_recv failed: %s",
+            nghttp2_strerror((int)ret));
+        PERF_UNLOCK(&self->lock);
+        return -1;
+    }
+    // TODO: handle partial mem_recv
+    if (ret != n) {
+        perf_log_fatal("perf__doh_recv() mem_recv did not take all");
+    }
+
+    // need to execute nghttp2_session_send if the receive ops triggered data frames
+    ret = nghttp2_session_send(self->http2.session);
+    if (ret < 0) {
+        // TODO: reconnect?
+        perf_log_warning("nghttp2_session_send failed: %s", nghttp2_strerror((int)ret));
+        PERF_UNLOCK(&self->lock);
+        return -1;
+    }
+
+    if (self->http2.dnsmsg_completed) {
+        if (self->http2.dnsmsg_at <= len) {
+            len = self->http2.dnsmsg_at;
+        }
+        memcpy(buf, self->http2.dnsmsg, len);
+        self->http2.dnsmsg_completed = false;
+        self->http2.dnsmsg_at        = 0;
+
+        // self->have_more = false; TODO
+        PERF_UNLOCK(&self->lock);
+        return len;
+    } else {
+        // self->have_more = true; TODO
+        PERF_UNLOCK(&self->lock);
+        errno = EAGAIN;
+        return -1;
+    }
 }
 
 static void _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, size_t len)
@@ -393,218 +489,6 @@ static void _submit_dns_query_post(struct perf_net_socket* sock, const void* buf
     }
 
     self->http2.stream.stream_id = stream_id;
-}
-
-/* nghttp2 callbacks */
-
-static ssize_t _http2_send_cb(nghttp2_session* session,
-    const uint8_t*                             data,
-    size_t                                     length,
-    int                                        flags,
-    void*                                      sock)
-{
-    ssize_t n;
-    (void)session;
-    (void)flags;
-
-    // TODO: remove once non-experimental
-    if (!PERF_TRYLOCK(&self->lock)) {
-        perf_log_fatal("_http2_send_cb called without lock");
-    }
-
-    if (!self->is_ready) {
-        return NGHTTP2_ERR_CALLBACK_FAILURE;
-    }
-
-    // TODO: verify partial write
-    n = SSL_write(self->ssl, data, length);
-    if (n < 1) {
-        switch (SSL_get_error(self->ssl, n)) {
-        case SSL_ERROR_SYSCALL:
-            switch (errno) {
-            case ECONNREFUSED:
-            case ECONNRESET:
-            case ENOTCONN:
-            case EPIPE:
-                perf__doh_reconnect(sock);
-                errno = EINPROGRESS;
-                return NGHTTP2_ERR_CALLBACK_FAILURE;
-            default:
-                break;
-            }
-            return NGHTTP2_ERR_CALLBACK_FAILURE;
-        case SSL_ERROR_WANT_READ:
-        case SSL_ERROR_WANT_WRITE:
-            errno = EINPROGRESS;
-            return NGHTTP2_ERR_WOULDBLOCK;
-        default:
-            break;
-        }
-        perf_log_warning("SSL_write(): %s", ERR_error_string(SSL_get_error(self->ssl, n), 0));
-        errno = EBADF;
-        return NGHTTP2_ERR_CALLBACK_FAILURE;
-    }
-
-    return n;
-}
-
-static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* frame, void* sock)
-{
-    // TODO: remove once non-experimental
-    if (!PERF_TRYLOCK(&self->lock)) {
-        perf_log_fatal("_http2_frame_recv_cb called without lock");
-    }
-
-    switch (frame->hd.type) {
-    case NGHTTP2_HEADERS:
-        break;
-    case NGHTTP2_DATA:
-        // we are interested in DATA frame which will carry the DNS response
-        // NGHTTP2_FLAG_END_STREAM indicates that we have the data in full
-        if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
-            // TODO: what's the point of below code? if dnsmsg_at > max size then it will already done a buffer overflow
-            // if (self->http2.dnsmsg_at > DNS_MSG_MAX_SIZE) {
-            //     perf_log_warning("DNS response > DNS message maximum size");
-            //     return NGHTTP2_ERR_CALLBACK_FAILURE;
-            // }
-
-            if (self->http2.dnsmsg_completed) {
-                perf_log_fatal("_http2_frame_recv_cb: frame received when already having a dns msg");
-            }
-
-            self->http2.dnsmsg_completed = true;
-            // self->have_more               = false; TODO
-        }
-        break;
-    case NGHTTP2_SETTINGS:
-        break;
-    case NGHTTP2_RST_STREAM:
-        break;
-    case NGHTTP2_GOAWAY:
-        break;
-    }
-
-    return 0;
-}
-
-static int _http2_data_chunk_recv_cb(nghttp2_session* session,
-    uint8_t                                           flags,
-    int32_t                                           stream_id,
-    const uint8_t*                                    data,
-    size_t len, void* sock)
-{
-    (void)flags;
-
-    // TODO: remove once non-experimental
-    if (!PERF_TRYLOCK(&self->lock)) {
-        perf_log_fatal("_http2_data_chunk_recv_cb called without lock");
-    }
-
-    if (self->http2.dnsmsg_completed) {
-        perf_log_fatal("_http2_data_chunk_recv_cb: chunk received when already having a dns msg");
-    }
-
-    // TODO: point of nghttp2_session_get_stream_user_data() code?
-    // if (nghttp2_session_get_stream_user_data(session, stream_id)) {
-    if (self->http2.dnsmsg_at + len > DNS_MSG_MAX_SIZE) {
-        perf_log_warning("http2 chunk data exceeds DNS message max size");
-        return NGHTTP2_ERR_CALLBACK_FAILURE;
-    }
-    memcpy(self->http2.dnsmsg + self->http2.dnsmsg_at, data, len);
-    self->http2.dnsmsg_at += len;
-    // }
-
-    return 0;
-}
-
-static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t len, int flags)
-{
-    ssize_t n   = 0;
-    ssize_t ret = 0;
-
-    // read TLS data here instead of nghttp2_recv_callback
-    PERF_LOCK(&self->lock);
-    if (!self->is_ready) {
-        PERF_UNLOCK(&self->lock);
-        errno = EAGAIN;
-        return -1;
-    }
-
-    n = SSL_read(self->ssl, self->recvbuf, TCP_RECV_BUF_SIZE);
-    if (!n) {
-        perf__doh_reconnect(sock);
-        PERF_UNLOCK(&self->lock);
-        errno = EAGAIN;
-        return -1;
-    }
-    if (n < 0) {
-        int err = SSL_get_error(self->ssl, n);
-        switch (err) {
-        case SSL_ERROR_WANT_READ:
-            errno = EAGAIN;
-            break;
-        case SSL_ERROR_SYSCALL:
-            switch (errno) {
-            case ECONNREFUSED:
-            case ECONNRESET:
-            case ENOTCONN:
-                perf__doh_reconnect(sock);
-                errno = EAGAIN;
-                break;
-            default:
-                break;
-            }
-            break;
-        default:
-            errno = EBADF;
-            break;
-        }
-        PERF_UNLOCK(&self->lock);
-        return -1;
-    }
-
-    // this will be processed by nghttp2 callbacks
-    // self->recvbuf holds the payload
-    ret = nghttp2_session_mem_recv(self->http2.session,
-        (uint8_t*)self->recvbuf,
-        n);
-    if (ret < 0) {
-        perf_log_warning("nghttp2_session_mem_recv failed: %s",
-            nghttp2_strerror((int)ret));
-        PERF_UNLOCK(&self->lock);
-        return -1;
-    }
-    // TODO: handle partial mem_recv
-    if (ret != n) {
-        perf_log_fatal("perf__doh_recv() mem_recv did not take all");
-    }
-
-    // need to execute nghttp2_session_send if the receive ops triggered data frames
-    ret = nghttp2_session_send(self->http2.session);
-    if (ret < 0) {
-        // TODO: reconnect?
-        perf_log_warning("nghttp2_session_send failed: %s", nghttp2_strerror((int)ret));
-        PERF_UNLOCK(&self->lock);
-        return -1;
-    }
-
-    if (self->http2.dnsmsg_completed) {
-        if (self->http2.dnsmsg_at <= len) {
-            len = self->http2.dnsmsg_at;
-        }
-        memcpy(buf, self->http2.dnsmsg, len);
-        self->http2.dnsmsg_completed = false;
-        self->http2.dnsmsg_at        = 0;
-
-        // self->have_more = false; TODO
-        PERF_UNLOCK(&self->lock);
-        return len;
-    } else {
-        // self->have_more = true; TODO
-        PERF_UNLOCK(&self->lock);
-        errno = EAGAIN;
-        return -1;
-    }
 }
 
 static ssize_t perf__doh_sendto(struct perf_net_socket* sock, uint16_t qid, const void* buf, size_t len, int flags, const struct sockaddr* dest_addr, socklen_t addrlen)
@@ -809,6 +693,146 @@ static bool perf__doh_have_more(struct perf_net_socket* sock)
     return false;
 }
 
+/* nghttp2 callbacks */
+
+static ssize_t _http2_send_cb(nghttp2_session* session,
+    const uint8_t*                             data,
+    size_t                                     length,
+    int                                        flags,
+    void*                                      sock)
+{
+    ssize_t n;
+    (void)session;
+    (void)flags;
+
+    // TODO: remove once non-experimental
+    if (!PERF_TRYLOCK(&self->lock)) {
+        perf_log_fatal("_http2_send_cb called without lock");
+    }
+
+    if (!self->is_ready) {
+        return NGHTTP2_ERR_CALLBACK_FAILURE;
+    }
+
+    // TODO: verify partial write
+    n = SSL_write(self->ssl, data, length);
+    if (n < 1) {
+        switch (SSL_get_error(self->ssl, n)) {
+        case SSL_ERROR_SYSCALL:
+            switch (errno) {
+            case ECONNREFUSED:
+            case ECONNRESET:
+            case ENOTCONN:
+            case EPIPE:
+                perf__doh_reconnect(sock);
+                errno = EINPROGRESS;
+                return NGHTTP2_ERR_CALLBACK_FAILURE;
+            default:
+                break;
+            }
+            return NGHTTP2_ERR_CALLBACK_FAILURE;
+        case SSL_ERROR_WANT_READ:
+        case SSL_ERROR_WANT_WRITE:
+            errno = EINPROGRESS;
+            return NGHTTP2_ERR_WOULDBLOCK;
+        default:
+            break;
+        }
+        perf_log_warning("SSL_write(): %s", ERR_error_string(SSL_get_error(self->ssl, n), 0));
+        errno = EBADF;
+        return NGHTTP2_ERR_CALLBACK_FAILURE;
+    }
+
+    return n;
+}
+
+static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* frame, void* sock)
+{
+    // TODO: remove once non-experimental
+    if (!PERF_TRYLOCK(&self->lock)) {
+        perf_log_fatal("_http2_frame_recv_cb called without lock");
+    }
+
+    switch (frame->hd.type) {
+    case NGHTTP2_HEADERS:
+        break;
+    case NGHTTP2_DATA:
+        // we are interested in DATA frame which will carry the DNS response
+        // NGHTTP2_FLAG_END_STREAM indicates that we have the data in full
+        if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
+            // TODO: what's the point of below code? if dnsmsg_at > max size then it will already done a buffer overflow
+            // if (self->http2.dnsmsg_at > DNS_MSG_MAX_SIZE) {
+            //     perf_log_warning("DNS response > DNS message maximum size");
+            //     return NGHTTP2_ERR_CALLBACK_FAILURE;
+            // }
+
+            if (self->http2.dnsmsg_completed) {
+                perf_log_fatal("_http2_frame_recv_cb: frame received when already having a dns msg");
+            }
+
+            self->http2.dnsmsg_completed = true;
+            // self->have_more               = false; TODO
+        }
+        break;
+    case NGHTTP2_SETTINGS:
+        break;
+    case NGHTTP2_RST_STREAM:
+        break;
+    case NGHTTP2_GOAWAY:
+        break;
+    }
+
+    return 0;
+}
+
+static int _http2_data_chunk_recv_cb(nghttp2_session* session,
+    uint8_t                                           flags,
+    int32_t                                           stream_id,
+    const uint8_t*                                    data,
+    size_t len, void* sock)
+{
+    (void)flags;
+
+    // TODO: remove once non-experimental
+    if (!PERF_TRYLOCK(&self->lock)) {
+        perf_log_fatal("_http2_data_chunk_recv_cb called without lock");
+    }
+
+    if (self->http2.dnsmsg_completed) {
+        perf_log_fatal("_http2_data_chunk_recv_cb: chunk received when already having a dns msg");
+    }
+
+    // TODO: point of nghttp2_session_get_stream_user_data() code?
+    // if (nghttp2_session_get_stream_user_data(session, stream_id)) {
+    if (self->http2.dnsmsg_at + len > DNS_MSG_MAX_SIZE) {
+        perf_log_warning("http2 chunk data exceeds DNS message max size");
+        return NGHTTP2_ERR_CALLBACK_FAILURE;
+    }
+    memcpy(self->http2.dnsmsg + self->http2.dnsmsg_at, data, len);
+    self->http2.dnsmsg_at += len;
+    // }
+
+    return 0;
+}
+
+#ifndef OPENSSL_NO_NEXTPROTONEG
+/* NPN TLS extension check */
+static int select_next_proto_cb(SSL* ssl, unsigned char** out,
+    unsigned char* outlen, const unsigned char* in,
+    unsigned int inlen, void* arg)
+{
+    (void)ssl;
+    (void)arg;
+
+    if (nghttp2_select_next_protocol(out, outlen, in, inlen) <= 0) {
+        perf_log_warning("Server did not advertise %u", NGHTTP2_PROTO_VERSION_ID);
+        return SSL_TLSEXT_ERR_ALERT_WARNING;
+    }
+
+    return SSL_TLSEXT_ERR_OK;
+}
+#endif /* !OPENSSL_NO_NEXTPROTONEG */
+
 struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, const perf_sockaddr_t* local, size_t bufsize, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event)
 {
     struct perf__doh_socket* tmp  = calloc(1, sizeof(struct perf__doh_socket)); // clang scan-build
@@ -888,28 +912,4 @@ struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, c
     perf__doh_connect(sock);
 
     return sock;
-}
-
-void perf_net_doh_parse_uri(const char* uri)
-{
-    if (parse_uri(&doh_uri, uri)) {
-        perf_log_warning("invalid DNS-over-HTTPS URI");
-        perf_opt_usage();
-        exit(1);
-    }
-}
-
-void perf_net_doh_parse_method(const char* method)
-{
-    if (!strcmp(method, "GET")) {
-        doh_method = doh_method_get;
-        return;
-    } else if (!strcmp(method, "POST")) {
-        doh_method = doh_method_post;
-        return;
-    }
-
-    perf_log_warning("invalid DNS-over-HTTPS method");
-    perf_opt_usage();
-    exit(1);
 }
