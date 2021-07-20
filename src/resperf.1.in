@@ -44,6 +44,7 @@ resperf \- test the resolution performance of a caching DNS server
 [\fB\-F\ \fIfall_behind\fR]
 [\fB\-v\fR]
 [\fB\-W\fR]
+[\fB\-O\ \fIoption=value\fR]
 .ad
 .hy
 .hy 0
@@ -74,6 +75,7 @@ resperf \- test the resolution performance of a caching DNS server
 [\fB\-F\ \fIfall_behind\fR]
 [\fB\-v\fR]
 [\fB\-W\fR]
+[\fB\-O\ \fIoption=value\fR]
 .ad
 .hy
 .SH DESCRIPTION
@@ -437,7 +439,7 @@ This allows for long running tests on very small and simple query datafile.
 \fB-M \fImode\fR
 .br
 .RS
-Specifies the transport mode to use, "udp", "tcp" or "dot".
+Specifies the transport mode to use, "udp", "tcp", "dot" or "doh".
 Default is "udp".
 .RE
 
@@ -452,7 +454,7 @@ The default is the loopback address, 127.0.0.1.
 .br
 .RS
 Sets the port on which the DNS packets are sent.
-If not specified, the standard DNS port (udp/tcp 53, DoT 853) is used.
+If not specified, the standard DNS port (udp/tcp 53, DoT 853, DoH 443) is used.
 .RE
 
 \fB-a \fIlocal_addr\fR
@@ -633,6 +635,14 @@ Enables verbose mode to report about network readiness and congestion.
 .RS
 Log warnings and errors to standard output instead of standard error making
 it easier for script, test and automation to capture all output.
+.RE
+
+\fB-O \fIoption=value\fR
+.br
+.RS
+Set an extended long option for various things to control different aspects
+of testing or protocol modules, see EXTENDED OPTIONS in \fBdnsperf\fR(1) for
+list of available options.
 .RE
 .SH "THE PLOT DATA FILE"
 The plot data file is written by the \fBresperf\fR program and contains the
