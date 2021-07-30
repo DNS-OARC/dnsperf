@@ -108,6 +108,7 @@ struct perf__doh_socket {
     http2_session_t http2; // http2 session data
 };
 
+static pthread_mutex_t            _nghttp2_lock      = PTHREAD_MUTEX_INITIALIZER;
 static nghttp2_session_callbacks* _nghttp2_callbacks = 0;
 static nghttp2_option*            _nghttp2_option    = 0;
 
@@ -140,7 +141,7 @@ static void perf__doh_connect(struct perf_net_socket* sock)
     int ret;
 
     nghttp2_session_del(self->http2.session);
-    ret = nghttp2_session_client_new2(&self->http2.session, _nghttp2_callbacks, self, _nghttp2_option);
+    ret = nghttp2_session_client_new2(&self->http2.session, _nghttp2_callbacks, sock, _nghttp2_option);
     if (ret < 0) {
         perf_log_fatal("Failed to initialize http2 session: %s", nghttp2_strerror(ret));
     }
@@ -229,6 +230,41 @@ static void perf__doh_reconnect(struct perf_net_socket* sock)
     perf__doh_connect(sock);
 }
 
+// static ssize_t _recv_callback(nghttp2_session *session, uint8_t *buf, size_t length, int flags, void *sock)
+// {
+//     if (self->http2.dnsmsg_completed) {
+//         return NGHTTP2_ERR_WOULDBLOCK;
+//     }
+//
+//     ssize_t n = SSL_read(self->ssl, buf, length);
+//     if (!n) {
+//         perf__doh_reconnect(sock);
+//         return NGHTTP2_ERR_WOULDBLOCK;
+//     }
+//     if (n < 0) {
+//         int err = SSL_get_error(self->ssl, n);
+//         switch (err) {
+//         case SSL_ERROR_WANT_READ:
+//             return NGHTTP2_ERR_WOULDBLOCK;
+//         case SSL_ERROR_SYSCALL:
+//             switch (errno) {
+//             case ECONNREFUSED:
+//             case ECONNRESET:
+//             case ENOTCONN:
+//                 perf__doh_reconnect(sock);
+//                 return NGHTTP2_ERR_WOULDBLOCK;
+//             default:
+//                 break;
+//             }
+//             break;
+//         default:
+//             break;
+//         }
+//         return NGHTTP2_ERR_CALLBACK_FAILURE;
+//     }
+//     return n;
+// }
+
 static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t len, int flags)
 {
     // read TLS data here instead of nghttp2_recv_callback
@@ -276,8 +312,7 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
     // this will be processed by nghttp2 callbacks
     int ret = nghttp2_session_mem_recv(self->http2.session, recvbuf, n);
     if (ret < 0) {
-        perf_log_warning("nghttp2_session_mem_recv failed: %s",
-            nghttp2_strerror((int)ret));
+        perf_log_warning("nghttp2_session_mem_recv failed: %s", nghttp2_strerror(ret));
         PERF_UNLOCK(&self->lock);
         return -1;
     }
@@ -286,32 +321,28 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
         perf_log_fatal("perf__doh_recv() mem_recv did not take all");
     }
 
-    // need to execute nghttp2_session_send if the receive ops triggered data frames
-    ret = nghttp2_session_send(self->http2.session);
-    if (ret < 0) {
-        // TODO: handle error better, reconnect when needed
-        perf_log_warning("nghttp2_session_send failed: %s", nghttp2_strerror((int)ret));
-        PERF_UNLOCK(&self->lock);
-        return -1;
-    }
+    // TODO: is this faster then mem_recv?
+    // int ret = nghttp2_session_recv(self->http2.session);
+    // if (ret < 0) {
+    //     perf_log_warning("nghttp2_session_recv failed: %s", nghttp2_strerror(ret));
+    //     PERF_UNLOCK(&self->lock);
+    //     return -1;
+    // }
 
     if (self->http2.dnsmsg_completed) {
-        if (self->http2.dnsmsg_at <= len) {
-            len = self->http2.dnsmsg_at;
-        }
-        memcpy(buf, self->http2.dnsmsg, len);
+        memcpy(buf, self->http2.dnsmsg, self->http2.dnsmsg_at > len ? len : self->http2.dnsmsg_at);
         self->http2.dnsmsg_completed = false;
         self->http2.dnsmsg_at        = 0;
 
         // self->have_more = false; TODO
         PERF_UNLOCK(&self->lock);
         return len;
-    } else {
-        // self->have_more = true; TODO
-        PERF_UNLOCK(&self->lock);
-        errno = EAGAIN;
-        return -1;
     }
+
+    // self->have_more = true; TODO
+    PERF_UNLOCK(&self->lock);
+    errno = EAGAIN;
+    return -1;
 }
 
 static void _submit_dns_query_get(struct perf_net_socket* sock, const void* buf, size_t len)
@@ -354,7 +385,7 @@ static void _submit_dns_query_get(struct perf_net_socket* sock, const void* buf,
         MAKE_NV_LEN(":authority", doh_uri.hostport, doh_uri.hostportlen),
         MAKE_NV_LEN(":path", full_path, p - full_path),
         MAKE_NV("accept", "application/dns-message"),
-        MAKE_NV("user-agent", "nghttp2-dnsperf/" NGHTTP2_VERSION)
+        MAKE_NV("user-agent", "dnsperf/" PACKAGE_VERSION " (nghttp2/" NGHTTP2_VERSION ")")
     };
 
     int32_t stream_id = nghttp2_submit_request(self->http2.session,
@@ -396,14 +427,14 @@ static void _submit_dns_query_post(struct perf_net_socket* sock, const void* buf
     // can send across without issuing WINDOW_UPDATE
     // we need to check for this and bounce back the request if the
     // payload > remote window size
-    // TODO: are these needed? can they be checked on connect?
-    int remote_window_size = nghttp2_session_get_remote_window_size(self->http2.session);
-    if (remote_window_size < 0) {
-        perf_log_fatal("failed to get http2 session remote window size");
-    }
-    if (len > remote_window_size) {
-        perf_log_fatal("remote window size is too small for POST payload");
-    }
+    // TODO: are below needed? can they be checked on connect?
+    // int remote_window_size = nghttp2_session_get_remote_window_size(self->http2.session);
+    // if (remote_window_size < 0) {
+    //     perf_log_fatal("failed to get http2 session remote window size");
+    // }
+    // if (len > remote_window_size) {
+    //     perf_log_fatal("remote window size is too small for POST payload");
+    // }
 
     // compose content-length
     char payload_size[20];
@@ -418,7 +449,7 @@ static void _submit_dns_query_post(struct perf_net_socket* sock, const void* buf
         MAKE_NV("accept", "application/dns-message"),
         MAKE_NV("content-type", "application/dns-message"),
         MAKE_NV_LEN("content-length", payload_size, payload_size_len),
-        MAKE_NV("user-agent", "nghttp2-dnsperf/" NGHTTP2_VERSION)
+        MAKE_NV("user-agent", "dnsperf/" PACKAGE_VERSION " (nghttp2/" NGHTTP2_VERSION ")")
     };
 
     if (len > self->http2.payload.buf_len) {
@@ -597,19 +628,21 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
             return 0;
         }
 
-        const uint8_t* alpn     = NULL;
+        const uint8_t* alpn     = 0;
         uint32_t       alpn_len = 0;
 #ifndef OPENSSL_NO_NEXTPROTONEG
         SSL_get0_next_proto_negotiated(self->ssl, &alpn, &alpn_len);
 #endif /* !OPENSSL_NO_NEXTPROTONEG */
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L
-        if (alpn == NULL) {
+        if (!alpn) {
             SSL_get0_alpn_selected(self->ssl, &alpn, &alpn_len);
         }
 #endif /* OPENSSL_VERSION_NUMBER >= 0x10002000L */
-
-        if (alpn == NULL || alpn_len != 2 || memcmp("h2", alpn, 2) != 0) {
-            // TODO: better handling of this, if code about is not included because of defines then this will reconnect loop forever
+#if defined(OPENSSL_NO_NEXTPROTONEG) && OPENSSL_VERSION_NUMBER < 0x10002000L
+#error "OpenSSL has no support for getting alpn"
+#endif
+        if (!alpn || alpn_len != 2 || memcmp("h2", alpn, 2) != 0) {
+            perf_log_warning("Unable to get ALPN or not \"h2\", reconnecting");
             self->do_reconnect = true;
             PERF_UNLOCK(&self->lock);
             return 0;
@@ -670,7 +703,6 @@ static ssize_t _http2_send_cb(nghttp2_session* session,
         return NGHTTP2_ERR_CALLBACK_FAILURE;
     }
 
-    // TODO: verify partial write
     ssize_t n = SSL_write(self->ssl, data, length);
     if (n < 1) {
         switch (SSL_get_error(self->ssl, n)) {
@@ -685,7 +717,7 @@ static ssize_t _http2_send_cb(nghttp2_session* session,
             default:
                 break;
             }
-            return NGHTTP2_ERR_CALLBACK_FAILURE;
+            break;
         case SSL_ERROR_WANT_READ:
         case SSL_ERROR_WANT_WRITE:
             return NGHTTP2_ERR_WOULDBLOCK;
@@ -719,6 +751,7 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
             //     return NGHTTP2_ERR_CALLBACK_FAILURE;
             // }
 
+            // TODO: need to be able to receive multiple responses at the same time
             if (self->http2.dnsmsg_completed) {
                 perf_log_fatal("_http2_frame_recv_cb: frame received when already having a dns msg");
             }
@@ -842,21 +875,27 @@ struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, c
     }
 
     /* setup HTTP/2 callbacks */
-    if (!_nghttp2_callbacks) {
-        if (nghttp2_session_callbacks_new(&_nghttp2_callbacks)) {
-            perf_log_fatal("Unable to create nghttp2 callbacks: out of memory");
-        }
-        nghttp2_session_callbacks_set_send_callback(_nghttp2_callbacks, _http2_send_cb);
-        nghttp2_session_callbacks_set_on_data_chunk_recv_callback(_nghttp2_callbacks, _http2_data_chunk_recv_cb);
-        nghttp2_session_callbacks_set_on_frame_recv_callback(_nghttp2_callbacks, _http2_frame_recv_cb);
-    }
+    if (!_nghttp2_callbacks || !_nghttp2_option) {
+        PERF_LOCK(&_nghttp2_lock);
+        if (!_nghttp2_callbacks) {
+            if (nghttp2_session_callbacks_new(&_nghttp2_callbacks)) {
+                perf_log_fatal("Unable to create nghttp2 callbacks: out of memory");
+            }
+            nghttp2_session_callbacks_set_send_callback(_nghttp2_callbacks, _http2_send_cb);
+            nghttp2_session_callbacks_set_on_data_chunk_recv_callback(_nghttp2_callbacks, _http2_data_chunk_recv_cb);
+            nghttp2_session_callbacks_set_on_frame_recv_callback(_nghttp2_callbacks, _http2_frame_recv_cb);
 
-    /* setup HTTP/2 options */
-    if (!_nghttp2_option) {
-        if (nghttp2_option_new(&_nghttp2_option)) {
-            perf_log_fatal("Unable to create nghttp2 options: out of memory");
+            // nghttp2_session_callbacks_set_recv_callback(_nghttp2_callbacks, _recv_callback);
         }
-        nghttp2_option_set_peer_max_concurrent_streams(_nghttp2_option, DEFAULT_MAX_CONCURRENT_STREAMS);
+
+        /* setup HTTP/2 options */
+        if (!_nghttp2_option) {
+            if (nghttp2_option_new(&_nghttp2_option)) {
+                perf_log_fatal("Unable to create nghttp2 options: out of memory");
+            }
+            nghttp2_option_set_peer_max_concurrent_streams(_nghttp2_option, DEFAULT_MAX_CONCURRENT_STREAMS);
+        }
+        PERF_UNLOCK(&_nghttp2_lock);
     }
 
     perf__doh_connect(sock);
