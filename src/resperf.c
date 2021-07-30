@@ -219,8 +219,23 @@ stringify(double value, int precision)
 static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t event, uint64_t elapsed_time);
 static void perf__net_sent(struct perf_net_socket* sock, uint16_t qid);
 
-static void
-setup(int argc, char** argv)
+static ramp_bucket* init_buckets(int n)
+{
+    ramp_bucket* p;
+    int          i;
+
+    if (!(p = calloc(n, sizeof(*p)))) {
+        perf_log_fatal("out of memory");
+        return 0; // fix clang scan-build
+    }
+    for (i = 0; i < n; i++) {
+        p[i].queries = p[i].responses = p[i].failures = 0;
+        p[i].latency_sum                              = 0.0;
+    }
+    return p;
+}
+
+static void setup(int argc, char** argv)
 {
     const char*  family      = NULL;
     const char*  server_name = DEFAULT_SERVER_NAME;
@@ -388,6 +403,15 @@ setup(int argc, char** argv)
     if (edns_option_str != NULL)
         edns_option = perf_edns_parseoption(edns_option_str);
 
+    traffic_time = ramp_time + sustain_time;
+    end_time     = traffic_time + wait_time;
+
+    n_buckets = (traffic_time + bucket_interval - 1) / bucket_interval;
+    buckets   = init_buckets(n_buckets);
+
+    time_now              = perf_get_time();
+    time_of_program_start = time_now;
+
     if (!(socks = calloc(nsocks, sizeof(*socks)))) {
         perf_log_fatal("out of memory");
     }
@@ -520,23 +544,6 @@ print_statistics(void)
     }
     printf("  Maximum throughput:   %.6lf qps\n", max_throughput);
     printf("  Lost at that point:   %.2f%%\n", loss_at_max_throughput);
-}
-
-static ramp_bucket*
-init_buckets(int n)
-{
-    ramp_bucket* p;
-    int          i;
-
-    if (!(p = calloc(n, sizeof(*p)))) {
-        perf_log_fatal("out of memory");
-        return 0; // fix clang scan-build
-    }
-    for (i = 0; i < n; i++) {
-        p[i].queries = p[i].responses = p[i].failures = 0;
-        p[i].latency_sum                              = 0.0;
-    }
-    return p;
 }
 
 /*
@@ -809,15 +816,6 @@ int main(int argc, char** argv)
 
     max_packet_size = edns ? MAX_EDNS_PACKET : MAX_UDP_PACKET;
     perf_buffer_init(&msg, outpacket_buffer, max_packet_size);
-
-    traffic_time = ramp_time + sustain_time;
-    end_time     = traffic_time + wait_time;
-
-    n_buckets = (traffic_time + bucket_interval - 1) / bucket_interval;
-    buckets   = init_buckets(n_buckets);
-
-    time_now              = perf_get_time();
-    time_of_program_start = time_now;
 
     printf("[Status] Command line: %s", progname);
     for (i = 1; i < argc; i++) {
