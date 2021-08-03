@@ -514,6 +514,10 @@ static ssize_t perf__doh_sendto(struct perf_net_socket* sock, uint16_t qid, cons
     if (ret < 0) {
         // TODO: handle error better, reconnect when needed
         perf_log_warning("nghttp2_session_send failed: %s", nghttp2_strerror(ret));
+        self->do_reconnect = true;
+        PERF_UNLOCK(&self->lock);
+        errno = EINPROGRESS;
+        return -1;
     }
 
     if (nghttp2_session_want_write(self->http2.session) || self->is_post_sending) {
@@ -762,10 +766,10 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
         break;
     // case NGHTTP2_SETTINGS:
     //     break;
-    // case NGHTTP2_RST_STREAM:
-    //     break;
-    // case NGHTTP2_GOAWAY:
-    //     break;
+    case NGHTTP2_RST_STREAM:
+    case NGHTTP2_GOAWAY:
+        perf__doh_reconnect(sock);
+        break;
     default:
         break;
     }
