@@ -171,6 +171,11 @@ test over a local Ethernet connection, it should be zero.
 If one or more packets has been dropped, there may be a problem with the
 network connection.
 In that case, the results should be considered suspect and the test repeated.
+.SS "Using DNS-over-HTTPS"
+When using DNS-over-HTTPS you must set the \fB-O doh\-uri=...\fR to something
+that works with the server you're sending to.
+Also note that the value for maximum outstanding queries will be used to
+control the maximum concurrent streams within the HTTP/2 connection.
 .SH OPTIONS
 
 \fB-a \fIlocal_addr\fR

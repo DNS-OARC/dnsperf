@@ -171,5 +171,6 @@ struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t*, const pe
 
 void perf_net_doh_parse_uri(const char*);
 void perf_net_doh_parse_method(const char*);
+void perf_net_doh_set_max_concurrent_streams(size_t);
 
 #endif
