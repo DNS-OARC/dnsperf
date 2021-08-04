@@ -106,6 +106,8 @@ struct perf__doh_socket {
     perf_socket_event_t conn_event, conning_event;
 
     http2_session_t http2; // http2 session data
+    int             http2_code;
+    bool            http2_is_dns;
 };
 
 static pthread_mutex_t            _nghttp2_lock      = PTHREAD_MUTEX_INITIALIZER;
@@ -231,6 +233,8 @@ static void perf__doh_reconnect(struct perf_net_socket* sock)
 
     self->http2.dnsmsg_at        = 0;
     self->http2.dnsmsg_completed = false;
+    self->http2_code             = 0;
+    self->http2_is_dns           = false;
 
     perf__doh_connect(sock);
 }
@@ -335,6 +339,25 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
     // }
 
     if (self->http2.dnsmsg_completed) {
+        if (!self->http2_is_dns) {
+            // TODO: store non-dns for stats
+            self->http2.dnsmsg_completed = false;
+            self->http2.dnsmsg_at        = 0;
+            self->http2_code             = 0;
+            self->http2_is_dns           = false;
+            PERF_UNLOCK(&self->lock);
+            errno = EAGAIN;
+            return -1;
+        }
+        if (self->http2_code < 200 || self->http2_code > 299) {
+            // TODO: store return code for stats
+            self->http2.dnsmsg_completed = false;
+            self->http2.dnsmsg_at        = 0;
+            self->http2_code             = 0;
+            PERF_UNLOCK(&self->lock);
+            errno = EAGAIN;
+            return -1;
+        }
         if (self->http2.dnsmsg_at < len) {
             len = self->http2.dnsmsg_at;
         }
@@ -751,8 +774,6 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
     }
 
     switch (frame->hd.type) {
-    // case NGHTTP2_HEADERS:
-    //     break;
     case NGHTTP2_DATA:
         // we are interested in DATA frame which will carry the DNS response
         // NGHTTP2_FLAG_END_STREAM indicates that we have the data in full
@@ -772,8 +793,6 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
             // self->have_more               = false; TODO
         }
         break;
-    // case NGHTTP2_SETTINGS:
-    //     break;
     case NGHTTP2_RST_STREAM:
     case NGHTTP2_GOAWAY:
         perf__doh_reconnect(sock);
@@ -782,6 +801,28 @@ static int _http2_frame_recv_cb(nghttp2_session* session, const nghttp2_frame* f
         break;
     }
 
+    return 0;
+}
+
+static int _http2_on_header_callback(nghttp2_session* session, const nghttp2_frame* frame, const uint8_t* name, size_t namelen, const uint8_t* value, size_t valuelen, uint8_t flags, void* sock)
+{
+    switch (frame->hd.type) {
+    case NGHTTP2_HEADERS: {
+        if (!value) {
+            return 0;
+        }
+        if (!strncasecmp(":status:", (const char*)name, namelen)) {
+            self->http2_code = atoi((const char*)value);
+        } else if (!strncasecmp("content-type:", (const char*)name, namelen)) {
+            if (!strncasecmp("application/dns-message", (const char*)value, valuelen)) {
+                self->http2_is_dns = true;
+            }
+        }
+        break;
+    }
+    default:
+        break;
+    }
     return 0;
 }
 
@@ -896,6 +937,7 @@ struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, c
             nghttp2_session_callbacks_set_send_callback(_nghttp2_callbacks, _http2_send_cb);
             nghttp2_session_callbacks_set_on_data_chunk_recv_callback(_nghttp2_callbacks, _http2_data_chunk_recv_cb);
             nghttp2_session_callbacks_set_on_frame_recv_callback(_nghttp2_callbacks, _http2_frame_recv_cb);
+            nghttp2_session_callbacks_set_on_header_callback(_nghttp2_callbacks, _http2_on_header_callback);
 
             // nghttp2_session_callbacks_set_recv_callback(_nghttp2_callbacks, _recv_callback);
         }
