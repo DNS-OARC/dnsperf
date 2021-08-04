@@ -415,6 +415,11 @@ itself and the server under test can sustain.
 Otherwise, the test is likely to be cut short as a result of either running
 out of query IDs (because of large numbers of dropped queries) or of
 \fBresperf\fR falling behind its transmission schedule.
+.SS "Using DNS-over-HTTPS"
+When using DNS-over-HTTPS you must set the \fB-O doh\-uri=...\fR to something
+that works with the server you're sending to.
+Also note that the value for maximum outstanding queries will be used to
+control the maximum concurrent streams within the HTTP/2 connection.
 .SH OPTIONS
 Because the \fBresperf\-report\fR script passes its command line options
 directly to the \fBresperf\fR programs, they both accept the same set of

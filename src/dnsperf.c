@@ -520,6 +520,7 @@ setup(int argc, char** argv, config_t* config)
     if (doh_method) {
         perf_net_doh_parse_method(doh_method);
     }
+    perf_net_doh_set_max_concurrent_streams(config->max_outstanding);
 
     if (family != NULL)
         config->family = perf_net_parsefamily(family);

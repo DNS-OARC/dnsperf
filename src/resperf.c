@@ -362,6 +362,7 @@ static void setup(int argc, char** argv)
     if (doh_method) {
         perf_net_doh_parse_method(doh_method);
     }
+    perf_net_doh_set_max_concurrent_streams(max_outstanding);
 
     if (max_outstanding > nsocks * DEFAULT_MAX_OUTSTANDING)
         perf_log_fatal("number of outstanding packets (%u) must not "

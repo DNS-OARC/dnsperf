@@ -49,7 +49,6 @@
 
 #define DNS_GET_REQUEST_VAR "?dns="
 #define DNS_MSG_MAX_SIZE 65535
-#define DEFAULT_MAX_CONCURRENT_STREAMS 1
 
 static SSL_CTX*   ssl_ctx = 0;
 static struct URI doh_uri;
@@ -58,6 +57,7 @@ enum perf_doh_method {
     doh_method_post
 };
 static enum perf_doh_method doh_method = doh_method_get;
+static size_t               doh_max_concurr;
 
 #define self ((struct perf__doh_socket*)sock)
 
@@ -134,6 +134,11 @@ void perf_net_doh_parse_method(const char* method)
     perf_log_warning("invalid DNS-over-HTTPS method");
     perf_opt_usage();
     exit(1);
+}
+
+void perf_net_doh_set_max_concurrent_streams(size_t max_concurr)
+{
+    doh_max_concurr = max_concurr;
 }
 
 static void perf__doh_connect(struct perf_net_socket* sock)
@@ -330,7 +335,10 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
     // }
 
     if (self->http2.dnsmsg_completed) {
-        memcpy(buf, self->http2.dnsmsg, self->http2.dnsmsg_at > len ? len : self->http2.dnsmsg_at);
+        if (self->http2.dnsmsg_at < len) {
+            len = self->http2.dnsmsg_at;
+        }
+        memcpy(buf, self->http2.dnsmsg, len);
         self->http2.dnsmsg_completed = false;
         self->http2.dnsmsg_at        = 0;
 
@@ -528,7 +536,7 @@ static ssize_t perf__doh_sendto(struct perf_net_socket* sock, uint16_t qid, cons
     }
     PERF_UNLOCK(&self->lock);
 
-    return ret ? ret : len;
+    return len;
 }
 
 static int perf__doh_close(struct perf_net_socket* sock)
@@ -658,7 +666,7 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
         // send settings
         // TODO: does sending settings need session_send()?
         nghttp2_settings_entry iv[] = {
-            { NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, DEFAULT_MAX_CONCURRENT_STREAMS },
+            { NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, doh_max_concurr },
             { NGHTTP2_SETTINGS_ENABLE_PUSH, 0 },
             { NGHTTP2_SETTINGS_INITIAL_WINDOW_SIZE, 65535 }
         };
@@ -897,7 +905,7 @@ struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, c
             if (nghttp2_option_new(&_nghttp2_option)) {
                 perf_log_fatal("Unable to create nghttp2 options: out of memory");
             }
-            nghttp2_option_set_peer_max_concurrent_streams(_nghttp2_option, DEFAULT_MAX_CONCURRENT_STREAMS);
+            nghttp2_option_set_peer_max_concurrent_streams(_nghttp2_option, doh_max_concurr);
         }
         PERF_UNLOCK(&_nghttp2_lock);
     }
