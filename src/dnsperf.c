@@ -408,8 +408,8 @@ setup(int argc, char** argv, config_t* config)
     const char* edns_option = NULL;
     const char* tsigkey     = NULL;
     const char* mode        = 0;
-    const char* doh_uri     = 0;
-    const char* doh_method  = 0;
+    const char* doh_uri     = DEFAULT_DOH_URI;
+    const char* doh_method  = DEFAULT_DOH_METHOD;
 
     memset(config, 0, sizeof(*config));
     config->argc = argc;
@@ -1228,14 +1228,16 @@ threadinfo_stop(threadinfo_t* tinfo)
 }
 
 static void
-threadinfo_cleanup(threadinfo_t* tinfo, times_t* times)
+threadinfo_cleanup(config_t* config, threadinfo_t* tinfo, times_t* times)
 {
     unsigned int i;
 
     if (interrupted)
         cancel_queries(tinfo);
-    for (i = 0; i < tinfo->nsocks; i++)
+    for (i = 0; i < tinfo->nsocks; i++) {
+        perf_net_stats_compile(config->mode, tinfo->socks[i]);
         perf_net_close(tinfo->socks[i]);
+    }
     if (tinfo->last_recv > times->end_time)
         times->end_time = tinfo->last_recv;
 }
@@ -1321,13 +1323,16 @@ int main(int argc, char** argv)
     if (config.stats_interval > 0)
         PERF_JOIN(stats_thread.sender, NULL);
 
+    perf_net_stats_init(config.mode);
+
     for (i = 0; i < config.threads; i++)
-        threadinfo_cleanup(&threads[i], &times);
+        threadinfo_cleanup(&config, &threads[i], &times);
 
     print_final_status(&config);
 
     sum_stats(&config, &total_stats);
     print_statistics(&config, &times, &total_stats);
+    perf_net_stats_print(config.mode);
 
     cleanup(&config);
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
