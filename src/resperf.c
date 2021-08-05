@@ -249,8 +249,8 @@ static void setup(int argc, char** argv)
     unsigned int i;
     const char*  _mode           = 0;
     const char*  edns_option_str = NULL;
-    const char*  doh_uri         = 0;
-    const char*  doh_method      = 0;
+    const char*  doh_uri         = DEFAULT_DOH_URI;
+    const char*  doh_method      = DEFAULT_DOH_METHOD;
 
     sock_family     = AF_UNSPEC;
     server_port     = 0;
@@ -430,8 +430,10 @@ cleanup(void)
     unsigned int i;
 
     perf_datafile_close(&input);
-    for (i = 0; i < nsocks; i++)
+    for (i = 0; i < nsocks; i++) {
+        perf_net_stats_compile(mode, socks[i]);
         (void)perf_net_close(socks[i]);
+    }
     close(dummypipe[0]);
     close(dummypipe[1]);
 
@@ -545,6 +547,7 @@ print_statistics(void)
     }
     printf("  Maximum throughput:   %.6lf qps\n", max_throughput);
     printf("  Lost at that point:   %.2f%%\n", loss_at_max_throughput);
+    printf("\n");
 }
 
 /*
@@ -917,7 +920,9 @@ end_loop:
 
     fclose(plotf);
     print_statistics();
+    perf_net_stats_init(mode);
     cleanup();
+    perf_net_stats_print(mode);
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
     ERR_free_strings();
 #endif

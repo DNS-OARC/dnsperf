@@ -173,4 +173,11 @@ void perf_net_doh_parse_uri(const char*);
 void perf_net_doh_parse_method(const char*);
 void perf_net_doh_set_max_concurrent_streams(size_t);
 
+void perf_net_stats_init(enum perf_net_mode);
+void perf_net_stats_compile(enum perf_net_mode, struct perf_net_socket*);
+void perf_net_stats_print(enum perf_net_mode);
+void perf_net_doh_stats_init();
+void perf_net_doh_stats_compile(struct perf_net_socket*);
+void perf_net_doh_stats_print();
+
 #endif

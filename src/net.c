@@ -224,3 +224,33 @@ struct perf_net_socket* perf_net_opensocket(enum perf_net_mode mode, const perf_
 
     return 0;
 }
+
+void perf_net_stats_init(enum perf_net_mode mode)
+{
+    switch (mode) {
+    case sock_doh:
+        perf_net_doh_stats_init();
+    default:
+        break;
+    }
+}
+
+void perf_net_stats_compile(enum perf_net_mode mode, struct perf_net_socket* sock)
+{
+    switch (mode) {
+    case sock_doh:
+        perf_net_doh_stats_compile(sock);
+    default:
+        break;
+    }
+}
+
+void perf_net_stats_print(enum perf_net_mode mode)
+{
+    switch (mode) {
+    case sock_doh:
+        perf_net_doh_stats_print();
+    default:
+        break;
+    }
+}

@@ -87,6 +87,11 @@ typedef struct {
     bool                  dnsmsg_completed;
 } http2_session_t;
 
+struct _doh_stats {
+    size_t code[500];
+    size_t unknown_code;
+};
+
 struct perf__doh_socket {
     struct perf_net_socket base;
 
@@ -108,6 +113,8 @@ struct perf__doh_socket {
     http2_session_t http2; // http2 session data
     int             http2_code;
     bool            http2_is_dns;
+
+    struct _doh_stats stats;
 };
 
 static pthread_mutex_t            _nghttp2_lock      = PTHREAD_MUTEX_INITIALIZER;
@@ -339,6 +346,11 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
     // }
 
     if (self->http2.dnsmsg_completed) {
+        if (self->http2_code > 99 && self->http2_code < 600) {
+            self->stats.code[self->http2_code - 100]++;
+        } else {
+            self->stats.unknown_code++;
+        }
         if (!self->http2_is_dns) {
             // TODO: store non-dns for stats
             self->http2.dnsmsg_completed = false;
@@ -955,4 +967,51 @@ struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, c
     perf__doh_connect(sock);
 
     return sock;
+}
+
+static struct _doh_stats doh_stats;
+
+void perf_net_doh_stats_init()
+{
+    memset(&doh_stats, 0, sizeof(doh_stats));
+}
+
+void perf_net_doh_stats_compile(struct perf_net_socket* sock)
+{
+    int i;
+    for (i = 0; i < (sizeof(doh_stats.code) / sizeof(doh_stats.code[0])); i++) {
+        doh_stats.code[i] += self->stats.code[i];
+    }
+    doh_stats.unknown_code += self->stats.unknown_code;
+}
+
+void perf_net_doh_stats_print()
+{
+    printf("DNS-over-HTTPS statistics:\n\n");
+
+    printf("  HTTP/2 return codes:  ");
+    bool first_code = true, no_codes = true;
+    int  i;
+    for (i = 0; i < (sizeof(doh_stats.code) / sizeof(doh_stats.code[0])); i++) {
+        if (doh_stats.code[i]) {
+            if (first_code)
+                first_code = false;
+            else
+                printf(", ");
+            printf("%d: %zu", i + 100, doh_stats.code[i]);
+            no_codes = false;
+        }
+    }
+    if (doh_stats.unknown_code) {
+        if (!first_code)
+            printf(", ");
+        printf("unknown: %zu", doh_stats.unknown_code);
+        no_codes = false;
+    }
+    if (no_codes) {
+        printf("none");
+    }
+    printf("\n");
+
+    printf("\n");
 }
