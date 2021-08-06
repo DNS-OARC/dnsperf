@@ -5,6 +5,8 @@ test "$TEST_DNSPERF_WITH_NETWORK" = "1" || exit 0
 dumdumd=`which dumdumd`
 
 if [ -n "$dumdumd" ]; then
+    pkill dumdumd || true
+
     $dumdumd 127.0.0.1 5353 -r -D 100 &
     pid="$!"
     ../dnsperf -s 127.0.0.1 -p 5353 -d "$srcdir/datafile" -t 2 -l 2 -Q 10 -m tcp
