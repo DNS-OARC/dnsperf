@@ -56,8 +56,8 @@ enum perf_doh_method {
     doh_method_get,
     doh_method_post
 };
-static enum perf_doh_method doh_method = doh_method_get;
-static size_t               doh_max_concurr;
+static enum perf_doh_method doh_method      = doh_method_get;
+static size_t               doh_max_concurr = 100;
 
 #define self ((struct perf__doh_socket*)sock)
 
@@ -563,7 +563,7 @@ static ssize_t perf__doh_sendto(struct perf_net_socket* sock, uint16_t qid, cons
         return -1;
     }
 
-    if (nghttp2_session_want_write(self->http2.session) || self->is_post_sending) {
+    if (self->is_post_sending || nghttp2_session_get_outbound_queue_size(self->http2.session) > 0 || nghttp2_session_want_write(self->http2.session)) {
         self->is_sending = true;
         PERF_UNLOCK(&self->lock);
         errno = EINPROGRESS;
@@ -607,7 +607,7 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
 
         bool sent = false;
         if (self->is_sending) {
-            if (nghttp2_session_want_write(self->http2.session) || self->is_post_sending) {
+            if (self->is_post_sending || nghttp2_session_get_outbound_queue_size(self->http2.session) > 0 || nghttp2_session_want_write(self->http2.session)) {
                 PERF_UNLOCK(&self->lock);
                 return 0;
             }
