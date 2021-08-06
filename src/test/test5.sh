@@ -5,15 +5,17 @@ test "$TEST_DNSPERF_WITH_NETWORK" = "1" || exit 0
 dumdumd=`which dumdumd`
 
 if [ -n "$dumdumd" ]; then
-    pkill dumdumd || true
+    pkill -9 dumdumd || true
 
     $dumdumd 127.0.0.1 5353 -r -D 100 &
     pid="$!"
+    sleep 2
     ../dnsperf -s 127.0.0.1 -p 5353 -d "$srcdir/datafile" -t 2 -l 2 -Q 10 -m tcp
     kill "$pid"
 
     $dumdumd 127.0.0.1 5353 -r -D 10 &
     pid="$!"
+    sleep 2
     ../dnsperf -s 127.0.0.1 -p 5353 -d "$srcdir/datafile" -t 2 -l 10 -Q 100 -m tcp
     kill "$pid"
 
@@ -22,11 +24,13 @@ if [ -n "$dumdumd" ]; then
 
     $dumdumd 127.0.0.1 5353 -r -T -D 100 &
     pid="$!"
+    sleep 2
     ../dnsperf -s 127.0.0.1 -p 5353 -d "$srcdir/datafile" -t 2 -l 2 -Q 10 -m dot
     kill "$pid"
 
     $dumdumd 127.0.0.1 5353 -r -T -D 10 &
     pid="$!"
+    sleep 2
     ../dnsperf -s 127.0.0.1 -p 5353 -d "$srcdir/datafile" -t 2 -l 10 -Q 100 -m dot
     kill "$pid"
 
