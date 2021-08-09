@@ -53,6 +53,7 @@ const char* perf_dns_rcode_strings[] = {
 perf_result_t perf_dname_fromstring(const char* str, size_t len, perf_buffer_t* target)
 {
     size_t      label_len, at;
+    ssize_t     max      = 255;
     const char* orig_str = str;
     bool        is_quoted;
 
@@ -99,6 +100,10 @@ perf_result_t perf_dname_fromstring(const char* str, size_t len, perf_buffer_t* 
             break;
         }
         if (label_len > 63) {
+            return PERF_R_FAILURE;
+        }
+        max -= label_len + 1;
+        if (max < 0) {
             return PERF_R_FAILURE;
         }
         perf_buffer_putuint8(target, label_len);

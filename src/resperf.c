@@ -53,7 +53,8 @@
 #define DEFAULT_SERVER_NAME "127.0.0.1"
 #define DEFAULT_SERVER_PORT 53
 #define DEFAULT_SERVER_DOT_PORT 853
-#define DEFAULT_SERVER_PORTS "udp/tcp 53 or DoT 853"
+#define DEFAULT_SERVER_DOH_PORT 443
+#define DEFAULT_SERVER_PORTS "udp/tcp 53, DoT 853 or DoH 443"
 #define DEFAULT_LOCAL_PORT 0
 #define DEFAULT_SOCKET_BUFFER 32
 #define DEFAULT_TIMEOUT 45
@@ -218,8 +219,23 @@ stringify(double value, int precision)
 static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t event, uint64_t elapsed_time);
 static void perf__net_sent(struct perf_net_socket* sock, uint16_t qid);
 
-static void
-setup(int argc, char** argv)
+static ramp_bucket* init_buckets(int n)
+{
+    ramp_bucket* p;
+    int          i;
+
+    if (!(p = calloc(n, sizeof(*p)))) {
+        perf_log_fatal("out of memory");
+        return 0; // fix clang scan-build
+    }
+    for (i = 0; i < n; i++) {
+        p[i].queries = p[i].responses = p[i].failures = 0;
+        p[i].latency_sum                              = 0.0;
+    }
+    return p;
+}
+
+static void setup(int argc, char** argv)
 {
     const char*  family      = NULL;
     const char*  server_name = DEFAULT_SERVER_NAME;
@@ -233,6 +249,8 @@ setup(int argc, char** argv)
     unsigned int i;
     const char*  _mode           = 0;
     const char*  edns_option_str = NULL;
+    const char*  doh_uri         = DEFAULT_DOH_URI;
+    const char*  doh_method      = DEFAULT_DOH_METHOD;
 
     sock_family     = AF_UNSPEC;
     server_port     = 0;
@@ -251,7 +269,7 @@ setup(int argc, char** argv)
     perf_opt_add('f', perf_opt_string, "family",
         "address family of DNS transport, inet or inet6", "any",
         &family);
-    perf_opt_add('M', perf_opt_string, "mode", "set transport mode: udp, tcp or dot", "udp", &_mode);
+    perf_opt_add('M', perf_opt_string, "mode", "set transport mode: udp, tcp, dot or doh", "udp", &_mode);
     perf_opt_add('s', perf_opt_string, "server_addr",
         "the server to query", DEFAULT_SERVER_NAME, &server_name);
     perf_opt_add('p', perf_opt_port, "port",
@@ -310,6 +328,10 @@ setup(int argc, char** argv)
     perf_opt_add('R', perf_opt_boolean, NULL, "reopen datafile on end, allow for infinit use of it", NULL, &reopen_datafile);
     perf_opt_add('F', perf_opt_zpint, "fall_behind", "the maximum number of queries that is allowed to fall behind, zero to disable",
         stringify(DEFAULT_MAX_FALL_BEHIND, 0), &max_fall_behind);
+    perf_long_opt_add("doh-uri", perf_opt_string, "doh_uri",
+        "the URI to use for DNS-over-HTTPS", DEFAULT_DOH_URI, &doh_uri);
+    perf_long_opt_add("doh-method", perf_opt_string, "doh_method",
+        "the HTTP method to use for DNS-over-HTTPS: GET or POST", DEFAULT_DOH_METHOD, &doh_method);
 
     perf_opt_parse(argc, argv);
 
@@ -321,8 +343,26 @@ setup(int argc, char** argv)
         mode = perf_net_parsemode(_mode);
 
     if (!server_port) {
-        server_port = mode == sock_dot ? DEFAULT_SERVER_DOT_PORT : DEFAULT_SERVER_PORT;
+        switch (mode) {
+        case sock_doh:
+            server_port = DEFAULT_SERVER_DOH_PORT;
+            break;
+        case sock_dot:
+            server_port = DEFAULT_SERVER_DOT_PORT;
+            break;
+        default:
+            server_port = DEFAULT_SERVER_PORT;
+            break;
+        }
     }
+
+    if (doh_uri) {
+        perf_net_doh_parse_uri(doh_uri);
+    }
+    if (doh_method) {
+        perf_net_doh_parse_method(doh_method);
+    }
+    perf_net_doh_set_max_concurrent_streams(max_outstanding);
 
     if (max_outstanding > nsocks * DEFAULT_MAX_OUTSTANDING)
         perf_log_fatal("number of outstanding packets (%u) must not "
@@ -364,17 +404,23 @@ setup(int argc, char** argv)
     if (edns_option_str != NULL)
         edns_option = perf_edns_parseoption(edns_option_str);
 
+    traffic_time = ramp_time + sustain_time;
+    end_time     = traffic_time + wait_time;
+
+    n_buckets = (traffic_time + bucket_interval - 1) / bucket_interval;
+    buckets   = init_buckets(n_buckets);
+
+    time_now              = perf_get_time();
+    time_of_program_start = time_now;
+
     if (!(socks = calloc(nsocks, sizeof(*socks)))) {
         perf_log_fatal("out of memory");
     }
     for (i = 0; i < nsocks; i++) {
-        socks[i] = perf_net_opensocket(mode, &server_addr, &local_addr, i, bufsize);
+        socks[i] = perf_net_opensocket(mode, &server_addr, &local_addr, i, bufsize, (void*)(intptr_t)i, perf__net_sent, perf__net_event);
         if (!socks[i]) {
             perf_log_fatal("perf_net_opensocket(): no socket returned, out of memory?");
         }
-        socks[i]->data  = (void*)(intptr_t)i;
-        socks[i]->sent  = perf__net_sent;
-        socks[i]->event = perf__net_event;
     }
 }
 
@@ -384,8 +430,10 @@ cleanup(void)
     unsigned int i;
 
     perf_datafile_close(&input);
-    for (i = 0; i < nsocks; i++)
+    for (i = 0; i < nsocks; i++) {
+        perf_net_stats_compile(mode, socks[i]);
         (void)perf_net_close(socks[i]);
+    }
     close(dummypipe[0]);
     close(dummypipe[1]);
 
@@ -499,23 +547,7 @@ print_statistics(void)
     }
     printf("  Maximum throughput:   %.6lf qps\n", max_throughput);
     printf("  Lost at that point:   %.2f%%\n", loss_at_max_throughput);
-}
-
-static ramp_bucket*
-init_buckets(int n)
-{
-    ramp_bucket* p;
-    int          i;
-
-    if (!(p = calloc(n, sizeof(*p)))) {
-        perf_log_fatal("out of memory");
-        return 0; // fix clang scan-build
-    }
-    for (i = 0; i < n; i++) {
-        p[i].queries = p[i].responses = p[i].failures = 0;
-        p[i].latency_sum                              = 0.0;
-    }
-    return p;
+    printf("\n");
 }
 
 /*
@@ -776,6 +808,7 @@ int main(int argc, char** argv)
     switch (mode) {
     case sock_tcp:
     case sock_dot:
+    case sock_doh:
         // block SIGPIPE for TCP/DOT mode, if connection is closed it will generate a signal
         perf_os_blocksignal(SIGPIPE, true);
         break;
@@ -787,15 +820,6 @@ int main(int argc, char** argv)
 
     max_packet_size = edns ? MAX_EDNS_PACKET : MAX_UDP_PACKET;
     perf_buffer_init(&msg, outpacket_buffer, max_packet_size);
-
-    traffic_time = ramp_time + sustain_time;
-    end_time     = traffic_time + wait_time;
-
-    n_buckets = (traffic_time + bucket_interval - 1) / bucket_interval;
-    buckets   = init_buckets(n_buckets);
-
-    time_now              = perf_get_time();
-    time_of_program_start = time_now;
 
     printf("[Status] Command line: %s", progname);
     for (i = 1; i < argc; i++) {
@@ -896,7 +920,9 @@ end_loop:
 
     fclose(plotf);
     print_statistics();
+    perf_net_stats_init(mode);
     cleanup();
+    perf_net_stats_print(mode);
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
     ERR_free_strings();
 #endif

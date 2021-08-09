@@ -61,8 +61,6 @@ static void perf__dot_connect(struct perf_net_socket* sock)
 {
     int ret;
 
-    self->is_ready = true;
-
     int fd = socket(self->server.sa.sa.sa_family, SOCK_STREAM, 0);
     if (fd == -1) {
         char __s[256];
@@ -119,12 +117,14 @@ static void perf__dot_connect(struct perf_net_socket* sock)
     }
     if (connect(sock->fd, &self->server.sa.sa, self->server.length)) {
         if (errno == EINPROGRESS) {
-            self->is_ready = false;
+            return;
         } else {
             char __s[256];
             perf_log_fatal("connect() failed: %s", perf_strerror_r(errno, __s, sizeof(__s)));
         }
     }
+
+    self->is_conn_ready = true;
 }
 
 static void perf__dot_reconnect(struct perf_net_socket* sock)
@@ -136,6 +136,7 @@ static void perf__dot_reconnect(struct perf_net_socket* sock)
         self->sending    = 0;
         self->is_sending = false;
     }
+    self->is_ready      = false;
     self->is_conn_ready = false;
     perf__dot_connect(sock);
 }
@@ -416,7 +417,7 @@ static bool perf__dot_have_more(struct perf_net_socket* sock)
     return self->have_more;
 }
 
-struct perf_net_socket* perf_net_dot_opensocket(const perf_sockaddr_t* server, const perf_sockaddr_t* local, size_t bufsize)
+struct perf_net_socket* perf_net_dot_opensocket(const perf_sockaddr_t* server, const perf_sockaddr_t* local, size_t bufsize, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event)
 {
     struct perf__dot_socket* tmp  = calloc(1, sizeof(struct perf__dot_socket)); // clang scan-build
     struct perf_net_socket*  sock = (struct perf_net_socket*)tmp;
@@ -432,6 +433,10 @@ struct perf_net_socket* perf_net_dot_opensocket(const perf_sockaddr_t* server, c
     sock->sockeq    = perf__dot_sockeq;
     sock->sockready = perf__dot_sockready;
     sock->have_more = perf__dot_have_more;
+
+    sock->data  = data;
+    sock->sent  = sent;
+    sock->event = event;
 
     self->server  = *server;
     self->local   = *local;

@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.6.0
+Version:        2.7.0
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -17,6 +17,7 @@ BuildRequires:  openssl-devel
 BuildRequires:  pkgconfig
 BuildRequires:  ldns-devel
 BuildRequires:  ck-devel
+BuildRequires:  libnghttp2-devel
 
 %description
 dnsperf and resperf are free tools developed by Nominum/Akamai (2006-2018)
@@ -94,6 +95,44 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Mon Aug 09 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.7.0-1
+- Release 2.7.0
+  * This release adds DNS-over-HTTPS support!
+  * DNS-over-HTTPS can be used by specifying transport mode `doh` and you
+    should also look at the dnsperf(1) man-page (or `-H`) for the extended
+    options `doh-uri` and `doh-method`, which controls aspects of DoH/HTTP/2
+    that you might want to set.
+  * Other fixes:
+    - Add check when constructing DNS packet so that total length of labels
+      does not exceed 255 bytes
+    - Fix connection/reconnection state handling for DoT transport
+    - Fix event handling by initializing them directly when opening the
+      sockets, otherwise events could have been missed which would give
+      incorrect statistics
+  * Commits:
+    61b5eac Tests with dumdumd
+    d71071c Tests with dumdumd
+    b42f92e DoH sending
+    2fa40bb Net stats
+    f7f8692 DoH fixes
+    ea62b49 DoH concurrent streams
+    91929f1 DoH reconnect
+    17660e6 DoH fixes
+    5276aa6 resperf buckets
+    585860e Packages
+    3ffc601 Fixes
+    1570609 Man-page
+    6bcadc7 README
+    f81adf1 Fixes
+    1acd71f Code structure
+    6c47876 Fixes
+    2d379f4 Fixes
+    4d5384b Fixes
+    cee93b3 Initial DNS-over-HTTPS support implementation
+    4ff3ebc Events
+    8b24bbf DoT state
+    6a5b5ef Fix too long name
+    71fa09f long opts
 * Mon May 31 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.6.0-1
 - Release 2.6.0
   * This release adds EDNS options parameter `-E` to `resperf` and a script

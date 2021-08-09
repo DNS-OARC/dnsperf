@@ -28,6 +28,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <sys/time.h>
+#include <errno.h>
 
 #define MILLION ((uint64_t)1000000)
 
@@ -75,6 +76,19 @@
             perf_log_fatal("pthread_mutex_lock failed: %s", perf_strerror_r(__n, __s, sizeof(__s))); \
         }                                                                                            \
     } while (0)
+
+static inline int PERF_TRYLOCK(pthread_mutex_t* mutex)
+{
+    int __n = pthread_mutex_trylock(mutex);
+    if (__n == EBUSY) {
+        return 1;
+    }
+    if (__n != 0) {
+        char __s[256];
+        perf_log_fatal("pthread_mutex_lock failed: %s", perf_strerror_r(__n, __s, sizeof(__s)));
+    }
+    return 0;
+}
 
 #define PERF_UNLOCK(mutex)                                                                             \
     do {                                                                                               \

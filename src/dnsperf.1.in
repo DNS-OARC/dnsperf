@@ -44,6 +44,7 @@ dnsperf \- test the performance of a DNS server
 [\fB\-W\fR]
 [\fB\-x\ \fIlocal_port\fR]
 [\fB\-y\ \fI[alg:]name:secret\fR]
+[\fB\-O\ \fIoption=value\fR]
 .ad
 .hy
 .SH DESCRIPTION
@@ -170,6 +171,11 @@ test over a local Ethernet connection, it should be zero.
 If one or more packets has been dropped, there may be a problem with the
 network connection.
 In that case, the results should be considered suspect and the test repeated.
+.SS "Using DNS-over-HTTPS"
+When using DNS-over-HTTPS you must set the \fB-O doh\-uri=...\fR to something
+that works with the server you're sending to.
+Also note that the value for maximum outstanding queries will be used to
+control the maximum concurrent streams within the HTTP/2 connection.
 .SH OPTIONS
 
 \fB-a \fIlocal_addr\fR
@@ -259,7 +265,7 @@ times; if a time limit is set, the file may be read fewer times.
 .br
 .RS
 Sets the port on which the DNS packets are sent.
-If not specified, the standard DNS port (udp/tcp 53, DoT 853) is used.
+If not specified, the standard DNS port (udp/tcp 53, DoT 853, DoH 443) is used.
 .RE
 
 \fB-q \fInum_queries\fR
@@ -281,7 +287,7 @@ There is no default limit.
 \fB-m \fImode\fR
 .br
 .RS
-Specifies the transport mode to use, "udp", "tcp" or "dot".
+Specifies the transport mode to use, "udp", "tcp", "dot" or "doh".
 Default is "udp".
 .RE
 
@@ -367,6 +373,29 @@ key algorithm, name and secret, where the algorithm defaults to hmac-md5 and
 the secret is expressed as a base-64 encoded string.
 Available algorithms are: hmac-md5, hmac-sha1, hmac-sha224, hmac-sha256,
 hmac-sha384 and hmac-sha512.
+.RE
+
+\fB-O \fIoption=value\fR
+.br
+.RS
+Set an extended long option for various things to control different aspects
+of testing or protocol modules, see EXTENDED OPTIONS for list of available
+options.
+.RE
+.SH "EXTENDED OPTIONS"
+
+\fBdoh-uri=\fIURI\fR
+.br
+.RS
+The URI to use for DNS-over-HTTPS, default value is
+"https://localhost/dns-query".
+.RE
+
+\fBdoh-method=\fIHTTP_METHOD\fR
+.br
+.RS
+The HTTP method to use when querying with DNS-over-HTTPS, default is GET.
+Available methods are: GET, POST.
 .RE
 .SH "SEE ALSO"
 \fBresperf\fR(1)

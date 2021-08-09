@@ -16,7 +16,7 @@
 # limitations under the License.
 
 AC_PREREQ(2.64)
-AC_INIT([dnsperf], [2.6.0], [admin@dns-oarc.net], [dnsperf], [https://github.com/DNS-OARC/dnsperf/issues])
+AC_INIT([dnsperf], [2.7.0], [admin@dns-oarc.net], [dnsperf], [https://github.com/DNS-OARC/dnsperf/issues])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 AC_CONFIG_SRCDIR([src/dnsperf.c])
 AC_CONFIG_HEADER([src/config.h])
@@ -75,6 +75,15 @@ PKG_CHECK_MODULES([libldns], [libldns >= 1.7.0], [AC_DEFINE([HAVE_LDNS], [1], [D
   PKG_CHECK_MODULES([libldns], [ldns >= 1.7.0], [AC_DEFINE([HAVE_LDNS], [1], [Define to 1 if you have the LDNS library])], [
     AC_MSG_NOTICE([LDNS (>= 1.7.0) not found, dynamic update support disabled])
   ])
+])
+
+# Check for nghttp2
+PKG_CHECK_MODULES([libnghttp2], [libnghttp2 >= 0], [
+  AS_VAR_APPEND([CFLAGS], [" $nghttp2_CFLAGS"])
+  AS_VAR_APPEND([LIBS], [" $nghttp2_LIBS"])
+], [
+  AC_CHECK_HEADERS([nghttp2.h],, [AC_MSG_ERROR([nghttp2 headers not found])])
+  AC_CHECK_LIB([nghttp2], [nghttp2_session],, [AC_MSG_ERROR([nghttp2 not found])])
 ])
 
 # Output Makefiles

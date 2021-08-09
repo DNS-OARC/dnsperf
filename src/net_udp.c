@@ -61,7 +61,7 @@ static int perf__udp_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
     return 1;
 }
 
-struct perf_net_socket* perf_net_udp_opensocket(const perf_sockaddr_t* server, const perf_sockaddr_t* local, size_t bufsize)
+struct perf_net_socket* perf_net_udp_opensocket(const perf_sockaddr_t* server, const perf_sockaddr_t* local, size_t bufsize, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event)
 {
     struct perf__udp_socket* tmp  = calloc(1, sizeof(struct perf__udp_socket)); // clang scan-build
     struct perf_net_socket*  sock = (struct perf_net_socket*)tmp;
@@ -78,6 +78,10 @@ struct perf_net_socket* perf_net_udp_opensocket(const perf_sockaddr_t* server, c
     sock->close     = perf__udp_close;
     sock->sockeq    = perf__udp_sockeq;
     sock->sockready = perf__udp_sockready;
+
+    sock->data  = data;
+    sock->sent  = sent;
+    sock->event = event;
 
     sock->fd = socket(server->sa.sa.sa_family, SOCK_DGRAM, 0);
     if (sock->fd == -1) {

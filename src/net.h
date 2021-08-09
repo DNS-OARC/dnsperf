@@ -47,7 +47,8 @@ enum perf_net_mode {
     sock_pipe,
     sock_udp,
     sock_tcp,
-    sock_dot
+    sock_dot,
+    sock_doh
 };
 
 struct perf_net_socket;
@@ -158,10 +159,25 @@ static inline int perf_sockaddr_isinet6(const perf_sockaddr_t* sockaddr)
     return sockaddr->sa.sa.sa_family == AF_INET6;
 }
 
-struct perf_net_socket* perf_net_opensocket(enum perf_net_mode mode, const perf_sockaddr_t* server, const perf_sockaddr_t* local, unsigned int offset, size_t bufsize);
+struct perf_net_socket* perf_net_opensocket(enum perf_net_mode mode, const perf_sockaddr_t* server, const perf_sockaddr_t* local, unsigned int offset, size_t bufsize, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event);
 
-struct perf_net_socket* perf_net_udp_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t);
-struct perf_net_socket* perf_net_tcp_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t);
-struct perf_net_socket* perf_net_dot_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t);
+struct perf_net_socket* perf_net_udp_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event);
+struct perf_net_socket* perf_net_tcp_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event);
+struct perf_net_socket* perf_net_dot_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event);
+struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t*, const perf_sockaddr_t*, size_t, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event);
+
+#define DEFAULT_DOH_URI "https://localhost/dns-query"
+#define DEFAULT_DOH_METHOD "GET"
+
+void perf_net_doh_parse_uri(const char*);
+void perf_net_doh_parse_method(const char*);
+void perf_net_doh_set_max_concurrent_streams(size_t);
+
+void perf_net_stats_init(enum perf_net_mode);
+void perf_net_stats_compile(enum perf_net_mode, struct perf_net_socket*);
+void perf_net_stats_print(enum perf_net_mode);
+void perf_net_doh_stats_init();
+void perf_net_doh_stats_compile(struct perf_net_socket*);
+void perf_net_doh_stats_print();
 
 #endif

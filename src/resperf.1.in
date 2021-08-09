@@ -44,6 +44,7 @@ resperf \- test the resolution performance of a caching DNS server
 [\fB\-F\ \fIfall_behind\fR]
 [\fB\-v\fR]
 [\fB\-W\fR]
+[\fB\-O\ \fIoption=value\fR]
 .ad
 .hy
 .hy 0
@@ -74,6 +75,7 @@ resperf \- test the resolution performance of a caching DNS server
 [\fB\-F\ \fIfall_behind\fR]
 [\fB\-v\fR]
 [\fB\-W\fR]
+[\fB\-O\ \fIoption=value\fR]
 .ad
 .hy
 .SH DESCRIPTION
@@ -413,6 +415,11 @@ itself and the server under test can sustain.
 Otherwise, the test is likely to be cut short as a result of either running
 out of query IDs (because of large numbers of dropped queries) or of
 \fBresperf\fR falling behind its transmission schedule.
+.SS "Using DNS-over-HTTPS"
+When using DNS-over-HTTPS you must set the \fB-O doh\-uri=...\fR to something
+that works with the server you're sending to.
+Also note that the value for maximum outstanding queries will be used to
+control the maximum concurrent streams within the HTTP/2 connection.
 .SH OPTIONS
 Because the \fBresperf\-report\fR script passes its command line options
 directly to the \fBresperf\fR programs, they both accept the same set of
@@ -437,7 +444,7 @@ This allows for long running tests on very small and simple query datafile.
 \fB-M \fImode\fR
 .br
 .RS
-Specifies the transport mode to use, "udp", "tcp" or "dot".
+Specifies the transport mode to use, "udp", "tcp", "dot" or "doh".
 Default is "udp".
 .RE
 
@@ -452,7 +459,7 @@ The default is the loopback address, 127.0.0.1.
 .br
 .RS
 Sets the port on which the DNS packets are sent.
-If not specified, the standard DNS port (udp/tcp 53, DoT 853) is used.
+If not specified, the standard DNS port (udp/tcp 53, DoT 853, DoH 443) is used.
 .RE
 
 \fB-a \fIlocal_addr\fR
@@ -633,6 +640,14 @@ Enables verbose mode to report about network readiness and congestion.
 .RS
 Log warnings and errors to standard output instead of standard error making
 it easier for script, test and automation to capture all output.
+.RE
+
+\fB-O \fIoption=value\fR
+.br
+.RS
+Set an extended long option for various things to control different aspects
+of testing or protocol modules, see EXTENDED OPTIONS in \fBdnsperf\fR(1) for
+list of available options.
 .RE
 .SH "THE PLOT DATA FILE"
 The plot data file is written by the \fBresperf\fR program and contains the

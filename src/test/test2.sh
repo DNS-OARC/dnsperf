@@ -100,6 +100,9 @@ echo " A" | ../dnsperf -W -s 1.1.1.1 \
 echo "toooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooolongname" \
   | ../dnsperf -W -s 1.1.1.1 -u \
   | grep "Unable to parse domain name"
+echo "tooooooooooooooooooooooooooooo.oooooooooooooooooooooooo.ooooooooooooooooooooooooooooo.ooooooooooooooooooooooooooooooo.oooooooooooooooooooooooooooooooooooooo.oooooooooooooooooooooooooooo.ooooooooooooooooooooooooo.ooooooooooooooooooooooooooooooooo.oooooooooooooooooooooooooooo.oooooooooooooooooooooooooooooooo.ooooooooooooooooooo.longname" \
+  | ../dnsperf -W -s 1.1.1.1 -u \
+  | grep "Unable to parse domain name"
 echo -e "test\ndelete toooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooolongname" \
   | ../dnsperf -W -s 1.1.1.1 -u \
   | grep "invalid update command, domain name too large"
