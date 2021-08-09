@@ -46,7 +46,7 @@ environment with autoconf, automake, libtool and pkgconfig.
 - [OpenSSL](https://www.openssl.org/) - for TSIG support
 - [Concurrency Kit](http://concurrencykit.org/) - for atomic operations
 - [LDNS](https://nlnetlabs.nl/projects/ldns/about/) - optional for dynamic update support
-- [nghttp2](https://nghttp2.org) - for **experimental** DNS-over-HTTPS support using HTTP/2
+- [nghttp2](https://nghttp2.org) - for DNS-over-HTTPS support using HTTP/2
 
 To install the dependencies under Debian/Ubuntu:
 ```
