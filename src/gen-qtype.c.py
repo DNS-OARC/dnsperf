@@ -1,18 +1,24 @@
 #!/usr/bin/python3
 
 import csv
+import sys
 from urllib.request import Request, urlopen
+from urllib.error import URLError
 from io import StringIO
 
 qtype = {}
 
-for row in csv.reader(StringIO(urlopen(Request('https://www.iana.org/assignments/dns-parameters/dns-parameters-4.csv')).read().decode('utf-8'))):
-    if row[0] == 'TYPE':
-        continue
-    try:
-        qtype[row[0]] = int(row[1])
-    except Exception:
-        continue
+try:
+    for row in csv.reader(StringIO(urlopen(Request('https://www.iana.org/assignments/dns-parameters/dns-parameters-4.csv')).read().decode('utf-8'))):
+        if row[0] == 'TYPE':
+            continue
+        try:
+            qtype[row[0]] = int(row[1])
+        except Exception:
+            continue
+except URLError as err:
+    print("URLerror: {0}".format(err),file=sys.stderr)
+    sys.exit(1)
 
 print("""/*
  * Copyright 2019-2021 OARC, Inc.
