@@ -2,7 +2,7 @@ Source: dnsperf
 Section: net
 Priority: optional
 Maintainer: Jerry Lundström <lundstrom.jerry@gmail.com>
-Build-Depends: debhelper (>= 8.0.0), build-essential, automake, autoconf,
+Build-Depends: debhelper (>= 10), build-essential, automake, autoconf,
  libtool, libssl-dev, pkg-config, libldns-dev, libck-dev, libnghttp2-dev
 Standards-Version: 3.9.4
 Homepage: https://www.dns-oarc.net/tools/dnsperf
