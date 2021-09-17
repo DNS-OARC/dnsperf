@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.7.0
+Version:        2.7.1
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -95,6 +95,15 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Sep 17 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.7.1-1
+- Release 2.7.1
+  * This release fixes issues with constructing wire-format DNS when the
+    domain names includes escaped characters such as `\123` or `\.`.
+  * Other changes:
+    - Bump Debian package compat level to 10
+  * Commits:
+    4873f02 DNS encoding
+    c4eccc0 debhelper
 * Mon Aug 09 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.7.0-1
 - Release 2.7.0
   * This release adds DNS-over-HTTPS support!
