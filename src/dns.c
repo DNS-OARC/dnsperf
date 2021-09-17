@@ -111,12 +111,11 @@ perf_result_t perf_dname_fromstring(const char* str, size_t len, perf_buffer_t* 
             for (at = 0; at < len; at++) {
                 if (*(str + at) == '\\') {
                     at++;
-                    if (at >= len)
-                        return PERF_R_FAILURE;
                     if (*(str + at) >= '0' && *(str + at) <= '9') {
                         char b[4];
                         long v;
-                        memcpy(b, str, 3);
+                        memcpy(b, str + at, 3);
+                        at += 2;
                         b[3] = 0;
                         v    = strtol(b, 0, 7);
                         if (v < 0 || v > 255)
@@ -124,6 +123,8 @@ perf_result_t perf_dname_fromstring(const char* str, size_t len, perf_buffer_t* 
                         perf_buffer_putuint8(target, (uint8_t)v);
                         continue;
                     }
+                } else if (*(str + at) == '.') {
+                    break;
                 }
                 perf_buffer_putmem(target, str + at, 1);
             }
