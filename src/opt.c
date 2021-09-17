@@ -236,21 +236,25 @@ parse_timeval(const char* desc, const char* str)
 static int perf_opt_long_parse(char* optarg)
 {
     ssize_t optlen;
-    char*   arg;
+    char*   arg = strchr(optarg, '=');
 
-    // TODO: Allow boolean not to have =/value
-    if (!(arg = strchr(optarg, '='))) {
-        return -1;
+    if (arg) {
+        optlen = arg - optarg;
+        arg++;
+    } else {
+        optlen = strlen(optarg);
     }
-    optlen = arg - optarg;
     if (optlen < 1) {
         return -1;
     }
-    arg++;
 
     long_opt_t* opt = longopts;
     while (opt) {
         if (!strncmp(optarg, opt->name, optlen)) {
+            // booleans must not to have =value, others must have it
+            if (!((opt->type == perf_opt_boolean) == !arg)) {
+                return -1;
+            }
             switch (opt->type) {
             case perf_opt_string:
                 *opt->u.stringp = arg;
