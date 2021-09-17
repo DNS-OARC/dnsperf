@@ -1,3 +1,18 @@
+dnsperf (2.7.1-1~unstable+1) unstable; urgency=low
+
+  * Release 2.7.1
+
+    This release fixes issues with constructing wire-format DNS when the
+    domain names includes escaped characters such as `\123` or `\.`.
+
+    Other changes:
+    - Bump Debian package compat level to 10
+
+    4873f02 DNS encoding
+    c4eccc0 debhelper
+
+ -- Jerry Lundström <lundstrom.jerry@gmail.com>  Fri, 17 Sep 2021 15:46:53 +0200
+
 dnsperf (2.7.0-1~unstable+1) unstable; urgency=low
 
   * Release 2.7.0

@@ -1,3 +1,16 @@
+2021-09-17 Jerry Lundström
+
+    Release 2.7.1
+
+    This release fixes issues with constructing wire-format DNS when the
+    domain names includes escaped characters such as `\123` or `\.`.
+
+    Other changes:
+    - Bump Debian package compat level to 10
+
+    4873f02 DNS encoding
+    c4eccc0 debhelper
+
 2021-08-09 Jerry Lundström
 
     Release 2.7.0
