@@ -87,6 +87,7 @@ typedef struct {
     uint64_t           stats_interval;
     bool               updates;
     bool               verbose;
+    bool               suppress_timeout_msg;
     enum perf_net_mode mode;
 } config_t;
 
@@ -487,6 +488,9 @@ setup(int argc, char** argv, config_t* config)
         "the URI to use for DNS-over-HTTPS", DEFAULT_DOH_URI, &doh_uri);
     perf_long_opt_add("doh-method", perf_opt_string, "doh_method",
         "the HTTP method to use for DNS-over-HTTPS: GET or POST", DEFAULT_DOH_METHOD, &doh_method);
+    perf_long_opt_add("suppress-timeout-msg", perf_opt_boolean, "suppress_timeout_msg",
+        "suppress messages about individual timeouted queries", NULL, &config->suppress_timeout_msg);
+
 
     bool log_stdout = false;
     perf_opt_add('W', perf_opt_boolean, NULL, "log warnings and errors to stdout instead of stderr", NULL, &log_stdout);
@@ -827,13 +831,15 @@ process_timeouts(threadinfo_t* tinfo, uint64_t now)
 
         tinfo->stats.num_timedout++;
 
-        if (q->desc != NULL) {
-            perf_log_printf("> T %s", q->desc);
-        } else {
-            perf_log_printf("[Timeout] %s timed out: msg id %u",
-                config->updates ? "Update" : "Query",
-                (unsigned int)(q - tinfo->queries));
-        }
+	if (!config->suppress_timeout_msg) {
+            if (q->desc != NULL) {
+                perf_log_printf("> T %s", q->desc);
+            } else {
+                perf_log_printf("[Timeout] %s timed out: msg id %u",
+                    config->updates ? "Update" : "Query",
+                    (unsigned int)(q - tinfo->queries));
+            }
+	}
         q = perf_list_tail(tinfo->outstanding_queries);
     } while (q != NULL && q->timestamp < now && now - q->timestamp >= config->timeout);
 
