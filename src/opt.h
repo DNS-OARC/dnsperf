@@ -20,6 +20,8 @@
 #ifndef PERF_OPT_H
 #define PERF_OPT_H 1
 
+#include <stdbool.h>
+
 typedef enum {
     perf_opt_string,
     perf_opt_boolean,
@@ -30,6 +32,13 @@ typedef enum {
     perf_opt_port,
 } perf_opttype_t;
 
+typedef struct {
+    bool timeouts;
+    bool congestion;
+    bool sendfailed;
+    bool sockready;
+} perf_suppress_t;
+
 void perf_opt_add(char c, perf_opttype_t type, const char* desc, const char* help, const char* defval, void* valp);
 void perf_long_opt_add(const char* name, perf_opttype_t type, const char* desc, const char* help, const char* defval, void* valp);
 
@@ -37,5 +46,7 @@ void perf_opt_usage(void);
 void perf_long_opt_usage(void);
 
 void perf_opt_parse(int argc, char** argv);
+
+perf_suppress_t perf_opt_parse_suppress(const char* val);
 
 #endif

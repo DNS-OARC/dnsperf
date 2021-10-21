@@ -397,6 +397,23 @@ The URI to use for DNS-over-HTTPS, default value is
 The HTTP method to use when querying with DNS-over-HTTPS, default is GET.
 Available methods are: GET, POST.
 .RE
+
+\fBsuppress=\fIMESSAGE[,MESSAGE,...]\fR
+.br
+.RS
+Suppress various messages and warnings that may be shown excessively in some
+situations, such as socket readiness when connecting to a slow service.
+Can suppress multiple types by listing them as a comma separated list.
+Following type are available.
+
+\fBtimeouts\fR: Suppress messages about queries being timed out
+.br
+\fBcongestion\fR: Suppress messages about network congestion
+.br
+\fBsendfailed\fR: Suppress messages about failure to send packets or if only parts of the packet were sent
+.br
+\fBsockready\fR: Suppress messages about socket readiness
+.RE
 .SH "SEE ALSO"
 \fBresperf\fR(1)
 .SH AUTHOR
