@@ -88,6 +88,7 @@ typedef struct {
     bool               updates;
     bool               verbose;
     enum perf_net_mode mode;
+    perf_suppress_t    suppress;
 } config_t;
 
 typedef struct {
@@ -399,17 +400,18 @@ stringify(unsigned int value)
 static void
 setup(int argc, char** argv, config_t* config)
 {
-    const char* family      = NULL;
-    const char* server_name = DEFAULT_SERVER_NAME;
-    in_port_t   server_port = 0;
-    const char* local_name  = NULL;
-    in_port_t   local_port  = DEFAULT_LOCAL_PORT;
-    const char* filename    = NULL;
-    const char* edns_option = NULL;
-    const char* tsigkey     = NULL;
-    const char* mode        = 0;
-    const char* doh_uri     = DEFAULT_DOH_URI;
-    const char* doh_method  = DEFAULT_DOH_METHOD;
+    const char* family         = NULL;
+    const char* server_name    = DEFAULT_SERVER_NAME;
+    in_port_t   server_port    = 0;
+    const char* local_name     = NULL;
+    in_port_t   local_port     = DEFAULT_LOCAL_PORT;
+    const char* filename       = NULL;
+    const char* edns_option    = NULL;
+    const char* tsigkey        = NULL;
+    const char* mode           = 0;
+    const char* doh_uri        = DEFAULT_DOH_URI;
+    const char* doh_method     = DEFAULT_DOH_METHOD;
+    const char* local_suppress = 0;
 
     memset(config, 0, sizeof(*config));
     config->argc = argc;
@@ -487,6 +489,8 @@ setup(int argc, char** argv, config_t* config)
         "the URI to use for DNS-over-HTTPS", DEFAULT_DOH_URI, &doh_uri);
     perf_long_opt_add("doh-method", perf_opt_string, "doh_method",
         "the HTTP method to use for DNS-over-HTTPS: GET or POST", DEFAULT_DOH_METHOD, &doh_method);
+    perf_long_opt_add("suppress", perf_opt_string, "message[,message,...]",
+        "suppress messages/warnings, see man-page for list of message types", NULL, &local_suppress);
 
     bool log_stdout = false;
     perf_opt_add('W', perf_opt_boolean, NULL, "log warnings and errors to stdout instead of stderr", NULL, &log_stdout);
@@ -496,6 +500,8 @@ setup(int argc, char** argv, config_t* config)
     if (log_stdout) {
         perf_log_tostdout();
     }
+
+    config->suppress = perf_opt_parse_suppress(local_suppress);
 
     if (mode != 0)
         config->mode = perf_net_parsemode(mode);
@@ -695,14 +701,14 @@ do_send(void* arg)
             q->sock = tinfo->socks[tinfo->current_sock++ % tinfo->nsocks];
             switch (perf_net_sockready(q->sock, threadpipe[0], TIMEOUT_CHECK_TIME)) {
             case 0:
-                if (config->verbose) {
+                if (config->verbose && !config->suppress.sockready) {
                     perf_log_warning("socket %p not ready", q->sock);
                 }
                 q->sock  = 0;
                 all_fail = false;
                 continue;
             case -1:
-                if (config->verbose) {
+                if (config->verbose && !config->suppress.sockready) {
                     perf_log_warning("socket %p readiness check timed out", q->sock);
                 }
                 q->sock = 0;
@@ -765,12 +771,12 @@ do_send(void* arg)
             config->server_addr.length);
         if (n < 0) {
             if (errno == EINPROGRESS) {
-                if (config->verbose) {
+                if (config->verbose && !config->suppress.congestion) {
                     perf_log_warning("network congested, packet sending in progress");
                 }
                 any_inprogress = 1;
             } else {
-                if (config->verbose) {
+                if (config->verbose && !config->suppress.sendfailed) {
                     char __s[256];
                     perf_log_warning("failed to send packet: %s", perf_strerror_r(errno, __s, sizeof(__s)));
                 }
@@ -780,7 +786,9 @@ do_send(void* arg)
                 continue;
             }
         } else if ((unsigned int)n != length) {
-            perf_log_warning("failed to send full packet: only sent %d of %u", n, length);
+            if (!config->suppress.sendfailed) {
+                perf_log_warning("failed to send full packet: only sent %d of %u", n, length);
+            }
             PERF_LOCK(&tinfo->lock);
             query_move(tinfo, q, prepend_unused);
             PERF_UNLOCK(&tinfo->lock);
@@ -827,12 +835,14 @@ process_timeouts(threadinfo_t* tinfo, uint64_t now)
 
         tinfo->stats.num_timedout++;
 
-        if (q->desc != NULL) {
-            perf_log_printf("> T %s", q->desc);
-        } else {
-            perf_log_printf("[Timeout] %s timed out: msg id %u",
-                config->updates ? "Update" : "Query",
-                (unsigned int)(q - tinfo->queries));
+        if (!config->suppress.timeouts) {
+            if (q->desc != NULL) {
+                perf_log_printf("> T %s", q->desc);
+            } else {
+                perf_log_printf("[Timeout] %s timed out: msg id %u",
+                    config->updates ? "Update" : "Query",
+                    (unsigned int)(q - tinfo->queries));
+            }
         }
         q = perf_list_tail(tinfo->outstanding_queries);
     } while (q != NULL && q->timestamp < now && now - q->timestamp >= config->timeout);
