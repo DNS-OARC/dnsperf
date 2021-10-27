@@ -115,6 +115,9 @@ struct perf__doh_socket {
     bool            http2_is_dns;
 
     struct _doh_stats stats;
+
+    char   recvbuf[TCP_RECV_BUF_SIZE];
+    size_t recv_at;
 };
 
 static pthread_mutex_t            _nghttp2_lock      = PTHREAD_MUTEX_INITIALIZER;
@@ -291,50 +294,62 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
         return -1;
     }
 
-    uint8_t recvbuf[TCP_RECV_BUF_SIZE];
-    ssize_t n = SSL_read(self->ssl, recvbuf, TCP_RECV_BUF_SIZE);
-    if (!n) {
-        perf__doh_reconnect(sock);
-        PERF_UNLOCK(&self->lock);
-        errno = EAGAIN;
-        return -1;
-    }
-    if (n < 0) {
-        int err = SSL_get_error(self->ssl, n);
-        switch (err) {
-        case SSL_ERROR_WANT_READ:
+    if (self->recv_at < sizeof(self->recvbuf)) {
+        // try to recv more if we can
+        ssize_t n = SSL_read(self->ssl, self->recvbuf + self->recv_at, sizeof(self->recvbuf) - self->recv_at);
+        if (!n) {
+            perf__doh_reconnect(sock);
+            PERF_UNLOCK(&self->lock);
             errno = EAGAIN;
-            break;
-        case SSL_ERROR_SYSCALL:
-            switch (errno) {
-            case ECONNREFUSED:
-            case ECONNRESET:
-            case ENOTCONN:
-                perf__doh_reconnect(sock);
-                errno = EAGAIN;
-                break;
-            default:
-                break;
-            }
-            break;
-        default:
-            errno = EBADF;
-            break;
+            return -1;
         }
-        PERF_UNLOCK(&self->lock);
-        return -1;
+        if (n < 0) {
+            int err = SSL_get_error(self->ssl, n);
+            switch (err) {
+            case SSL_ERROR_WANT_READ:
+                if (self->recv_at) {
+                    // did not recv but we got something in buffer
+                    break;
+                }
+                errno = EAGAIN;
+                PERF_UNLOCK(&self->lock);
+                return -1;
+            case SSL_ERROR_SYSCALL:
+                switch (errno) {
+                case ECONNREFUSED:
+                case ECONNRESET:
+                case ENOTCONN:
+                    perf__doh_reconnect(sock);
+                    errno = EAGAIN;
+                    break;
+                default:
+                    break;
+                }
+                PERF_UNLOCK(&self->lock);
+                return -1;
+            default:
+                errno = EBADF;
+                PERF_UNLOCK(&self->lock);
+                return -1;
+            }
+        } else {
+            self->recv_at += n;
+        }
     }
 
     // this will be processed by nghttp2 callbacks
-    int ret = nghttp2_session_mem_recv(self->http2.session, recvbuf, n);
+    ssize_t ret = nghttp2_session_mem_recv(self->http2.session, (uint8_t*)self->recvbuf, self->recv_at);
     if (ret < 0) {
         perf_log_warning("nghttp2_session_mem_recv failed: %s", nghttp2_strerror(ret));
         PERF_UNLOCK(&self->lock);
         return -1;
     }
-    // TODO: handle partial mem_recv
-    if (ret != n) {
-        perf_log_fatal("perf__doh_recv() mem_recv did not take all");
+    if (ret != self->recv_at) {
+        // only process one response per call
+        memmove(self->recvbuf, self->recvbuf + ret, self->recv_at - ret);
+        self->recv_at -= ret;
+    } else {
+        self->recv_at = 0;
     }
 
     // TODO: is this faster then mem_recv?
@@ -850,7 +865,9 @@ static int _http2_data_chunk_recv_cb(nghttp2_session* session,
     }
 
     if (self->http2.dnsmsg_completed) {
-        perf_log_fatal("_http2_data_chunk_recv_cb: chunk received when already having a dns msg");
+        // pause for now and don't process this chunk
+        // can only do one response at a time in perf__doh_recv()
+        return NGHTTP2_ERR_PAUSE;
     }
 
     // TODO: point of nghttp2_session_get_stream_user_data() code?
