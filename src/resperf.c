@@ -205,6 +205,8 @@ static perf_tsigkey_t* tsigkey;
 static bool         verbose;
 static unsigned int max_fall_behind;
 
+static perf_suppress_t suppress;
+
 const char* progname = "resperf";
 
 static char*
@@ -251,6 +253,7 @@ static void setup(int argc, char** argv)
     const char*  edns_option_str = NULL;
     const char*  doh_uri         = DEFAULT_DOH_URI;
     const char*  doh_method      = DEFAULT_DOH_METHOD;
+    const char*  local_suppress  = 0;
 
     sock_family     = AF_UNSPEC;
     server_port     = 0;
@@ -332,12 +335,16 @@ static void setup(int argc, char** argv)
         "the URI to use for DNS-over-HTTPS", DEFAULT_DOH_URI, &doh_uri);
     perf_long_opt_add("doh-method", perf_opt_string, "doh_method",
         "the HTTP method to use for DNS-over-HTTPS: GET or POST", DEFAULT_DOH_METHOD, &doh_method);
+    perf_long_opt_add("suppress", perf_opt_string, "message[,message,...]",
+        "suppress messages/warnings, see dnsperf(1) man-page for list of message types", NULL, &local_suppress);
 
     perf_opt_parse(argc, argv);
 
     if (log_stdout) {
         perf_log_tostdout();
     }
+
+    suppress = perf_opt_parse_suppress(local_suppress);
 
     if (_mode != 0)
         mode = perf_net_parsemode(_mode);
@@ -574,11 +581,11 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
     while (q->is_inprogress) {
         if (perf_net_sockready(socks[sock], dummypipe[0], TIMEOUT_CHECK_TIME) == -1) {
             if (errno == EINPROGRESS) {
-                if (verbose) {
+                if (verbose && !suppress.congestion) {
                     perf_log_warning("network congested, packet sending in progress");
                 }
             } else {
-                if (verbose) {
+                if (verbose && !suppress.sockready) {
                     char __s[256];
                     perf_log_warning("failed to check socket readiness: %s", perf_strerror_r(errno, __s, sizeof(__s)));
                 }
@@ -603,16 +610,16 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
 
     switch (perf_net_sockready(socks[sock], dummypipe[0], TIMEOUT_CHECK_TIME)) {
     case 0:
-        if (verbose) {
+        if (verbose && !suppress.sockready) {
             perf_log_warning("failed to send packet: socket %d not ready", sock);
         }
         return (PERF_R_FAILURE);
     case -1:
         if (errno == EINPROGRESS) {
-            if (verbose) {
+            if (verbose && !suppress.congestion) {
                 perf_log_warning("network congested, packet sending in progress");
             }
-        } else {
+        } else if (!suppress.sockready) {
             perf_log_warning("failed to send packet: socket %d not ready", sock);
         }
         return (PERF_R_FAILURE);
@@ -642,12 +649,12 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
             &server_addr.sa.sa, server_addr.length)
         < 1) {
         if (errno == EINPROGRESS) {
-            if (verbose) {
+            if (verbose && !suppress.congestion) {
                 perf_log_warning("network congested, packet sending in progress");
             }
             q->is_inprogress = true;
         } else {
-            if (verbose) {
+            if (verbose && !suppress.sendfailed) {
                 char __s[256];
                 perf_log_warning("failed to send packet: %s", perf_strerror_r(errno, __s, sizeof(__s)));
             }
@@ -702,7 +709,7 @@ try_process_response(unsigned int sockindex)
 
     if (perf_net_sockready(socks[sockindex], dummypipe[0], TIMEOUT_CHECK_TIME) == -1) {
         if (errno != EINPROGRESS) {
-            if (verbose) {
+            if (verbose && !suppress.sockready) {
                 char __s[256];
                 perf_log_warning("failed to check socket readiness: %s", perf_strerror_r(errno, __s, sizeof(__s)));
             }

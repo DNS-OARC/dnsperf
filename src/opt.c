@@ -366,3 +366,38 @@ void perf_opt_parse(int argc, char** argv)
         exit(1);
     }
 }
+
+perf_suppress_t perf_opt_parse_suppress(const char* val)
+{
+    perf_suppress_t s = { false, false, false };
+
+    while (val && *val) {
+        const char* next = strchr(val, ',');
+        int         len;
+        if (next) {
+            len = next - val;
+            next += 1;
+        } else {
+            len  = strlen(val);
+            next = 0;
+        }
+
+        if (!strncmp(val, "timeouts", len)) {
+            s.timeouts = true;
+        } else if (!strncmp(val, "congestion", len)) {
+            s.congestion = true;
+        } else if (!strncmp(val, "sendfailed", len)) {
+            s.sendfailed = true;
+        } else if (!strncmp(val, "sockready", len)) {
+            s.sockready = true;
+        } else {
+            fprintf(stderr, "unknown message type to suppress: %.*s\n", len, val);
+            perf_opt_usage();
+            exit(1);
+        }
+
+        val = next;
+    }
+
+    return s;
+}
