@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.7.1
+Version:        2.8.0
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -95,6 +95,25 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Nov 02 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.8.0-1
+- Release 2.8.0
+  * This release fixes response handling for DNS-over-HTTPS when multiple
+    responses are received within the same receive cycle, and adds a new
+    option to suppress some of the normal and verbose output.
+  * The network model within dnsperf and resperf can not process more then
+    one response at a time from a protocol module, so a buffer has been added
+    to the DNS-over-HTTPS module to handle this situation (this already exists
+    in all other modules).
+  * The new option `-O suppress=<message,...>` can selectively suppress parts
+    of the normal and verbose output. Some of these messages might be
+    excessively displayed due to the network model and depending on what
+    protocol you use which makes usage harder then necessary. For example
+    during TCP connection stage, if you end-point is slow to establish
+    connection you will get a lot of output saying that the socket isn't ready
+    yet.
+  * Commits:
+    6a452b0 DoH response handling
+    e2828e7 Suppress
 * Fri Sep 17 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.7.1-1
 - Release 2.7.1
   * This release fixes issues with constructing wire-format DNS when the
