@@ -413,6 +413,8 @@ Following type are available.
 \fBsendfailed\fR: Suppress messages about failure to send packets or if only parts of the packet were sent
 .br
 \fBsockready\fR: Suppress messages about socket readiness
+.br
+\fBunexpected\fR: Suppress messages about answers with an unexpected message ID
 .RE
 .SH "SEE ALSO"
 \fBresperf\fR(1)

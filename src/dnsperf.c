@@ -1000,7 +1000,7 @@ do_recv(void* arg)
                 perf_log_warning("received short response");
                 continue;
             }
-            if (recvd[i].unexpected) {
+            if (recvd[i].unexpected && !tinfo->config->suppress.unexpected) {
                 perf_log_warning("received a response with an "
                                  "unexpected (maybe timed out) "
                                  "id: %u",
