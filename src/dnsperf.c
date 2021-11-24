@@ -89,6 +89,7 @@ typedef struct {
     bool               verbose;
     enum perf_net_mode mode;
     perf_suppress_t    suppress;
+    size_t             num_queries_per_conn;
 } config_t;
 
 typedef struct {
@@ -491,6 +492,8 @@ setup(int argc, char** argv, config_t* config)
         "the HTTP method to use for DNS-over-HTTPS: GET or POST", DEFAULT_DOH_METHOD, &doh_method);
     perf_long_opt_add("suppress", perf_opt_string, "message[,message,...]",
         "suppress messages/warnings, see man-page for list of message types", NULL, &local_suppress);
+    perf_long_opt_add("num-queries-per-conn", perf_opt_uint, "queries",
+        "Number of queries to send per connection", NULL, &config->num_queries_per_conn);
 
     bool log_stdout = false;
     perf_opt_add('W', perf_opt_boolean, NULL, "log warnings and errors to stdout instead of stderr", NULL, &log_stdout);
@@ -1221,6 +1224,9 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
             tinfo, perf__net_sent, perf__net_event);
         if (!tinfo->socks[i]) {
             perf_log_fatal("perf_net_opensocket(): no socket returned, out of memory?");
+        }
+        if (config->num_queries_per_conn && tinfo->socks[i]->num_queries_per_conn) {
+            tinfo->socks[i]->num_queries_per_conn(tinfo->socks[i], config->num_queries_per_conn, config->timeout);
         }
     }
     tinfo->current_sock = 0;

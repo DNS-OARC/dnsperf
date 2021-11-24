@@ -118,6 +118,10 @@ struct perf__doh_socket {
 
     char   recvbuf[TCP_RECV_BUF_SIZE];
     size_t recv_at;
+
+    size_t       num_queries_per_conn, nqpc_timeout;
+    unsigned int nqpc_sent, nqpc_recv;
+    uint64_t     nqpc_ts;
 };
 
 static pthread_mutex_t            _nghttp2_lock      = PTHREAD_MUTEX_INITIALIZER;
@@ -156,6 +160,10 @@ void perf_net_doh_set_max_concurrent_streams(size_t max_concurr)
 static void perf__doh_connect(struct perf_net_socket* sock)
 {
     int ret;
+
+    self->nqpc_sent = 0;
+    ck_pr_store_uint(&self->nqpc_recv, 0);
+    self->nqpc_ts = 0;
 
     nghttp2_session_del(self->http2.session);
     ret = nghttp2_session_client_new2(&self->http2.session, _nghttp2_callbacks, sock, _nghttp2_option);
@@ -394,6 +402,9 @@ static ssize_t perf__doh_recv(struct perf_net_socket* sock, void* buf, size_t le
 
         // self->have_more = false; TODO
         PERF_UNLOCK(&self->lock);
+        if (self->num_queries_per_conn) {
+            ck_pr_inc_uint(&self->nqpc_recv);
+        }
         return len;
     }
 
@@ -586,6 +597,8 @@ static ssize_t perf__doh_sendto(struct perf_net_socket* sock, uint16_t qid, cons
     }
     PERF_UNLOCK(&self->lock);
 
+    self->nqpc_sent++;
+
     return len;
 }
 
@@ -628,6 +641,21 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
             }
             self->is_sending = false;
             sent             = true;
+            self->nqpc_sent++;
+        }
+        if (self->num_queries_per_conn && self->nqpc_sent >= self->num_queries_per_conn) {
+            if (!self->nqpc_ts) {
+                self->nqpc_ts = perf_get_time() + self->nqpc_timeout;
+            }
+            unsigned int r = ck_pr_load_uint(&self->nqpc_recv);
+            if (r >= self->nqpc_sent || perf_get_time() > self->nqpc_ts) {
+                self->do_reconnect = true;
+            }
+            PERF_UNLOCK(&self->lock);
+            if (sent && sock->sent) {
+                sock->sent(sock, self->qid);
+            }
+            return 0;
         }
         PERF_UNLOCK(&self->lock);
         if (sent && sock->sent) {
@@ -898,6 +926,12 @@ static int select_next_proto_cb(SSL* ssl, unsigned char** out,
 }
 #endif /* !OPENSSL_NO_NEXTPROTONEG */
 
+static void perf__doh_num_queries_per_conn(struct perf_net_socket* sock, size_t num_queries_per_conn, size_t timeout)
+{
+    self->num_queries_per_conn = num_queries_per_conn;
+    self->nqpc_timeout         = timeout;
+}
+
 struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, const perf_sockaddr_t* local, size_t bufsize, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event)
 {
     struct perf__doh_socket* tmp  = calloc(1, sizeof(struct perf__doh_socket)); // clang scan-build
@@ -914,6 +948,8 @@ struct perf_net_socket* perf_net_doh_opensocket(const perf_sockaddr_t* server, c
     sock->sockeq    = perf__doh_sockeq;
     sock->sockready = perf__doh_sockready;
     sock->have_more = perf__doh_have_more;
+
+    sock->num_queries_per_conn = perf__doh_num_queries_per_conn;
 
     sock->data  = data;
     sock->sent  = sent;
