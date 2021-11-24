@@ -738,7 +738,9 @@ try_process_response(unsigned int sockindex)
 
     size_t idx = qid * nsocks + sockindex;
     if (idx >= max_outstanding || queries[idx].list != &outstanding_list) {
-        perf_log_warning("received a response with an unexpected id: %u", qid);
+        if (!suppress.unexpected) {
+            perf_log_warning("received a response with an unexpected id: %u", qid);
+        }
         return;
     }
     q = &queries[idx];
