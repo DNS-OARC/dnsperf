@@ -369,7 +369,7 @@ void perf_opt_parse(int argc, char** argv)
 
 perf_suppress_t perf_opt_parse_suppress(const char* val)
 {
-    perf_suppress_t s = { false, false, false };
+    perf_suppress_t s = { false, false, false, false };
 
     while (val && *val) {
         const char* next = strchr(val, ',');
@@ -390,6 +390,8 @@ perf_suppress_t perf_opt_parse_suppress(const char* val)
             s.sendfailed = true;
         } else if (!strncmp(val, "sockready", len)) {
             s.sockready = true;
+        } else if (!strncmp(val, "unexpected", len)) {
+            s.unexpected = true;
         } else {
             fprintf(stderr, "unknown message type to suppress: %.*s\n", len, val);
             perf_opt_usage();
