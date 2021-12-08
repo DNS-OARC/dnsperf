@@ -55,11 +55,19 @@ struct perf__dot_socket {
 
     uint64_t            conn_ts;
     perf_socket_event_t conn_event, conning_event;
+
+    size_t       num_queries_per_conn, nqpc_timeout;
+    unsigned int nqpc_sent, nqpc_recv;
+    uint64_t     nqpc_ts;
 };
 
 static void perf__dot_connect(struct perf_net_socket* sock)
 {
     int ret;
+
+    self->nqpc_sent = 0;
+    ck_pr_store_uint(&self->nqpc_recv, 0);
+    self->nqpc_ts = 0;
 
     int fd = socket(self->server.sa.sa.sa_family, SOCK_STREAM, 0);
     if (fd == -1) {
@@ -204,6 +212,9 @@ static ssize_t perf__dot_recv(struct perf_net_socket* sock, void* buf, size_t le
     memcpy(buf, self->recvbuf + 2, len < dnslen ? len : dnslen);
     memmove(self->recvbuf, self->recvbuf + 2 + dnslen, self->at - 2 - dnslen);
     self->at -= 2 + dnslen;
+    if (self->num_queries_per_conn) {
+        ck_pr_inc_uint(&self->nqpc_recv);
+    }
 
     if (self->at > 2) {
         memcpy(&dnslen2, self->recvbuf, 2);
@@ -283,6 +294,8 @@ static ssize_t perf__dot_sendto(struct perf_net_socket* sock, uint16_t qid, cons
     }
     PERF_UNLOCK(&self->lock);
 
+    self->nqpc_sent++;
+
     return n - 2;
 }
 
@@ -342,9 +355,22 @@ static int perf__dot_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
             if (sock->sent) {
                 sock->sent(sock, self->qid);
             }
-            return 1;
+            self->nqpc_sent++;
+        } else {
+            PERF_UNLOCK(&self->lock);
         }
-        PERF_UNLOCK(&self->lock);
+        if (self->num_queries_per_conn && self->nqpc_sent >= self->num_queries_per_conn) {
+            if (!self->nqpc_ts) {
+                self->nqpc_ts = perf_get_time() + self->nqpc_timeout;
+            }
+            unsigned int r = ck_pr_load_uint(&self->nqpc_recv);
+            if (r >= self->nqpc_sent || perf_get_time() > self->nqpc_ts) {
+                PERF_LOCK(&self->lock);
+                perf__dot_reconnect(sock);
+                PERF_UNLOCK(&self->lock);
+            }
+            return 0;
+        }
         return 1;
     }
 
@@ -417,6 +443,12 @@ static bool perf__dot_have_more(struct perf_net_socket* sock)
     return self->have_more;
 }
 
+static void perf__dot_num_queries_per_conn(struct perf_net_socket* sock, size_t num_queries_per_conn, size_t timeout)
+{
+    self->num_queries_per_conn = num_queries_per_conn;
+    self->nqpc_timeout         = timeout;
+}
+
 struct perf_net_socket* perf_net_dot_opensocket(const perf_sockaddr_t* server, const perf_sockaddr_t* local, size_t bufsize, void* data, perf_net_sent_cb_t sent, perf_net_event_cb_t event)
 {
     struct perf__dot_socket* tmp  = calloc(1, sizeof(struct perf__dot_socket)); // clang scan-build
@@ -433,6 +465,8 @@ struct perf_net_socket* perf_net_dot_opensocket(const perf_sockaddr_t* server, c
     sock->sockeq    = perf__dot_sockeq;
     sock->sockready = perf__dot_sockready;
     sock->have_more = perf__dot_have_more;
+
+    sock->num_queries_per_conn = perf__dot_num_queries_per_conn;
 
     sock->data  = data;
     sock->sent  = sent;

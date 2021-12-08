@@ -255,6 +255,8 @@ static void setup(int argc, char** argv)
     const char*  doh_method      = DEFAULT_DOH_METHOD;
     const char*  local_suppress  = 0;
 
+    size_t num_queries_per_conn = 0;
+
     sock_family     = AF_UNSPEC;
     server_port     = 0;
     local_port      = DEFAULT_LOCAL_PORT;
@@ -337,6 +339,8 @@ static void setup(int argc, char** argv)
         "the HTTP method to use for DNS-over-HTTPS: GET or POST", DEFAULT_DOH_METHOD, &doh_method);
     perf_long_opt_add("suppress", perf_opt_string, "message[,message,...]",
         "suppress messages/warnings, see dnsperf(1) man-page for list of message types", NULL, &local_suppress);
+    perf_long_opt_add("num-queries-per-conn", perf_opt_uint, "queries",
+        "Number of queries to send per connection", NULL, &num_queries_per_conn);
 
     perf_opt_parse(argc, argv);
 
@@ -427,6 +431,9 @@ static void setup(int argc, char** argv)
         socks[i] = perf_net_opensocket(mode, &server_addr, &local_addr, i, bufsize, (void*)(intptr_t)i, perf__net_sent, perf__net_event);
         if (!socks[i]) {
             perf_log_fatal("perf_net_opensocket(): no socket returned, out of memory?");
+        }
+        if (num_queries_per_conn && socks[i]->num_queries_per_conn) {
+            socks[i]->num_queries_per_conn(socks[i], num_queries_per_conn, query_timeout);
         }
     }
 }
@@ -738,7 +745,9 @@ try_process_response(unsigned int sockindex)
 
     size_t idx = qid * nsocks + sockindex;
     if (idx >= max_outstanding || queries[idx].list != &outstanding_list) {
-        perf_log_warning("received a response with an unexpected id: %u", qid);
+        if (!suppress.unexpected) {
+            perf_log_warning("received a response with an unexpected id: %u", qid);
+        }
         return;
     }
     q = &queries[idx];

@@ -80,6 +80,8 @@ typedef enum perf_socket_event {
 /* Callback for socket events related to connection oriented protocols, for statistics */
 typedef void (*perf_net_event_cb_t)(struct perf_net_socket* sock, perf_socket_event_t event, uint64_t elapsed_time);
 
+typedef void (*perf_net_num_queries_per_conn_t)(struct perf_net_socket* sock, size_t num_queries_per_conn, size_t timeout);
+
 struct perf_net_socket {
     void* data; /* user data */
 
@@ -90,6 +92,8 @@ struct perf_net_socket {
     perf_net_sockeq_t    sockeq;
     perf_net_sockready_t sockready;
     perf_net_have_more_t have_more;
+
+    perf_net_num_queries_per_conn_t num_queries_per_conn;
 
     /*
      * Not set by protocol, set by caller.

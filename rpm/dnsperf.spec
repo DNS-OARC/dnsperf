@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.8.0
+Version:        2.9.0
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -95,6 +95,20 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed Dec 08 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.9.0-1
+- Release 2.9.0
+  * This release brings a new message suppression option and a way to control
+    how many queries are sent over a connection.
+  * You can now suppress the message about receiving unexpected DNS message
+    IDs by using `-O suppress=unexpected`.
+  * With `-O num-queries-per-conn=<num>` you can now limit the number of
+    queries sent over a connection before triggering a re-connection, see
+    the `dnsperf(3)` man-page for more information how this works.
+  * Commits:
+    cd9df40 Tests
+    864a968 Queries per connection
+    7c5d6ab Suppress unexpected
+    8e9f4a2 Suppress
 * Tue Nov 02 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.8.0-1
 - Release 2.8.0
   * This release fixes response handling for DNS-over-HTTPS when multiple

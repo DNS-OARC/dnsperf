@@ -413,6 +413,24 @@ Following type are available.
 \fBsendfailed\fR: Suppress messages about failure to send packets or if only parts of the packet were sent
 .br
 \fBsockready\fR: Suppress messages about socket readiness
+.br
+\fBunexpected\fR: Suppress messages about answers with an unexpected message ID
+.RE
+
+\fBnum-queries-per-conn=\fINUMBER\fR
+.br
+.RS
+This will limit the number of queries sent over a connection before
+triggering a re-connection. Once re-connected it will reset the counter and
+continue sending queries until the limit is reached again, triggering
+another re-connection and so on.
+Using this option will also enable counting number of responses received
+for each connection and once the limit is reached for sending queries it
+will wait until the same amount of responses has been received before
+re-connecting.
+Waiting for responses may timeout and the timeout used for this is the
+same as specified by \fB-t\fR.
+Note that this option is only useful for connection oriented protocols.
 .RE
 .SH "SEE ALSO"
 \fBresperf\fR(1)

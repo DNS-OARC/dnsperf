@@ -37,6 +37,7 @@ typedef struct {
     bool congestion;
     bool sendfailed;
     bool sockready;
+    bool unexpected;
 } perf_suppress_t;
 
 void perf_opt_add(char c, perf_opttype_t type, const char* desc, const char* help, const char* defval, void* valp);
