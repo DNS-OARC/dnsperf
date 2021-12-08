@@ -1,1 +1,2 @@
 sonar.coverage.exclusions=src/gen-qtype.c.py
+sonar.python.version=3
