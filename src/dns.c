@@ -544,3 +544,12 @@ perf_result_t perf_dns_buildrequest(const perf_region_t* record, uint16_t qid,
 
     return result;
 }
+
+void perf_dns_change_qid(uint16_t qid, perf_buffer_t* msg)
+{
+	unsigned char *buf = perf_buffer_base(msg);
+	assert(perf_buffer_usedlength(msg) >= 2U);
+
+	buf[0] = qid >> 8;
+	buf[1] = qid;
+}

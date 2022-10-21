@@ -86,6 +86,8 @@ typedef struct {
     uint32_t           max_qps;
     uint64_t           stats_interval;
     bool               updates;
+    bool               binary_input;
+    perf_input_format_t input_format;
     bool               verbose;
     enum perf_net_mode mode;
     perf_suppress_t    suppress;
@@ -483,6 +485,9 @@ setup(int argc, char** argv, config_t* config)
     perf_opt_add('u', perf_opt_boolean, NULL,
         "send dynamic updates instead of queries",
         NULL, &config->updates);
+    perf_opt_add('B', perf_opt_boolean, NULL,
+        "read input file as TCP stream",
+        NULL, &config->binary_input);
     perf_opt_add('v', perf_opt_boolean, NULL,
         "verbose: report each query and additional information to stdout",
         NULL, &config->verbose);
@@ -538,6 +543,18 @@ setup(int argc, char** argv, config_t* config)
     perf_net_parselocal(config->server_addr.sa.sa.sa_family,
         local_name, local_port, &config->local_addr);
 
+    if (config->binary_input
+        && (config->edns || config->edns_option || config->dnssec
+            || config->tsigkey || config->updates) ) {
+        fprintf(stderr, "-B is mutually exclusive with -D, -e, -E, -u, -y\n");
+        exit(1);
+    }
+    if (config->updates)
+	    config->input_format = input_text_update;
+    else if (config->binary_input)
+	    config->input_format = input_tcp_wire_format;
+    else
+	    config->input_format = input_text_query;
     input = perf_datafile_open(filename);
 
     if (config->maxruns == 0 && config->timelimit == 0)
@@ -736,7 +753,7 @@ do_send(void* arg)
         PERF_UNLOCK(&tinfo->lock);
 
         perf_buffer_clear(&lines);
-        result = perf_datafile_next(input, &lines, config->updates);
+        result = perf_datafile_next(input, &lines, config->input_format);
         if (result != PERF_R_SUCCESS) {
             if (result == PERF_R_INVALIDFILE)
                 perf_log_fatal("input file contains no data");
@@ -744,12 +761,20 @@ do_send(void* arg)
         }
 
         qid = q - tinfo->queries;
-        perf_buffer_usedregion(&lines, &used);
-        perf_buffer_clear(&msg);
-        result = perf_dns_buildrequest(&used, qid,
-            config->edns, config->dnssec, config->updates,
-            config->tsigkey, config->edns_option,
-            &msg);
+	perf_buffer_clear(&msg);
+	if (config->input_format != input_tcp_wire_format) {
+		perf_buffer_usedregion(&lines, &used);
+		result = perf_dns_buildrequest(&used, qid,
+		    config->edns, config->dnssec, config->input_format == input_text_update,
+		    config->tsigkey, config->edns_option,
+		    &msg);
+	} else {
+		msg = lines;
+		if (msg.used >= 2) {
+			perf_dns_change_qid(qid, &msg);
+		}
+		result = PERF_R_SUCCESS;
+	}
         if (result != PERF_R_SUCCESS) {
             PERF_LOCK(&tinfo->lock);
             query_move(tinfo, q, prepend_unused);
@@ -764,7 +789,10 @@ do_send(void* arg)
         now = perf_get_time();
         if (config->verbose) {
             free(q->desc);
-            q->desc = strdup(lines.base);
+	    if (config->input_format != input_tcp_wire_format)
+		    q->desc = strdup(lines.base);
+	    else
+		    q->desc = strdup("binary input");
             if (q->desc == NULL)
                 perf_log_fatal("out of memory");
         }

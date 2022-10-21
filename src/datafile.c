@@ -129,13 +129,15 @@ static perf_result_t read_more(perf_datafile_t* dfile)
         dfile->at   = 0;
     }
 
+    /* leave space for \0 string termination a the end */
     n = read(dfile->fd, &dfile->databuf[dfile->have], sizeof(dfile->databuf) - dfile->have - 1);
     if (n < 0) {
         return (PERF_R_FAILURE);
+    } else if (n == 0) {
+        return (PERF_R_EOF);
     }
 
     dfile->have += n;
-    dfile->databuf[dfile->have] = 0;
 
     if (dfile->is_file && dfile->have == dfile->size) {
         dfile->cached = true;
@@ -144,6 +146,61 @@ static perf_result_t read_more(perf_datafile_t* dfile)
     return (PERF_R_SUCCESS);
 }
 
+/* Binary format: (<uint16_t> for blob length, <bytes>), repeat
+ * Outputs single packet _without_ the length preambule. */
+static perf_result_t read_one_blob(perf_datafile_t* dfile, perf_buffer_t* wire)
+{
+    const char*   cur;
+    size_t        length, curlen, nrem;
+    perf_result_t result;
+    uint16_t packet_size; /* 2-byte preambule like in the TCP stream */
+
+    while (true) {
+        size_t buf_data_len = dfile->have - dfile->at;
+        if (buf_data_len < sizeof(packet_size)) {
+            /* we don't have complete preambule yet */
+            if (dfile->cached) {
+                if (buf_data_len == 0) {
+                    return PERF_R_EOF;
+                } else {
+                    return PERF_R_INVALIDFILE;
+                }
+            }
+            result = read_more(dfile);
+            if (result != PERF_R_SUCCESS) {
+                if (result == PERF_R_EOF && buf_data_len != 0) {
+                    /* incomplete preambule at the end of file */
+                    result = PERF_R_INVALIDFILE;
+                }
+                return (result);
+            }
+            continue;
+        }
+
+        packet_size = ntohs(*(uint16_t *)&dfile->databuf[dfile->at]);
+        if (sizeof(packet_size) + packet_size > buf_data_len) {
+            if (dfile->cached) {
+                return PERF_R_INVALIDFILE;
+            }
+            result = read_more(dfile);
+            if (result != PERF_R_SUCCESS) {
+                if (result == PERF_R_EOF) {
+                    /* incomplete blob at the end of file */
+                    result = PERF_R_INVALIDFILE;
+                }
+                return (result);
+            }
+            continue;
+        }
+       break;
+    }
+
+    perf_buffer_putmem(wire, ((unsigned char*)&dfile->databuf[dfile->at]) + sizeof(packet_size), packet_size);
+    dfile->at += sizeof(packet_size) + packet_size;
+    return (PERF_R_SUCCESS);
+}
+
+/* String in output buffer is not \0 terminated, check length in dfile->have */
 static perf_result_t read_one_line(perf_datafile_t* dfile, perf_buffer_t* lines)
 {
     const char*   cur;
@@ -163,11 +220,12 @@ static perf_result_t read_one_line(perf_datafile_t* dfile, perf_buffer_t* lines)
         if (curlen == nrem) {
             if (!dfile->cached) {
                 result = read_more(dfile);
+                /* line terminator for text input */
+                dfile->databuf[dfile->have] = '\0';
                 if (result != PERF_R_SUCCESS)
                     return (result);
             }
             if (dfile->have - dfile->at == 0) {
-                dfile->nruns++;
                 return (PERF_R_EOF);
             }
             if (dfile->have - dfile->at > nrem)
@@ -194,10 +252,23 @@ static perf_result_t read_one_line(perf_datafile_t* dfile, perf_buffer_t* lines)
     return (PERF_R_SUCCESS);
 }
 
-perf_result_t perf_datafile_next(perf_datafile_t* dfile, perf_buffer_t* lines, bool is_update)
+perf_result_t perf_datafile_next(perf_datafile_t* dfile, perf_buffer_t* lines, perf_input_format_t format)
 {
     const char*   current;
     perf_result_t result;
+    perf_result_t (*readfunc)(perf_datafile_t* dfile, perf_buffer_t* lines);
+
+    switch (format) {
+        case input_text_query:
+        case input_text_update:
+            readfunc = read_one_line;
+            break;
+        case input_tcp_wire_format:
+            readfunc = read_one_blob;
+            break;
+        default:
+            return PERF_R_FAILURE;
+    };
 
     PERF_LOCK(&dfile->lock);
 
@@ -206,15 +277,16 @@ perf_result_t perf_datafile_next(perf_datafile_t* dfile, perf_buffer_t* lines, b
         goto done;
     }
 
-    result = read_one_line(dfile, lines);
+    result = readfunc(dfile, lines);
     if (result == PERF_R_EOF) {
         if (!dfile->read_any) {
             result = PERF_R_INVALIDFILE;
             goto done;
         }
+        dfile->nruns++;
         if (dfile->maxruns != dfile->nruns) {
             reopen_file(dfile);
-            result = read_one_line(dfile, lines);
+            result = readfunc(dfile, lines);
         }
     }
     if (result != PERF_R_SUCCESS) {
@@ -222,12 +294,15 @@ perf_result_t perf_datafile_next(perf_datafile_t* dfile, perf_buffer_t* lines, b
     }
     dfile->read_any = true;
 
-    if (is_update) {
+    if (format == input_text_update) {
         while (true) {
             current = perf_buffer_used(lines);
-            result  = read_one_line(dfile, lines);
-            if (result == PERF_R_EOF && dfile->maxruns != dfile->nruns) {
-                reopen_file(dfile);
+            result  = readfunc(dfile, lines);
+            if (result == PERF_R_EOF) {
+                dfile->nruns++;
+                if (dfile->maxruns != dfile->nruns) {
+                    reopen_file(dfile);
+                }
             }
             if (result != PERF_R_SUCCESS || strcasecmp(current, "send") == 0)
                 break;
