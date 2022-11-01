@@ -188,7 +188,8 @@ static perf_result_t read_one_blob(perf_datafile_t* dfile, perf_buffer_t* wire)
             }
             continue;
         }
-        packet_size = ntohs(*(uint16_t*)&dfile->databuf[dfile->at]);
+        memcpy(&packet_size, &dfile->databuf[dfile->at], sizeof(uint16_t));
+        packet_size = ntohs(packet_size);
         break;
     }
     while (true) {
