@@ -40,6 +40,4 @@ perf_result_t perf_dns_buildrequest(const perf_region_t* record, uint16_t qid,
     perf_tsigkey_t* tsigkey, perf_ednsoption_t* edns_option,
     perf_buffer_t* msg);
 
-void perf_dns_change_qid(uint16_t qid, perf_buffer_t* msg);
-
 #endif

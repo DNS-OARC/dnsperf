@@ -401,7 +401,7 @@ static void setup(int argc, char** argv)
     perf_net_parselocal(server_addr.sa.sa.sa_family, local_name,
         local_port, &local_addr);
 
-    input = perf_datafile_open(filename);
+    input = perf_datafile_open(filename, input_format_text_query);
     if (reopen_datafile) {
         perf_datafile_setmaxruns(input, -1);
     }
@@ -635,7 +635,7 @@ do_one_line(perf_buffer_t* lines, perf_buffer_t* msg)
     }
 
     perf_buffer_clear(lines);
-    result = perf_datafile_next(input, lines, false);
+    result = perf_datafile_next(input, lines);
     if (result != PERF_R_SUCCESS)
         perf_log_fatal("ran out of query data");
     perf_buffer_usedregion(lines, &used);
