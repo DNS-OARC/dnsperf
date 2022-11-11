@@ -1,4 +1,4 @@
-.\" Copyright 2019-2021 OARC, Inc.
+.\" Copyright 2019-2022 OARC, Inc.
 .\" Copyright 2017-2018 Akamai Technologies
 .\" Copyright 2006-2016 Nominum, Inc.
 .\" All rights reserved.
@@ -22,6 +22,7 @@ dnsperf \- test the performance of a DNS server
 .ad l
 \fBdnsperf\fR\ [\fB\-a\ \fIlocal_addr\fR]
 [\fB\-b\ \fIbufsize\fR]
+[\fB\-B\fR]
 [\fB\-c\ \fIclients\fR]
 [\fB\-d\ \fIdatafile\fR]
 [\fB\-D\fR]
@@ -192,6 +193,42 @@ Sets the size of the socket's send and receive buffers, in kilobytes.
 If not specified, the operating system's default is used.
 .RE
 
+\fB-B\fR
+.br
+.RS
+Instructs \fBdnsperf\fR to read datafile in TCP-stream binary format
+as specified by RFC 1035 section "4.2.2. TCP usage".
+Each packet is preceded by 2-byte preambule which specifies length of
+the following DNS packet in network byte order, immediatelly followed
+by raw bytes of the packet.
+First two bytes of any packet should contain message ID and are
+overwritten by \fBdnsperf\fR on the fly. All other bytes are left
+intact.
+Packets shorter than two bytes are sent intact.
+Packets in datafile can contain arbitrary bytes and are not checked for
+validity.
+Malformed packets probably will not be responded to by servers and will
+cause timeouts.
+This option is mutually exclusive with \fB-D\fR, \fB-e\fR, \fB-E\fR,
+\fB-u\fR and \fB-y\fR.
+
+These binary datafiles can be generated using arbitrary TCP listeners such
+as \fBnetcat\fR (nc) and \fBsockat\fR.
+TCP must be used so that the length is prepended.
+Following example shows how to generate a datafile with two query and
+then using it, you need two terminals.
+
+.EX
+(terminal 1) $ nc -l 127.0.0.1 5300 > dns.blob
+(terminal 2) $ echo "example.com A" | dnsperf -s 127.0.0.1 -p 5300 -m tcp
+...wait for dnsperf to finish...
+(terminal 1) $ nc -l 127.0.0.1 5300 >> dns.blob
+(terminal 2) $ echo "example.com AAAA" | dnsperf -s 127.0.0.1 -p 5300 -m tcp
+...wait for dnsperf to finish...
+(terminal 1) $ dnsperf -B -d dns.blob -s $IP
+.EE
+.RE
+
 \fB-c \fIclients\fR
 .br
 .RS
@@ -212,12 +249,14 @@ If not specified, \fBdnsperf\fR will read from standard input.
 .RS
 Sets the DO (DNSSEC OK) bit [RFC3225] in all packets sent.
 This also enables EDNS0, which is required for DNSSEC.
+This option is mutually exclusive with \fB-B\fR.
 .RE
 
 \fB-e\fR
 .br
 .RS
 Enables EDNS0 [RFC2671], by adding an OPT record to all packets sent.
+This option is mutually exclusive with \fB-B\fR.
 .RE
 
 \fB-E \fIcode:value\fR
@@ -226,6 +265,7 @@ Enables EDNS0 [RFC2671], by adding an OPT record to all packets sent.
 Add an EDNS [RFC2671] option to all packets sent, using the specified
 numeric option code and value expressed as a a hex-encoded string.
 This also enables EDNS0.
+This option is mutually exclusive with \fB-B\fR.
 .RE
 
 \fB-f \fIfamily\fR
@@ -331,6 +371,7 @@ Instructs \fBdnsperf\fR to send DNS dynamic update messages, rather than
 queries.
 The format of the input file is different in this case; see the
 "Constructing a dynamic update input file" section for more details.
+This option is mutually exclusive with \fB-B\fR.
 .RE
 
 \fB-v\fR
@@ -373,6 +414,7 @@ key algorithm, name and secret, where the algorithm defaults to hmac-md5 and
 the secret is expressed as a base-64 encoded string.
 Available algorithms are: hmac-md5, hmac-sha1, hmac-sha224, hmac-sha256,
 hmac-sha384 and hmac-sha512.
+This option is mutually exclusive with \fB-B\fR.
 .RE
 
 \fB-O \fIoption=value\fR

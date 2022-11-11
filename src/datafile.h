@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2021 OARC, Inc.
+ * Copyright 2019-2022 OARC, Inc.
  * Copyright 2017-2018 Akamai Technologies
  * Copyright 2006-2016 Nominum, Inc.
  * All rights reserved.
@@ -25,27 +25,38 @@
 
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdint.h>
 
-typedef struct perf_datafile {
+typedef enum {
+    input_format_text_query,
+    input_format_text_update,
+    input_format_tcp_wire_format
+} perf_input_format_t;
+
+typedef struct perf_datafile perf_datafile_t;
+struct perf_datafile {
     pthread_mutex_t lock;
     int             pipe_fd;
     int             fd;
     bool            is_file;
     size_t          size, at, have;
     bool            cached;
-    char            databuf[(64 * 1024) + 1];
+    char            databuf[(64 * 1024) + sizeof(uint16_t)]; /* pad for null-terminated string or TCP wire length */
     unsigned int    maxruns;
     unsigned int    nruns;
     bool            read_any;
-} perf_datafile_t;
 
-perf_datafile_t* perf_datafile_open(const char* filename);
+    perf_input_format_t format;
+    perf_result_t (*readfunc)(perf_datafile_t* dfile, perf_buffer_t* lines);
+};
+
+perf_datafile_t* perf_datafile_open(const char* filename, perf_input_format_t format);
 
 void perf_datafile_close(perf_datafile_t** dfilep);
 void perf_datafile_setmaxruns(perf_datafile_t* dfile, unsigned int maxruns);
 void perf_datafile_setpipefd(perf_datafile_t* dfile, int pipe_fd);
 
-perf_result_t perf_datafile_next(perf_datafile_t* dfile, perf_buffer_t* lines, bool is_update);
+perf_result_t perf_datafile_next(perf_datafile_t* dfile, perf_buffer_t* lines);
 
 unsigned int perf_datafile_nruns(const perf_datafile_t* dfile);
 

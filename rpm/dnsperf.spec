@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.9.0
+Version:        2.10.0
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -95,6 +95,24 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Nov 11 2022 Jerry Lundström <lundstrom.jerry@gmail.com> 2.10.0-1
+- Release 2.10.0
+  * This release adds a binary datafile (DNS wire) format to `dnsperf`
+    thanks to a contribution from Petr Špaček @pspacek (ISC).
+  * The new binary format greatly improves performance in some cases, for
+    Petr's case it was testing dynamic updates. Switching to this
+    pre-compiled DNS wire format increased QPS from 4k to 600k, an increase
+    of 150 times throughput from `dnsperf`!
+  * See man-page for `-B` for more information and examples how to use.
+  * Commits:
+    5971cb9 Doc
+    a241068 CodeQL
+    2a7d10a Fix CodeQL workflow
+    0ce15f6 Fix COPR
+    0ae4a54 CodeQL
+    f52e4b1 wire format input
+    c423aa9 wire format input
+    2b0693d Input binary format
 * Wed Dec 08 2021 Jerry Lundström <lundstrom.jerry@gmail.com> 2.9.0-1
 - Release 2.9.0
   * This release brings a new message suppression option and a way to control

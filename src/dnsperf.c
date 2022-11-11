@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2021 OARC, Inc.
+ * Copyright 2019-2022 OARC, Inc.
  * Copyright 2017-2018 Akamai Technologies
  * Copyright 2006-2016 Nominum, Inc.
  * All rights reserved.
@@ -67,29 +67,31 @@
 #define RECV_BATCH_SIZE 16
 
 typedef struct {
-    int                argc;
-    char**             argv;
-    int                family;
-    uint32_t           clients;
-    uint32_t           threads;
-    uint32_t           maxruns;
-    uint64_t           timelimit;
-    perf_sockaddr_t    server_addr;
-    perf_sockaddr_t    local_addr;
-    uint64_t           timeout;
-    uint32_t           bufsize;
-    bool               edns;
-    bool               dnssec;
-    perf_tsigkey_t*    tsigkey;
-    perf_ednsoption_t* edns_option;
-    uint32_t           max_outstanding;
-    uint32_t           max_qps;
-    uint64_t           stats_interval;
-    bool               updates;
-    bool               verbose;
-    enum perf_net_mode mode;
-    perf_suppress_t    suppress;
-    size_t             num_queries_per_conn;
+    int                 argc;
+    char**              argv;
+    int                 family;
+    uint32_t            clients;
+    uint32_t            threads;
+    uint32_t            maxruns;
+    uint64_t            timelimit;
+    perf_sockaddr_t     server_addr;
+    perf_sockaddr_t     local_addr;
+    uint64_t            timeout;
+    uint32_t            bufsize;
+    bool                edns;
+    bool                dnssec;
+    perf_tsigkey_t*     tsigkey;
+    perf_ednsoption_t*  edns_option;
+    uint32_t            max_outstanding;
+    uint32_t            max_qps;
+    uint64_t            stats_interval;
+    bool                updates;
+    bool                binary_input;
+    perf_input_format_t input_format;
+    bool                verbose;
+    enum perf_net_mode  mode;
+    perf_suppress_t     suppress;
+    size_t              num_queries_per_conn;
 } config_t;
 
 typedef struct {
@@ -483,6 +485,9 @@ setup(int argc, char** argv, config_t* config)
     perf_opt_add('u', perf_opt_boolean, NULL,
         "send dynamic updates instead of queries",
         NULL, &config->updates);
+    perf_opt_add('B', perf_opt_boolean, NULL,
+        "read input file as TCP-stream binary format",
+        NULL, &config->binary_input);
     perf_opt_add('v', perf_opt_boolean, NULL,
         "verbose: report each query and additional information to stdout",
         NULL, &config->verbose);
@@ -538,7 +543,19 @@ setup(int argc, char** argv, config_t* config)
     perf_net_parselocal(config->server_addr.sa.sa.sa_family,
         local_name, local_port, &config->local_addr);
 
-    input = perf_datafile_open(filename);
+    if (config->binary_input
+        && (config->edns || config->edns_option || config->dnssec
+            || config->tsigkey || config->updates)) {
+        fprintf(stderr, "-B is mutually exclusive with -D, -e, -E, -u, -y\n");
+        exit(1);
+    }
+    if (config->updates)
+        config->input_format = input_format_text_update;
+    else if (config->binary_input)
+        config->input_format = input_format_tcp_wire_format;
+    else
+        config->input_format = input_format_text_query;
+    input = perf_datafile_open(filename, config->input_format);
 
     if (config->maxruns == 0 && config->timelimit == 0)
         config->maxruns = 1;
@@ -736,20 +753,35 @@ do_send(void* arg)
         PERF_UNLOCK(&tinfo->lock);
 
         perf_buffer_clear(&lines);
-        result = perf_datafile_next(input, &lines, config->updates);
+        result = perf_datafile_next(input, &lines);
         if (result != PERF_R_SUCCESS) {
             if (result == PERF_R_INVALIDFILE)
                 perf_log_fatal("input file contains no data");
             break;
         }
 
-        qid = q - tinfo->queries;
-        perf_buffer_usedregion(&lines, &used);
-        perf_buffer_clear(&msg);
-        result = perf_dns_buildrequest(&used, qid,
-            config->edns, config->dnssec, config->updates,
-            config->tsigkey, config->edns_option,
-            &msg);
+        perf_buffer_t* send = &msg;
+        qid                 = q - tinfo->queries;
+        switch (config->input_format) {
+        case input_format_text_query:
+        case input_format_text_update:
+            perf_buffer_clear(&msg);
+            perf_buffer_usedregion(&lines, &used);
+            result = perf_dns_buildrequest(&used, qid,
+                config->edns, config->dnssec, config->input_format == input_format_text_update,
+                config->tsigkey, config->edns_option,
+                &msg);
+            break;
+
+        case input_format_tcp_wire_format:
+            send = &lines;
+            if (perf_buffer_usedlength(send) > 1) {
+                ((uint8_t*)perf_buffer_base(send))[0] = qid >> 8;
+                ((uint8_t*)perf_buffer_base(send))[1] = qid;
+            }
+            result = PERF_R_SUCCESS;
+            break;
+        }
         if (result != PERF_R_SUCCESS) {
             PERF_LOCK(&tinfo->lock);
             query_move(tinfo, q, prepend_unused);
@@ -758,13 +790,17 @@ do_send(void* arg)
             continue;
         }
 
-        base   = perf_buffer_base(&msg);
-        length = perf_buffer_usedlength(&msg);
+        base   = perf_buffer_base(send);
+        length = perf_buffer_usedlength(send);
 
         now = perf_get_time();
         if (config->verbose) {
             free(q->desc);
-            q->desc = strdup(lines.base);
+            if (config->input_format == input_format_tcp_wire_format) {
+                q->desc = strdup("binary input");
+            } else {
+                q->desc = strdup(lines.base);
+            }
             if (q->desc == NULL)
                 perf_log_fatal("out of memory");
         }

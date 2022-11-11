@@ -15,6 +15,7 @@ $(top)/rpmbuild:
 	mkdir -p "$(top)"/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
 srpm: prereq update-dist-tools
+	git config --global safe.directory "*"
 	test -f .gitmodules && git submodule update --init || true
 	echo "$(spec)" | grep -q "develop.spec" && auto_build_number=`date --utc +%s` message="Auto build `date --utc --iso-8601=seconds`" "$(top)/dist-tools/spec-new-changelog-entry" || true
 	overwrite=yes nosign=yes "$(top)/dist-tools/create-source-packages" rpm
