@@ -1,4 +1,4 @@
-# Copyright 2019-2021 OARC, Inc.
+# Copyright 2019-2022 OARC, Inc.
 # Copyright 2017-2018 Akamai Technologies
 # Copyright 2006-2016 Nominum, Inc.
 # All rights reserved.
@@ -16,7 +16,7 @@
 # limitations under the License.
 
 AC_PREREQ(2.64)
-AC_INIT([dnsperf], [2.9.0], [admin@dns-oarc.net], [dnsperf], [https://github.com/DNS-OARC/dnsperf/issues])
+AC_INIT([dnsperf], [2.10.0], [admin@dns-oarc.net], [dnsperf], [https://github.com/DNS-OARC/dnsperf/issues])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 AC_CONFIG_SRCDIR([src/dnsperf.c])
 AC_CONFIG_HEADER([src/config.h])
