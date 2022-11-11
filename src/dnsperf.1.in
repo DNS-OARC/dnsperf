@@ -211,6 +211,22 @@ Malformed packets probably will not be responded to by servers and will
 cause timeouts.
 This option is mutually exclusive with \fB-D\fR, \fB-e\fR, \fB-E\fR,
 \fB-u\fR and \fB-y\fR.
+
+These binary datafiles can be generated using arbitrary TCP listeners such
+as \fBnetcat\fR (nc) and \fBsockat\fR.
+TCP must be used so that the length is prepended.
+Following example shows how to generate a datafile with two query and
+then using it, you need two terminals.
+
+.EX
+(terminal 1) $ nc -l 127.0.0.1 5300 > dns.blob
+(terminal 2) $ echo "example.com A" | dnsperf -s 127.0.0.1 -p 5300 -m tcp
+...wait for dnsperf to finish...
+(terminal 1) $ nc -l 127.0.0.1 5300 >> dns.blob
+(terminal 2) $ echo "example.com AAAA" | dnsperf -s 127.0.0.1 -p 5300 -m tcp
+...wait for dnsperf to finish...
+(terminal 1) $ dnsperf -B -d dns.blob -s $IP
+.EE
 .RE
 
 \fB-c \fIclients\fR
