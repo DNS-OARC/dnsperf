@@ -249,7 +249,7 @@ static perf_result_t read_one_line(perf_datafile_t* dfile, perf_buffer_t* lines)
 
         /* We now have a line.  Advance the buffer past it. */
         dfile->at += curlen;
-        if (dfile->have - dfile->at > 0) {
+        if (dfile->at < dfile->have) {
             dfile->at += 1;
         }
 
