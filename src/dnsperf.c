@@ -85,6 +85,7 @@ typedef struct {
     uint32_t            max_outstanding;
     uint32_t            max_qps;
     uint64_t            stats_interval;
+    bool                verbose_interval_stats;
     bool                updates;
     bool                binary_input;
     perf_input_format_t input_format;
@@ -257,7 +258,39 @@ stddev(uint64_t sum_of_squares, uint64_t sum, uint64_t total)
 }
 
 static void
-print_statistics(const config_t* config, const times_t* times, stats_t* stats)
+diff_stats(stats_t* last, stats_t* now, stats_t* diff)
+{
+    for (int idx = 0; idx < sizeof(now->rcodecounts) / sizeof(now->rcodecounts[0]); idx++)
+        diff->rcodecounts[idx] = now->rcodecounts[idx] - last->rcodecounts[idx];
+
+    diff->num_sent        = now->num_sent - last->num_sent;
+    diff->num_interrupted = now->num_interrupted - last->num_interrupted;
+    diff->num_timedout    = now->num_timedout - last->num_timedout;
+    diff->num_completed   = now->num_completed - last->num_completed;
+
+    diff->total_request_size  = now->total_request_size - last->total_request_size;
+    diff->total_response_size = now->total_response_size - last->total_response_size;
+
+    diff->latency_sum         = now->latency_sum - last->latency_sum;
+    diff->latency_sum_squares = now->latency_sum_squares - last->latency_sum_squares;
+    diff->latency_min         = 0; /* not enough data */
+    diff->latency_max         = 0;
+
+    diff->num_conn_reconnect = now->num_conn_reconnect - last->num_conn_reconnect;
+    diff->num_conn_completed = now->num_conn_completed - last->num_conn_completed;
+
+    diff->conn_latency_sum         = now->conn_latency_sum - last->conn_latency_sum;
+    diff->conn_latency_sum_squares = now->conn_latency_sum_squares - last->conn_latency_sum_squares;
+    diff->conn_latency_min         = 0;
+    diff->conn_latency_max         = 0;
+}
+
+/*
+ * now != 0 is call to print stats in the middle of test run.
+ * min-max values are not available on per-interval basis, so skip them.
+ */
+static void
+print_statistics(const config_t* config, const times_t* times, stats_t* stats, uint64_t now, uint64_t interval_time)
 {
     const char*  units;
     uint64_t     run_time;
@@ -267,9 +300,12 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats)
 
     units = config->updates ? "Updates" : "Queries";
 
-    run_time = times->end_time - times->start_time;
+    if (now != 0)
+        run_time = now - times->start_time;
+    else
+        run_time = times->end_time - times->start_time;
 
-    printf("Statistics:\n\n");
+    printf("%sStatistics:\n\n", now != 0 ? "Interval " : "");
 
     printf("  %s sent:         %" PRIu64 "\n",
         units, stats->num_sent);
@@ -308,20 +344,24 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats)
         (unsigned int)(run_time / MILLION),
         (unsigned int)(run_time % MILLION));
     printf("  %s per second:   %.6lf\n", units,
-        PERF_SAFE_DIV(stats->num_completed, (((double)run_time) / MILLION)));
+        PERF_SAFE_DIV(stats->num_completed, (((double)(now != 0 ? interval_time : run_time) / MILLION))));
 
     printf("\n");
 
     latency_avg = PERF_SAFE_DIV(stats->latency_sum, stats->num_completed);
-    printf("  Average Latency (s):  %u.%06u (min %u.%06u, max %u.%06u)\n",
+    printf("  Average Latency (s):  %u.%06u",
         (unsigned int)(latency_avg / MILLION),
-        (unsigned int)(latency_avg % MILLION),
-        (unsigned int)(stats->latency_min / MILLION),
-        (unsigned int)(stats->latency_min % MILLION),
-        (unsigned int)(stats->latency_max / MILLION),
-        (unsigned int)(stats->latency_max % MILLION));
+        (unsigned int)(latency_avg % MILLION));
+    if (now == 0) {
+        printf(" (min %u.%06u, max %u.%06u)",
+            (unsigned int)(stats->latency_min / MILLION),
+            (unsigned int)(stats->latency_min % MILLION),
+            (unsigned int)(stats->latency_max / MILLION),
+            (unsigned int)(stats->latency_max % MILLION));
+    }
+
     if (stats->num_completed > 1) {
-        printf("  Latency StdDev (s):   %f\n",
+        printf("\n  Latency StdDev (s):   %f\n",
             stddev(stats->latency_sum_squares, stats->latency_sum,
                 stats->num_completed)
                 / MILLION);
@@ -336,15 +376,18 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats)
     printf("Connection Statistics:\n\n");
     printf("  Reconnections:        %" PRIu64 "\n\n", stats->num_conn_reconnect);
     latency_avg = PERF_SAFE_DIV(stats->conn_latency_sum, stats->num_conn_completed);
-    printf("  Average Latency (s):  %u.%06u (min %u.%06u, max %u.%06u)\n",
+    printf("  Average Latency (s):  %u.%06u",
         (unsigned int)(latency_avg / MILLION),
-        (unsigned int)(latency_avg % MILLION),
-        (unsigned int)(stats->conn_latency_min / MILLION),
-        (unsigned int)(stats->conn_latency_min % MILLION),
-        (unsigned int)(stats->conn_latency_max / MILLION),
-        (unsigned int)(stats->conn_latency_max % MILLION));
+        (unsigned int)(latency_avg % MILLION));
+    if (now == 0) {
+        printf(" (min %u.%06u, max %u.%06u)\n",
+            (unsigned int)(stats->conn_latency_min / MILLION),
+            (unsigned int)(stats->conn_latency_min % MILLION),
+            (unsigned int)(stats->conn_latency_max / MILLION),
+            (unsigned int)(stats->conn_latency_max % MILLION));
+    };
     if (stats->num_conn_completed > 1) {
-        printf("  Latency StdDev (s):   %f\n",
+        printf("\n  Latency StdDev (s):   %f\n",
             stddev(stats->conn_latency_sum_squares, stats->conn_latency_sum, stats->num_conn_completed) / MILLION);
     }
 
@@ -499,6 +542,8 @@ setup(int argc, char** argv, config_t* config)
         "suppress messages/warnings, see man-page for list of message types", NULL, &local_suppress);
     perf_long_opt_add("num-queries-per-conn", perf_opt_uint, "queries",
         "Number of queries to send per connection", NULL, &config->num_queries_per_conn);
+    perf_long_opt_add("verbose-interval-stats", perf_opt_boolean, "boolean",
+        "print detailed statistics for each stats_interval", NULL, &config->verbose_interval_stats);
 
     bool log_stdout = false;
     perf_opt_add('W', perf_opt_boolean, NULL, "log warnings and errors to stdout instead of stderr", NULL, &log_stdout);
@@ -1098,6 +1143,8 @@ do_interval_stats(void* arg)
 {
     threadinfo_t*          tinfo;
     stats_t                total;
+    stats_t                last;
+    stats_t                diff;
     uint64_t               now;
     uint64_t               last_interval_time;
     uint64_t               last_completed;
@@ -1108,7 +1155,7 @@ do_interval_stats(void* arg)
 
     tinfo              = arg;
     last_interval_time = tinfo->times->start_time;
-    last_completed     = 0;
+    memset(&last, 0, sizeof(last));
 
     wait_for_start();
     while (perf_os_waituntilreadable(&sock, threadpipe[0],
@@ -1117,13 +1164,18 @@ do_interval_stats(void* arg)
         now = perf_get_time();
         sum_stats(tinfo->config, &total);
         interval_time = now - last_interval_time;
-        num_completed = total.num_completed - last_completed;
+        num_completed = total.num_completed - last.num_completed;
         qps           = num_completed / (((double)interval_time) / MILLION);
         perf_log_printf("%u.%06u: %.6lf",
             (unsigned int)(now / MILLION),
             (unsigned int)(now % MILLION), qps);
+        if (tinfo->config->verbose_interval_stats) {
+            diff_stats(&last, &total, &diff);
+            print_statistics(tinfo->config, tinfo->times, &diff, now, interval_time);
+        }
+
         last_interval_time = now;
-        last_completed     = total.num_completed;
+        last               = total;
     }
 
     return NULL;
@@ -1383,7 +1435,7 @@ int main(int argc, char** argv)
     print_final_status(&config);
 
     sum_stats(&config, &total_stats);
-    print_statistics(&config, &times, &total_stats);
+    print_statistics(&config, &times, &total_stats, 0, 0);
     perf_net_stats_print(config.mode);
 
     cleanup(&config);
