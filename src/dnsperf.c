@@ -574,14 +574,18 @@ setup(int argc, char** argv, config_t* config)
      * If we run more threads than max-qps, some threads will have
      * ->max_qps set to 0, and be unlimited.
      */
-    if (config->max_qps > 0 && config->threads > config->max_qps)
+    if (config->max_qps > 0 && config->threads > config->max_qps) {
+        perf_log_warning("requested max QPS limit (-Q %u) is lower than number of threads (-T %u), lowering number of threads", config->max_qps, config->threads);
         config->threads = config->max_qps;
+    }
 
     /*
      * We also can't run more threads than clients.
      */
-    if (config->threads > config->clients)
+    if (config->threads > config->clients) {
+        perf_log_warning("requested number of threads (-T %u) exceeds number of clients (-c %u), lowering number of threads\n", config->threads, config->clients);
         config->threads = config->clients;
+    }
 
 #ifndef HAVE_LDNS
     if (config->updates) {
@@ -1245,11 +1249,15 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
     /*
      * We can't have more than 64k outstanding queries per thread.
      */
-    if (tinfo->max_outstanding > NQIDS)
+    if (tinfo->max_outstanding > NQIDS) {
+        perf_log_warning("requested number of outstanding queries (-q %u) per single thread (-T) exceeds built-in maximum %u, adjusting\n", tinfo->max_outstanding, NQIDS);
         tinfo->max_outstanding = NQIDS;
+    }
 
-    if (tinfo->nsocks > MAX_SOCKETS)
+    if (tinfo->nsocks > MAX_SOCKETS) {
+        perf_log_warning("requested number of clients (-c %u) per thread (-T) exceeds built-in maximum %u, adjusting\n", tinfo->nsocks, MAX_SOCKETS);
         tinfo->nsocks = MAX_SOCKETS;
+    }
 
     if (!(tinfo->socks = calloc(tinfo->nsocks, sizeof(*tinfo->socks)))) {
         perf_log_fatal("out of memory");
