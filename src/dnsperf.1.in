@@ -460,6 +460,16 @@ Following type are available.
 \fBunexpected\fR: Suppress messages about answers with an unexpected message ID
 .RE
 
+\fBlatency-histogram=\fIBOOLEAN\fR
+.br
+.RS
+Print detailed latency histograms for DNS answers and connections.
+Latency is quantized into bins with roughly 3 % resolution, and latency
+range for individual bins increases logarithmically.
+This is done to to limit amount of memory required for histograms
+and also allows to visualize latency using logarithmic percentile histograms
+with minimal postprocessing.
+.RE
 \fBnum-queries-per-conn=\fINUMBER\fR
 .br
 .RS

@@ -32,6 +32,7 @@
 #include "util.h"
 #include "list.h"
 #include "buffer.h"
+#include "hg64.h"
 
 #include <inttypes.h>
 #include <errno.h>
@@ -48,6 +49,8 @@
 #include <openssl/ssl.h>
 #include <openssl/conf.h>
 #include <openssl/err.h>
+
+#define HISTOGRAM_SIGBITS 5 /* about 3 % latency precision */
 
 #define DEFAULT_SERVER_NAME "127.0.0.1"
 #define DEFAULT_SERVER_PORT 53
@@ -86,6 +89,7 @@ typedef struct {
     uint32_t            max_qps;
     uint64_t            stats_interval;
     bool                verbose_interval_stats;
+    bool                latency_histogram;
     bool                updates;
     bool                binary_input;
     perf_input_format_t input_format;
@@ -114,6 +118,7 @@ typedef struct {
     uint64_t total_request_size;
     uint64_t total_response_size;
 
+    hg64*    latency;
     uint64_t latency_sum;
     uint64_t latency_sum_squares;
     uint64_t latency_min;
@@ -122,6 +127,7 @@ typedef struct {
     uint64_t num_conn_reconnect;
     uint64_t num_conn_completed;
 
+    hg64*    conn_latency;
     uint64_t conn_latency_sum;
     uint64_t conn_latency_sum_squares;
     uint64_t conn_latency_min;
@@ -276,16 +282,55 @@ diff_stats(stats_t* last, stats_t* now, stats_t* diff)
 
     diff->latency_sum         = now->latency_sum - last->latency_sum;
     diff->latency_sum_squares = now->latency_sum_squares - last->latency_sum_squares;
-    diff->latency_min         = 0; /* not enough data */
-    diff->latency_max         = 0;
+    if (diff->latency != NULL) {
+        free(diff->latency);
+    }
+    diff->latency = hg64_create(HISTOGRAM_SIGBITS);
+    if (last->latency != NULL) {
+        hg64_diff(now->latency, last->latency, diff->latency);
+    } else { /* first sample */
+        hg64_merge(diff->latency, now->latency);
+    }
+    diff->latency_min = 0;
+    hg64_get(diff->latency, hg64_min_key(diff->latency), &diff->latency_min, NULL, NULL);
+    diff->latency_max = 0;
+    hg64_get(diff->latency, hg64_max_key(diff->latency), NULL, &diff->latency_max, NULL);
 
     diff->num_conn_reconnect = now->num_conn_reconnect - last->num_conn_reconnect;
     diff->num_conn_completed = now->num_conn_completed - last->num_conn_completed;
 
     diff->conn_latency_sum         = now->conn_latency_sum - last->conn_latency_sum;
     diff->conn_latency_sum_squares = now->conn_latency_sum_squares - last->conn_latency_sum_squares;
-    diff->conn_latency_min         = 0;
-    diff->conn_latency_max         = 0;
+    if (diff->conn_latency != NULL) {
+        free(diff->conn_latency);
+    }
+    diff->conn_latency = hg64_create(HISTOGRAM_SIGBITS);
+    if (last->conn_latency != NULL) {
+        hg64_diff(now->conn_latency, last->conn_latency, diff->conn_latency);
+    } else { /* first sample */
+        hg64_merge(diff->conn_latency, now->conn_latency);
+    }
+    hg64_get(diff->conn_latency, hg64_min_key(diff->conn_latency), &diff->conn_latency_min, NULL, NULL);
+    hg64_get(diff->conn_latency, hg64_max_key(diff->conn_latency), NULL, &diff->conn_latency_max, NULL);
+}
+
+static void
+print_histogram(hg64* histogram, const char* const desc)
+{
+    printf("  Latency bucket (s):   %s\n", desc);
+    uint64_t pmin, pmax, pcount;
+    for (unsigned key = 0;
+         hg64_get(histogram, key, &pmin, &pmax, &pcount) == true;
+         key = hg64_next(histogram, key)) {
+        if (pcount == 0)
+            continue;
+        printf("  %" PRIu64 ".%06" PRIu64 " - %" PRIu64 ".%06" PRIu64 ":  %" PRIu64 "\n",
+            pmin / MILLION,
+            pmin % MILLION,
+            pmax / MILLION,
+            pmax % MILLION,
+            pcount);
+    };
 }
 
 /*
@@ -370,6 +415,8 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
             stddev(stats->latency_sum_squares, stats->latency_sum,
                 stats->num_completed)
                 / MILLION);
+        if (config->latency_histogram)
+            print_histogram(stats->latency, "answer count");
     }
 
     printf("\n");
@@ -396,20 +443,29 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
     if (stats->num_conn_completed > 1) {
         printf("  Latency StdDev (s):   %f\n",
             stddev(stats->conn_latency_sum_squares, stats->conn_latency_sum, stats->num_conn_completed) / MILLION);
+        if (config->latency_histogram)
+            print_histogram(stats->latency, "connection count");
     }
 
     printf("\n");
 }
 
+/*
+ * Caller must free() stats->latency and stats->conn_latency.
+ */
 static void
 sum_stats(const config_t* config, stats_t* total)
 {
     unsigned int i, j;
 
     memset(total, 0, sizeof(*total));
+    total->latency      = hg64_create(HISTOGRAM_SIGBITS);
+    total->conn_latency = hg64_create(HISTOGRAM_SIGBITS);
 
     for (i = 0; i < config->threads; i++) {
         stats_t* stats = &threads[i].stats;
+        hg64_merge(total->latency, stats->latency);
+        hg64_merge(total->conn_latency, stats->conn_latency);
 
         for (j = 0; j < DNSPERF_STATS_RCODECOUNTS; j++)
             total->rcodecounts[j] += stats->rcodecounts[j];
@@ -551,6 +607,8 @@ setup(int argc, char** argv, config_t* config)
         "Number of queries to send per connection", NULL, &config->num_queries_per_conn);
     perf_long_opt_add("verbose-interval-stats", perf_opt_boolean, NULL,
         "print detailed statistics for each stats_interval", NULL, &config->verbose_interval_stats);
+    perf_long_opt_add("latency-histogram", perf_opt_boolean, NULL,
+        "collect and print detailed latency histograms", NULL, &config->latency_histogram);
 
     bool log_stdout = false;
     perf_opt_add('W', perf_opt_boolean, NULL, "log warnings and errors to stdout instead of stderr", NULL, &log_stdout);
@@ -1122,6 +1180,7 @@ do_recv(void* arg)
             stats->total_response_size += recvd[i].size;
             stats->rcodecounts[recvd[i].rcode]++;
             stats->latency_sum += latency;
+            hg64_inc(stats->latency, latency);
             stats->latency_sum_squares += (latency * latency);
             if (latency < stats->latency_min || stats->num_completed == 1)
                 stats->latency_min = latency;
@@ -1190,7 +1249,13 @@ do_interval_stats(void* arg)
         }
 
         last_interval_time = now;
-        last               = total;
+        if (last.latency != NULL) {
+            free(last.latency);
+        }
+        if (last.conn_latency != NULL) {
+            free(last.conn_latency);
+        }
+        last = total;
     }
 
     return NULL;
@@ -1256,6 +1321,7 @@ static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t ev
     case perf_socket_event_connected:
         stats->num_conn_completed++;
 
+        hg64_inc(stats->conn_latency, elapsed_time);
         stats->conn_latency_sum += elapsed_time;
         stats->conn_latency_sum_squares += (elapsed_time * elapsed_time);
         if (elapsed_time < stats->conn_latency_min || stats->num_conn_completed == 1)
@@ -1285,6 +1351,8 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
 
     perf_list_init(tinfo->outstanding_queries);
     perf_list_init(tinfo->unused_queries);
+    tinfo->stats.latency      = hg64_create(HISTOGRAM_SIGBITS);
+    tinfo->stats.conn_latency = hg64_create(HISTOGRAM_SIGBITS);
     for (i = 0; i < NQIDS; i++) {
         perf_link_init(&tinfo->queries[i]);
         perf_list_append(tinfo->unused_queries, &tinfo->queries[i]);
