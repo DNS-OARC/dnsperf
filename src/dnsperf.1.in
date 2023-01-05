@@ -341,8 +341,9 @@ The default is the loopback address, 127.0.0.1.
 \fB-S \fIstats_interval\fR
 .br
 .RS
-If this parameter is specified, a count of the number of queries per second
-during the interval will be printed out every stats_interval seconds.
+If this parameter is specified, a count of the number of answers received
+per second during the interval will be printed out every \fIstats_interval\fR
+seconds.
 .RE
 
 \fB-t \fItimeout\fR
