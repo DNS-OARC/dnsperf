@@ -636,6 +636,10 @@ query_move(threadinfo_t* tinfo, query_info* q, query_move_op op)
 static inline uint64_t
 num_outstanding(const stats_t* stats)
 {
+    /* make sure negative values aren't returned */
+    if (stats->num_completed + stats->num_timedout > stats->num_sent) {
+        return 0;
+    }
     return stats->num_sent - stats->num_completed - stats->num_timedout;
 }
 
