@@ -924,7 +924,10 @@ recv_one(threadinfo_t* tinfo, int which_sock,
     }
     if (!n) {
         // Treat connection closed like try again until reconnection features are in
-        *saved_errnop = EAGAIN;
+        if (!*saved_errnop) {
+            // only set this if there was no error before to allow above error check to overwrite EAGAIN
+            *saved_errnop = EAGAIN;
+        }
         return false;
     }
     recvd->sock           = tinfo->socks[which_sock];
@@ -1010,8 +1013,6 @@ do_recv(void* arg)
                     break;
                 }
                 bit_set(socketbits, current_socket);
-                if (saved_errno != EAGAIN)
-                    break;
             }
             if (j == tinfo->nsocks)
                 break;
