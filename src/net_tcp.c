@@ -171,6 +171,8 @@ static ssize_t perf__tcp_recv(struct perf_net_socket* sock, void* buf, size_t le
             return 0;
         } else if (n < 0) {
             switch (errno) {
+            case EBADF:
+                // treat this as a retry, can happen if sendto is reconnecting
             case ECONNREFUSED:
             case ECONNRESET:
             case ENOTCONN:
