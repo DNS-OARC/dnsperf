@@ -102,8 +102,9 @@ typedef struct {
     struct timespec stop_time_ns;
 } times_t;
 
+#define DNSPERF_STATS_RCODECOUNTS 16
 typedef struct {
-    uint64_t rcodecounts[16];
+    uint64_t rcodecounts[DNSPERF_STATS_RCODECOUNTS];
 
     uint64_t num_sent;
     uint64_t num_interrupted;
@@ -260,8 +261,10 @@ stddev(uint64_t sum_of_squares, uint64_t sum, uint64_t total)
 static void
 diff_stats(stats_t* last, stats_t* now, stats_t* diff)
 {
-    for (int idx = 0; idx < sizeof(now->rcodecounts) / sizeof(now->rcodecounts[0]); idx++)
-        diff->rcodecounts[idx] = now->rcodecounts[idx] - last->rcodecounts[idx];
+    int i = 0;
+    for (; i < DNSPERF_STATS_RCODECOUNTS; i++) {
+        diff->rcodecounts[i] = now->rcodecounts[i] - last->rcodecounts[i];
+    }
 
     diff->num_sent        = now->num_sent - last->num_sent;
     diff->num_interrupted = now->num_interrupted - last->num_interrupted;
@@ -300,12 +303,12 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
 
     units = config->updates ? "Updates" : "Queries";
 
-    if (now != 0)
+    if (now)
         run_time = now - times->start_time;
     else
         run_time = times->end_time - times->start_time;
 
-    printf("%sStatistics:\n\n", now != 0 ? "Interval " : "");
+    printf("%sStatistics:\n\n", now ? "Interval " : "");
 
     printf("  %s sent:         %" PRIu64 "\n",
         units, stats->num_sent);
@@ -323,7 +326,7 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
 
     printf("  Response codes:       ");
     first_rcode = true;
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < DNSPERF_STATS_RCODECOUNTS; i++) {
         if (stats->rcodecounts[i] == 0)
             continue;
         if (first_rcode)
@@ -344,7 +347,7 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
         (unsigned int)(run_time / MILLION),
         (unsigned int)(run_time % MILLION));
     printf("  %s per second:   %.6lf\n", units,
-        PERF_SAFE_DIV(stats->num_completed, (((double)(now != 0 ? interval_time : run_time) / MILLION))));
+        PERF_SAFE_DIV(stats->num_completed, (((double)(now ? interval_time : run_time) / MILLION))));
 
     printf("\n");
 
@@ -352,16 +355,18 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
     printf("  Average Latency (s):  %u.%06u",
         (unsigned int)(latency_avg / MILLION),
         (unsigned int)(latency_avg % MILLION));
-    if (now == 0) {
-        printf(" (min %u.%06u, max %u.%06u)",
+    if (!now) {
+        printf(" (min %u.%06u, max %u.%06u)\n",
             (unsigned int)(stats->latency_min / MILLION),
             (unsigned int)(stats->latency_min % MILLION),
             (unsigned int)(stats->latency_max / MILLION),
             (unsigned int)(stats->latency_max % MILLION));
+    } else {
+        printf("\n");
     }
 
     if (stats->num_completed > 1) {
-        printf("\n  Latency StdDev (s):   %f\n",
+        printf("  Latency StdDev (s):   %f\n",
             stddev(stats->latency_sum_squares, stats->latency_sum,
                 stats->num_completed)
                 / MILLION);
@@ -379,15 +384,17 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
     printf("  Average Latency (s):  %u.%06u",
         (unsigned int)(latency_avg / MILLION),
         (unsigned int)(latency_avg % MILLION));
-    if (now == 0) {
+    if (!now) {
         printf(" (min %u.%06u, max %u.%06u)\n",
             (unsigned int)(stats->conn_latency_min / MILLION),
             (unsigned int)(stats->conn_latency_min % MILLION),
             (unsigned int)(stats->conn_latency_max / MILLION),
             (unsigned int)(stats->conn_latency_max % MILLION));
-    };
+    } else {
+        printf("\n");
+    }
     if (stats->num_conn_completed > 1) {
-        printf("\n  Latency StdDev (s):   %f\n",
+        printf("  Latency StdDev (s):   %f\n",
             stddev(stats->conn_latency_sum_squares, stats->conn_latency_sum, stats->num_conn_completed) / MILLION);
     }
 
@@ -404,7 +411,7 @@ sum_stats(const config_t* config, stats_t* total)
     for (i = 0; i < config->threads; i++) {
         stats_t* stats = &threads[i].stats;
 
-        for (j = 0; j < 16; j++)
+        for (j = 0; j < DNSPERF_STATS_RCODECOUNTS; j++)
             total->rcodecounts[j] += stats->rcodecounts[j];
 
         total->num_sent += stats->num_sent;
@@ -542,7 +549,7 @@ setup(int argc, char** argv, config_t* config)
         "suppress messages/warnings, see man-page for list of message types", NULL, &local_suppress);
     perf_long_opt_add("num-queries-per-conn", perf_opt_uint, "queries",
         "Number of queries to send per connection", NULL, &config->num_queries_per_conn);
-    perf_long_opt_add("verbose-interval-stats", perf_opt_boolean, "boolean",
+    perf_long_opt_add("verbose-interval-stats", perf_opt_boolean, NULL,
         "print detailed statistics for each stats_interval", NULL, &config->verbose_interval_stats);
 
     bool log_stdout = false;
@@ -1147,9 +1154,7 @@ do_interval_stats(void* arg)
     stats_t                diff;
     uint64_t               now;
     uint64_t               last_interval_time;
-    uint64_t               last_completed;
     uint64_t               interval_time;
-    uint64_t               num_completed;
     double                 qps;
     struct perf_net_socket sock = { .mode = sock_pipe, .fd = threadpipe[0] };
 
@@ -1164,14 +1169,15 @@ do_interval_stats(void* arg)
         now = perf_get_time();
         sum_stats(tinfo->config, &total);
         interval_time = now - last_interval_time;
-        num_completed = total.num_completed - last.num_completed;
-        qps           = num_completed / (((double)interval_time) / MILLION);
-        perf_log_printf("%u.%06u: %.6lf",
-            (unsigned int)(now / MILLION),
-            (unsigned int)(now % MILLION), qps);
+
         if (tinfo->config->verbose_interval_stats) {
             diff_stats(&last, &total, &diff);
             print_statistics(tinfo->config, tinfo->times, &diff, now, interval_time);
+        } else {
+            qps = (total.num_completed - last.num_completed) / (((double)interval_time) / MILLION);
+            perf_log_printf("%u.%06u: %.6lf",
+                (unsigned int)(now / MILLION),
+                (unsigned int)(now % MILLION), qps);
         }
 
         last_interval_time = now;

@@ -475,19 +475,18 @@ Waiting for responses may timeout and the timeout used for this is the
 same as specified by \fB-t\fR.
 Note that this option is only useful for connection oriented protocols.
 .RE
-\fBverbose-interval-stats=\fIBOOLEAN\fR
+
+\fBverbose-interval-stats\fR
 .br
 .RS
-Make statistics printed by \fB-S\fR extra verbose and print larger set
-of statistics similar to summary at the very end of test run.
+Change the statistics format of \fB-S\fR to that shown at end of run.
 
-\fIPlease note\fR: Min/max values for latency and connections are not available
-in interval statistics. Number of answers received within \fIstats_interval\fR
-can legitimatelly exceed number of queries sent, depending on answer latency,
-configured \fItimeout\fR, and \fIstats_interval\fR. The output format is
-subject to change.
+\fIPlease note\fR: Min/max values for latency and connections are not
+available in interval statistics.
+Number of answers received within \fIstats_interval\fR can legitimately
+exceed number of queries sent, depending on answer latency, configured
+\fItimeout\fR, and \fIstats_interval\fR.
 .RE
-
 .SH "SEE ALSO"
 \fBresperf\fR(1)
 .SH AUTHOR
