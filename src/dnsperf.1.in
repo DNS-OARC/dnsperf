@@ -459,17 +459,6 @@ Following type are available.
 .br
 \fBunexpected\fR: Suppress messages about answers with an unexpected message ID
 .RE
-
-\fBlatency-histogram=\fIBOOLEAN\fR
-.br
-.RS
-Print detailed latency histograms for DNS answers and connections.
-Latency is quantized into bins with roughly 3 % resolution, and latency
-range for individual bins increases logarithmically.
-This is done to to limit amount of memory required for histograms
-and also allows to visualize latency using logarithmic percentile histograms
-with minimal postprocessing.
-.RE
 \fBnum-queries-per-conn=\fINUMBER\fR
 .br
 .RS
@@ -496,6 +485,17 @@ available in interval statistics.
 Number of answers received within \fIstats_interval\fR can legitimately
 exceed number of queries sent, depending on answer latency, configured
 \fItimeout\fR, and \fIstats_interval\fR.
+.RE
+
+\fBlatency-histogram\fR
+.br
+.RS
+Print detailed latency histograms for DNS answers and connections.
+Latency is quantized into bins with roughly 3 % resolution, and latency
+range for individual bins increases logarithmically.
+This is done to to limit amount of memory required for histograms
+and also allows to visualize latency using logarithmic percentile histograms
+with minimal postprocessing.
 .RE
 .SH "SEE ALSO"
 \fBresperf\fR(1)
