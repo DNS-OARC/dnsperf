@@ -56,6 +56,8 @@ AM_EXTRA_RECURSIVE_TARGETS([gcov])
 # Checks for support.
 AX_PTHREAD
 AC_CHECK_LIB([m], [sqrt])
+AC_CHECK_HEADERS([stdatomic.h])
+AM_CONDITIONAL([HAVE_STDATOMIC], [test "x$ac_cv_header_stdatomic_h" != "xno"])
 
 # Check for OpenSSL
 PKG_CHECK_MODULES([libssl], [libssl])

@@ -28,7 +28,7 @@
 
 #include "net.h"
 #include "edns.h"
-#include "parse_uri.h"
+#include "ext/parse_uri.h"
 #include "log.h"
 #include "strerror.h"
 #include "util.h"
