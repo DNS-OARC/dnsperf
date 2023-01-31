@@ -1251,7 +1251,7 @@ do_interval_stats(void* arg)
     threadinfo_t*          tinfo;
     stats_t                total;
     stats_t                last;
-    stats_t                diff;
+    stats_t                diff = {};
     uint64_t               now;
     uint64_t               last_interval_time;
     uint64_t               interval_time;
@@ -1539,7 +1539,7 @@ int main(int argc, char** argv)
     perf_os_blocksignal(SIGINT, false);
     sock.fd = mainpipe[0];
     result  = perf_os_waituntilreadable(&sock, intrpipe[0],
-        times.stop_time - times.start_time);
+         times.stop_time - times.start_time);
     if (result == PERF_R_CANCELED)
         interrupted = true;
 
