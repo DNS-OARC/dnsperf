@@ -1249,9 +1249,9 @@ static void*
 do_interval_stats(void* arg)
 {
     threadinfo_t*          tinfo;
-    stats_t                total;
-    stats_t                last;
-    stats_t                diff;
+    stats_t                total = {};
+    stats_t                last  = {};
+    stats_t                diff  = {};
     uint64_t               now;
     uint64_t               last_interval_time;
     uint64_t               interval_time;
@@ -1260,7 +1260,6 @@ do_interval_stats(void* arg)
 
     tinfo              = arg;
     last_interval_time = tinfo->times->start_time;
-    memset(&last, 0, sizeof(last));
 
     wait_for_start();
     while (perf_os_waituntilreadable(&sock, threadpipe[0],
