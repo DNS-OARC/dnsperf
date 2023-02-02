@@ -181,7 +181,7 @@ typedef struct {
     stats_t         stats;
 
     uint32_t max_outstanding;
-    uint32_t max_qps;
+    uint32_t packet_step;
 
     uint64_t last_recv;
 } threadinfo_t;
@@ -803,7 +803,7 @@ do_send(void* arg)
     stats_t*        stats;
     unsigned int    max_packet_size;
     perf_buffer_t   msg;
-    uint64_t        now, run_time, req_time;
+    uint64_t        last_packet, now, req_time;
     char            input_data[MAX_INPUT_DATA];
     perf_buffer_t   lines;
     perf_region_t   used;
@@ -825,7 +825,7 @@ do_send(void* arg)
     perf_buffer_init(&lines, input_data, sizeof(input_data));
 
     wait_for_start();
-    now = perf_get_time();
+    last_packet = now = perf_get_time();
     while (!interrupted && now < times->stop_time) {
         /* Avoid flooding the network too quickly. */
         if (stats->num_sent < tinfo->max_outstanding && stats->num_sent % 2 == 1) {
@@ -837,14 +837,15 @@ do_send(void* arg)
         }
 
         /* Rate limiting */
-        if (tinfo->max_qps > 0) {
-            run_time = now - times->start_time;
-            req_time = (MILLION * stats->num_sent) / tinfo->max_qps;
-            if (req_time > run_time) {
-                usleep(req_time - run_time);
+        if (tinfo->packet_step > 0) {
+            req_time = last_packet + tinfo->packet_step;
+            if (req_time > now) {
                 now = perf_get_time();
+                /* busy wait here is intentional as
+		 * usleep() is too slow for short intervals */
                 continue;
             }
+            last_packet = now;
         }
 
         PERF_LOCK(&tinfo->lock);
@@ -1408,8 +1409,11 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
      */
     tinfo->max_outstanding = per_thread(config->max_outstanding,
         config->threads, offset);
-    tinfo->max_qps         = per_thread(config->max_qps, config->threads, offset);
-    tinfo->nsocks          = per_thread(config->clients, config->threads, offset);
+    if (config->max_qps)
+        tinfo->packet_step = MILLION / per_thread(config->max_qps, config->threads, offset);
+    else
+        tinfo->packet_step = 0;
+    tinfo->nsocks = per_thread(config->clients, config->threads, offset);
 
     /*
      * We can't have more than 64k outstanding queries per thread.
@@ -1540,7 +1544,7 @@ int main(int argc, char** argv)
     perf_os_blocksignal(SIGINT, false);
     sock.fd = mainpipe[0];
     result  = perf_os_waituntilreadable(&sock, intrpipe[0],
-        times.stop_time - times.start_time);
+         times.stop_time - times.start_time);
     if (result == PERF_R_CANCELED)
         interrupted = true;
 
