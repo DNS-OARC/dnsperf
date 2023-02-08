@@ -239,6 +239,7 @@ static int perf_opt_long_parse(char* optarg)
     char*   arg;
 
     if ((arg = strchr(optarg, '='))) {
+        arg++;
         optlen = arg - optarg;
         if (optlen < 1) {
             return -1;
@@ -246,7 +247,6 @@ static int perf_opt_long_parse(char* optarg)
     } else {
         optlen = strlen(optarg);
     }
-    arg++;
 
     long_opt_t* opt = longopts;
     while (opt) {
