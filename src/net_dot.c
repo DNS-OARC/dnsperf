@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2022 OARC, Inc.
+ * Copyright 2019-2023 OARC, Inc.
  * Copyright 2017-2018 Akamai Technologies
  * Copyright 2006-2016 Nominum, Inc.
  * All rights reserved.
@@ -177,6 +177,8 @@ static ssize_t perf__dot_recv(struct perf_net_socket* sock, void* buf, size_t le
                 break;
             case SSL_ERROR_SYSCALL:
                 switch (errno) {
+                case EBADF:
+                    // treat this as a retry, can happen if sendto is reconnecting
                 case ECONNREFUSED:
                 case ECONNRESET:
                 case ENOTCONN:

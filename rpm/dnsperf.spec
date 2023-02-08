@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.10.0
+Version:        2.11.0
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -95,6 +95,47 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed Feb 08 2023 Jerry Lundström <lundstrom.jerry@gmail.com> 2.11.0-1
+- Release 2.11.0
+  * A couple of new features this release courtesy of Petr Špaček
+    @pspacek (ISC) and a bunch of bugfixes.
+  * First off `dnsperf` can now do verbose statistics during each interval
+    when using `-S`, see long option `verbose-interval-stats`.
+  * Next is a new latency histogram output using data structures (hg64)
+    created by Tony Finch @fanf2 (ISC), see long option
+    `latency-histogram`. These will also be shown during `-S` when used
+    together with `verbose-interval-stats`.
+  * Lastly a small change to boolean long options, they no longer require
+    a value (`=yes`) to be enabled.
+  * Bugfixes:
+    - Make sure the number of outstanding queries don't go negative,
+      happens if queries are timed out before being sent
+    - Fixed #208:
+      - `recv_one()`: Fix handling errno, only store EAGAIN if no other
+        error has been received
+      - `do_recv()`: Don't break on error as it will count it as a received
+        message
+      - Treat `EBADF` as `EAGAIN` for stateful connections, receive thread
+        might read from a closed socket if send thread is reconnecting
+    - `dnsperf`: warn if -c, -T, -q, -Q values are auto-adjusted
+    - Fixed #222: don't process unexpected message if the message is
+      suppressed
+  * Commits:
+    14db835 Opt arg
+    fb81481 Suppress unexpected
+    64b8c6d stats_t initialization
+    8290775 Fix first call to diff_stats
+    4f8bd24 Compile support histograms
+    a9b4f04 External code, latency histograms
+    d1f4b65 add detailed latency histograms
+    044e3a2 data structures for detailed latency histograms
+    ad3fb03 Opt, verbose statistics
+    38bc936 Command usage warnings
+    9f31595 Bad file descriptor
+    d3650eb Receive socket error handling
+    84c8e72 Negative outstanding
+    e7df5e1 Clarify meaning of dnsperf -S output in the man page
+    830eb43 verbose interval stats for dnsperf
 * Fri Nov 11 2022 Jerry Lundström <lundstrom.jerry@gmail.com> 2.10.0-1
 - Release 2.10.0
   * This release adds a binary datafile (DNS wire) format to `dnsperf`

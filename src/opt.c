@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2022 OARC, Inc.
+ * Copyright 2019-2023 OARC, Inc.
  * Copyright 2017-2018 Akamai Technologies
  * Copyright 2006-2016 Nominum, Inc.
  * All rights reserved.
@@ -238,39 +238,57 @@ static int perf_opt_long_parse(char* optarg)
     ssize_t optlen;
     char*   arg;
 
-    // TODO: Allow boolean not to have =/value
-    if (!(arg = strchr(optarg, '='))) {
-        return -1;
+    if ((arg = strchr(optarg, '='))) {
+        arg++;
+        optlen = arg - optarg;
+        if (optlen < 1) {
+            return -1;
+        }
+    } else {
+        optlen = strlen(optarg);
     }
-    optlen = arg - optarg;
-    if (optlen < 1) {
-        return -1;
-    }
-    arg++;
 
     long_opt_t* opt = longopts;
     while (opt) {
         if (!strncmp(optarg, opt->name, optlen)) {
             switch (opt->type) {
             case perf_opt_string:
+                if (!arg) {
+                    return -1;
+                }
                 *opt->u.stringp = arg;
                 break;
             case perf_opt_boolean:
                 *opt->u.boolp = true;
                 break;
             case perf_opt_uint:
+                if (!arg) {
+                    return -1;
+                }
                 *opt->u.uintp = parse_uint(opt->desc, arg, 1, 0xFFFFFFFF);
                 break;
             case perf_opt_zpint:
+                if (!arg) {
+                    return -1;
+                }
                 *opt->u.uintp = parse_uint(opt->desc, arg, 0, 0xFFFFFFFF);
                 break;
             case perf_opt_timeval:
+                if (!arg) {
+                    return -1;
+                }
                 *opt->u.uint64p = parse_timeval(opt->desc, arg);
                 break;
             case perf_opt_double:
+                if (!arg) {
+                    return -1;
+                }
                 *opt->u.doublep = parse_double(opt->desc, arg);
                 break;
             case perf_opt_port:
+                if (!arg) {
+                    return -1;
+                }
                 *opt->u.portp = parse_uint(opt->desc, arg, 0, 0xFFFF);
                 break;
             }
@@ -284,10 +302,10 @@ static int perf_opt_long_parse(char* optarg)
 
 void perf_long_opt_usage(void)
 {
-    fprintf(stderr, "Usage: %s ... -O <name>=<value> ...\n\nAvailable long options:\n", progname);
+    fprintf(stderr, "Usage: %s ... -O <name>[=<value>] ...\n\nAvailable long options:\n", progname);
     long_opt_t* opt = longopts;
     while (opt) {
-        fprintf(stderr, "  %s: %s", opt->name, opt->help);
+        fprintf(stderr, "  %s%s: %s", opt->name, opt->type != perf_opt_boolean ? "=<val>" : "", opt->help);
         if (opt->defval) {
             fprintf(stderr, " (default: %s)", opt->defval);
         }

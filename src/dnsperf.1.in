@@ -1,4 +1,4 @@
-.\" Copyright 2019-2022 OARC, Inc.
+.\" Copyright 2019-2023 OARC, Inc.
 .\" Copyright 2017-2018 Akamai Technologies
 .\" Copyright 2006-2016 Nominum, Inc.
 .\" All rights reserved.
@@ -341,8 +341,9 @@ The default is the loopback address, 127.0.0.1.
 \fB-S \fIstats_interval\fR
 .br
 .RS
-If this parameter is specified, a count of the number of queries per second
-during the interval will be printed out every stats_interval seconds.
+If this parameter is specified, a count of the number of answers received
+per second during the interval will be printed out every \fIstats_interval\fR
+seconds.
 .RE
 
 \fB-t \fItimeout\fR
@@ -458,7 +459,6 @@ Following type are available.
 .br
 \fBunexpected\fR: Suppress messages about answers with an unexpected message ID
 .RE
-
 \fBnum-queries-per-conn=\fINUMBER\fR
 .br
 .RS
@@ -473,6 +473,29 @@ re-connecting.
 Waiting for responses may timeout and the timeout used for this is the
 same as specified by \fB-t\fR.
 Note that this option is only useful for connection oriented protocols.
+.RE
+
+\fBverbose-interval-stats\fR
+.br
+.RS
+Change the statistics format of \fB-S\fR to that shown at end of run.
+
+\fIPlease note\fR: Min/max values for latency and connections are not
+available in interval statistics.
+Number of answers received within \fIstats_interval\fR can legitimately
+exceed number of queries sent, depending on answer latency, configured
+\fItimeout\fR, and \fIstats_interval\fR.
+.RE
+
+\fBlatency-histogram\fR
+.br
+.RS
+Print detailed latency histograms for DNS answers and connections.
+Latency is quantized into bins with roughly 3 % resolution, and latency
+range for individual bins increases logarithmically.
+This is done to to limit amount of memory required for histograms
+and also allows to visualize latency using logarithmic percentile histograms
+with minimal postprocessing.
 .RE
 .SH "SEE ALSO"
 \fBresperf\fR(1)
