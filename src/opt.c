@@ -240,7 +240,7 @@ static int perf_opt_long_parse(char* optarg)
 
     if ((arg = strchr(optarg, '='))) {
         arg++;
-        optlen = arg - optarg;
+        optlen = strlen(arg);
         if (optlen < 1) {
             return -1;
         }
@@ -305,7 +305,11 @@ void perf_long_opt_usage(void)
     fprintf(stderr, "Usage: %s ... -O <name>[=<value>] ...\n\nAvailable long options:\n", progname);
     long_opt_t* opt = longopts;
     while (opt) {
-        fprintf(stderr, "  %s%s: %s", opt->name, opt->type != perf_opt_boolean ? "=<val>" : "", opt->help);
+        if (opt->type == perf_opt_boolean) {
+            fprintf(stderr, "  %s: %s", opt->name, opt->help);
+        } else {
+            fprintf(stderr, "  %s=<%s>: %s", opt->name, opt->desc ? opt->desc : "val", opt->help);
+        }
         if (opt->defval) {
             fprintf(stderr, " (default: %s)", opt->defval);
         }
