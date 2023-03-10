@@ -20,6 +20,7 @@
 #include "result.h"
 #include "buffer.h"
 #include "edns.h"
+#include "gsstsig/gss.h"
 #include "tsig.h"
 
 #ifndef PERF_DNS_H
@@ -37,7 +38,7 @@ perf_result_t perf_qtype_fromstring(const char* str, size_t len, perf_buffer_t* 
 
 perf_result_t perf_dns_buildrequest(const perf_region_t* record, uint16_t qid,
     bool edns, bool dnssec, bool is_update,
-    perf_tsigkey_t* tsigkey, perf_ednsoption_t* edns_option,
+    perf_tsigkey_t* tsigkey, perf_ednsoption_t* edns_option, perf_gsstsig_t *gss_tsig,
     perf_buffer_t* msg);
 
 #endif

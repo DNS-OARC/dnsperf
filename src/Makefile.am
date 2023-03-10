@@ -30,10 +30,12 @@ bin_PROGRAMS = dnsperf resperf
 dist_bin_SCRIPTS = resperf-report
 
 _libperf_sources = datafile.c dns.c log.c net.c opt.c os.c strerror.c qtype.c \
-  edns.c tsig.c net_udp.c net_tcp.c net_dot.c net_doh.c ext/parse_uri.c
+  edns.c tsig.c net_udp.c net_tcp.c net_dot.c net_doh.c ext/parse_uri.c \
+  buffer.c gsstsig/generic_dns.c gsstsig/gss.c random_num.c
 
 _libperf_headers = datafile.h dns.h log.h net.h opt.h os.h util.h strerror.h \
-  list.h result.h buffer.h qtype.h edns.h tsig.h ext/parse_uri.h
+  list.h result.h buffer.h qtype.h edns.h tsig.h ext/parse_uri.h \
+  gsstsig/generic_dns.h gsstsig/gss.h random_num.h
 
 if HAVE_STDATOMIC
 _libperf_sources += ext/hg64.c

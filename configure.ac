@@ -88,6 +88,43 @@ PKG_CHECK_MODULES([libnghttp2], [libnghttp2 >= 0], [
   AC_CHECK_LIB([nghttp2], [nghttp2_session],, [AC_MSG_ERROR([nghttp2 not found])])
 ])
 
+# Check for gssapi
+KRB5_CONFIG=
+AC_PATH_PROG([KRB5_CONFIG], [krb5-config])
+AS_IF([test -z "$KRB5_CONFIG"],
+  AC_MSG_ERROR([krb5-config required but not found]))
+
+GSSAPI_CFLAGS=
+GSSAPI_LIBS=
+KRB5_CFLAGS=
+KRB5_LIBS=
+AC_MSG_CHECKING([for gssapi libraries])
+GSSAPI_CFLAGS=`"$KRB5_CONFIG" --cflags gssapi`
+GSSAPI_LIBS=`"$KRB5_CONFIG" --libs gssapi`
+AS_VAR_APPEND([CFLAGS], [" $GSSAPI_CFLAGS"])
+AS_VAR_APPEND([LIBS], [" $GSSAPI_LIBS"])
+AC_MSG_RESULT([$GSSAPI_CFLAGS $GSSAPI_LIBS])
+AC_CHECK_HEADERS([gssapi/gssapi.h], [],
+  [AC_CHECK_HEADERS([gssapi.h], [],
+    [AC_MSG_ERROR([neither gssapi/gssapi.h nor gssapi.h found])])])
+AC_CHECK_HEADERS([gssapi/gssapi_krb5.h],
+  [AC_CHECK_HEADERS([gssapi_krb5.h], []
+    [AC_MSG_ERROR([neither gssapi/gssapi_krb5.h nor gssapi_krb5.h found])])])
+AC_CHECK_FUNCS([gss_acquire_cred],[],
+  [AC_MSG_ERROR([linking with $GSSAPI_LIBS does not work])])
+
+AC_MSG_CHECKING([for krb5 libraries])
+KRB5_CFLAGS=`"$KRB5_CONFIG" --cflags krb5`
+KRB5_LIBS=`$KRB5_CONFIG --libs krb5`
+AS_VAR_APPEND([CFLAGS], [" $KRB5_CFLAGS"])
+AS_VAR_APPEND([LIBS], [" $KRB5_LIBS"])
+AC_MSG_RESULT([$KRB5_CFLAGS $KRB5_LIBS])
+AC_CHECK_HEADERS([krb5/krb5.h], [],
+  [AC_CHECK_HEADERS([krb5.h], [],
+    [AC_MSG_ERROR([neither krb5/krb5.h nor krb5 found])])])
+AC_CHECK_FUNCS([krb5_init_context], [],
+  [AC_MSG_ERROR([linking with $KRB5_LIBS failed])])
+
 # Output Makefiles
 AC_CONFIG_FILES([
   Makefile

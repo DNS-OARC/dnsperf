@@ -44,6 +44,8 @@ those queries to DNS servers to measure performance.
 environment with autoconf, automake, libtool and pkgconfig.
 
 - [OpenSSL](https://www.openssl.org/) - for TSIG support
+- libkrb5-dev - for GSS-TSIG support
+- krb5-user - for Kerberos user configuration
 - [Concurrency Kit](http://concurrencykit.org/) - for atomic operations
 - [LDNS](https://nlnetlabs.nl/projects/ldns/about/) - optional for dynamic update support
 - [nghttp2](https://nghttp2.org) - for DNS-over-HTTPS support using HTTP/2

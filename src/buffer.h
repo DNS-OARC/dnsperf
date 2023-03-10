@@ -21,6 +21,7 @@
 #define PERF_BUFFER_H 1
 
 #include <stddef.h>
+#include <stdint.h>
 
 typedef struct perf_region {
     void*  base;
@@ -112,5 +113,15 @@ typedef struct perf_buffer {
         (r)->base   = (b)->base;     \
         (r)->length = (b)->used;     \
     }
+
+#define perf_buffer_add_current(b, n)         \
+    {                                         \
+        assert((b)->current + n <= (b)->used);\
+        (b)->current += (n);                  \
+    }
+
+uint8_t perf_buffer_getuint8(perf_buffer_t *b);
+uint16_t perf_buffer_getuint16(perf_buffer_t *b);
+uint32_t perf_buffer_getuint32(perf_buffer_t *b);
 
 #endif

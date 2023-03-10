@@ -52,9 +52,9 @@
 #include <openssl/ssl.h>
 #include <openssl/conf.h>
 #include <openssl/err.h>
+#include "gsstsig/gss.h"
 
 #define HISTOGRAM_SIGBITS 5 /* about 3 % latency precision */
-
 #define DEFAULT_SERVER_NAME "127.0.0.1"
 #define DEFAULT_SERVER_PORT 53
 #define DEFAULT_SERVER_DOT_PORT 853
@@ -80,6 +80,7 @@ typedef struct {
     uint32_t            threads;
     uint32_t            maxruns;
     uint64_t            timelimit;
+    char*               server_name;
     perf_sockaddr_t     server_addr;
     perf_sockaddr_t     local_addr;
     uint64_t            timeout;
@@ -87,6 +88,8 @@ typedef struct {
     bool                edns;
     bool                dnssec;
     perf_tsigkey_t*     tsigkey;
+    bool                use_gsstsig;
+    perf_gsstsig_t      gss_tsig;
     perf_ednsoption_t*  edns_option;
     uint32_t            max_outstanding;
     uint32_t            max_qps;
@@ -564,7 +567,7 @@ setup(int argc, char** argv, config_t* config)
         &family);
     perf_opt_add('m', perf_opt_string, "mode", "set transport mode: udp, tcp, dot or doh", "udp", &mode);
     perf_opt_add('s', perf_opt_string, "server_addr",
-        "the server to query", DEFAULT_SERVER_NAME, &server_name);
+        "the server to query. For GSS-TSIG dynamic update, it must be server name.", DEFAULT_SERVER_NAME, &server_name);
     perf_opt_add('p', perf_opt_port, "port",
         "the port on which to query the server",
         DEFAULT_SERVER_PORTS, &server_port);
@@ -620,6 +623,9 @@ setup(int argc, char** argv, config_t* config)
     perf_opt_add('B', perf_opt_boolean, NULL,
         "read input file as TCP-stream binary format",
         NULL, &config->binary_input);
+    perf_opt_add('g', perf_opt_boolean, "use_gsstsig",
+        "send DDNS updates using GSS-TSIG",
+        NULL, &config->use_gsstsig);
     perf_opt_add('v', perf_opt_boolean, NULL,
         "verbose: report each query and additional information to stdout",
         NULL, &config->verbose);
@@ -701,6 +707,14 @@ setup(int argc, char** argv, config_t* config)
 
     if (config->dnssec || edns_option != NULL)
         config->edns = true;
+
+    if (config->updates && config->use_gsstsig) {
+        if (tsigkey != NULL) {
+            perf_log_fatal("GSS-TSIG and TSIG must not be used together.");
+        } else {
+            config->server_name = (char*)server_name;
+        }
+    }
 
     if (tsigkey != NULL)
         config->tsigkey = perf_tsig_parsekey(tsigkey);
@@ -906,6 +920,7 @@ do_send(void* arg)
             break;
         }
 
+        perf_gsstsig_t gss_tsig;
         perf_buffer_t* send = &msg;
         qid                 = q - tinfo->queries;
         switch (config->input_format) {
@@ -913,10 +928,19 @@ do_send(void* arg)
         case input_format_text_update:
             perf_buffer_clear(&msg);
             perf_buffer_usedregion(&lines, &used);
+            // create a separate GSS-TSIG context for each DNS request
+            if (config->use_gsstsig)
+            {
+                perf_result_t result = perf_init_gss_context(config->server_name, config->local_addr, config->server_addr, &gss_tsig);
+                if (result != PERF_R_SUCCESS) {
+                    perf_log_fatal("Failed to initialize GSS context: sent = %d", stats->num_sent);
+                    break;
+                }
+            }
             result = perf_dns_buildrequest(&used, qid,
                 config->edns, config->dnssec, config->input_format == input_format_text_update,
                 config->tsigkey, config->edns_option,
-                &msg);
+                config->use_gsstsig ? &gss_tsig : NULL, &msg);
             break;
 
         case input_format_tcp_wire_format:
@@ -979,8 +1003,13 @@ do_send(void* arg)
             PERF_UNLOCK(&tinfo->lock);
             continue;
         }
-        stats->num_sent++;
 
+        // terminate the context once done
+        if (config->use_gsstsig) {
+            perf_remove_gsstsig_context(&gss_tsig);
+        }
+
+        stats->num_sent++;
         stats->total_request_size += length;
     }
 

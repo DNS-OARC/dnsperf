@@ -20,7 +20,7 @@
 #include "config.h"
 
 #include "dns.h"
-
+#include "gsstsig/gss.h"
 #include "log.h"
 #include "opt.h"
 #include "qtype.h"
@@ -505,7 +505,7 @@ done:
 
 perf_result_t perf_dns_buildrequest(const perf_region_t* record, uint16_t qid,
     bool edns, bool dnssec, bool is_update,
-    perf_tsigkey_t* tsigkey, perf_ednsoption_t* edns_option,
+    perf_tsigkey_t* tsigkey, perf_ednsoption_t* edns_option, perf_gsstsig_t *gss_tsig,
     perf_buffer_t* msg)
 {
     unsigned int  flags;
@@ -540,6 +540,8 @@ perf_result_t perf_dns_buildrequest(const perf_region_t* record, uint16_t qid,
 
     if (result == PERF_R_SUCCESS && tsigkey) {
         result = perf_add_tsig(msg, tsigkey);
+    } else if (result == PERF_R_SUCCESS && gss_tsig != NULL) {
+        result = perf_add_gsstsig_signature(gss_tsig, msg);
     }
 
     return result;
