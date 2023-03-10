@@ -1,3 +1,12 @@
+2023-03-10 Jerry Lundström
+
+    Release 2.11.1
+
+    Fixed long option argument handling that broke in v2.11.0 and enhanced
+    long option help text, now includes argument type.
+
+    034e893 Long opt
+
 2023-02-08 Jerry Lundström
 
     Release 2.11.0

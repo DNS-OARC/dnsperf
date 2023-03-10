@@ -1,3 +1,14 @@
+dnsperf (2.11.1-1~unstable+1) unstable; urgency=low
+
+  * Release 2.11.1
+
+    Fixed long option argument handling that broke in v2.11.0 and enhanced
+    long option help text, now includes argument type.
+
+    034e893 Long opt
+
+ -- Jerry Lundström <lundstrom.jerry@gmail.com>  Fri, 10 Mar 2023 09:55:35 +0100
+
 dnsperf (2.11.0-1~unstable+1) unstable; urgency=low
 
   * Release 2.11.0
