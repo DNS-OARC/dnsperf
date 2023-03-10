@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.11.0
+Version:        2.11.1
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -95,6 +95,12 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Mar 10 2023 Jerry Lundström <lundstrom.jerry@gmail.com> 2.11.1-1
+- Release 2.11.1
+  * Fixed long option argument handling that broke in v2.11.0 and enhanced
+    long option help text, now includes argument type.
+  * Commits:
+    034e893 Long opt
 * Wed Feb 08 2023 Jerry Lundström <lundstrom.jerry@gmail.com> 2.11.0-1
 - Release 2.11.0
   * A couple of new features this release courtesy of Petr Špaček
