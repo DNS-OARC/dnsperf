@@ -239,9 +239,9 @@ static int perf_opt_long_parse(char* optarg)
     char*   arg;
 
     if ((arg = strchr(optarg, '='))) {
+        optlen = arg - optarg;
         arg++;
-        optlen = strlen(arg);
-        if (optlen < 1) {
+        if (optlen < 1 || !strlen(arg)) {
             return -1;
         }
     } else {
