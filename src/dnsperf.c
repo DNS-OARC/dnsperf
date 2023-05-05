@@ -850,7 +850,7 @@ do_send(void* arg)
     stats_t*        stats;
     unsigned int    max_packet_size;
     perf_buffer_t   msg;
-    uint64_t        last_packet, now, req_time;
+    uint64_t        last_packet, now, req_time, wait_us;
     char            input_data[MAX_INPUT_DATA];
     perf_buffer_t   lines;
     perf_region_t   used;
@@ -887,9 +887,19 @@ do_send(void* arg)
         if (tinfo->packet_step > 0) {
             req_time = last_packet + tinfo->packet_step;
             if (req_time > now) {
+                wait_us = req_time - now;
+                if (wait_us > config->qps_threshold_wait) {
+                    struct timespec ts = { 0, 0 };
+                    if (wait_us >= MILLION) {
+                        ts.tv_sec  = wait_us / MILLION;
+                        ts.tv_nsec = (wait_us % MILLION) * 1000;
+                    } else {
+                        ts.tv_sec  = 0;
+                        ts.tv_nsec = wait_us * 1000;
+                    }
+                    nanosleep(&ts, NULL);
+                }
                 now = perf_get_time();
-                /* busy wait here is intentional as
-		 * usleep() is too slow for short intervals */
                 continue;
             }
             last_packet = now;
