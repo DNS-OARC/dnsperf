@@ -102,6 +102,7 @@ typedef struct {
 #ifdef USE_HISTOGRAMS
     bool latency_histogram;
 #endif
+    int qps_threshold_wait;
 } config_t;
 
 typedef struct {
@@ -532,6 +533,40 @@ stringify(unsigned int value)
     return buf;
 }
 
+static int
+measure_nanosleep(config_t* config)
+{
+    struct timespec start, stop, wait = { 0, 0 };
+    int             err;
+
+    int i = 100;
+    if ((err = clock_gettime(CLOCK_REALTIME, &start))) {
+        return err;
+    }
+    for (; i; i--) {
+        if ((err = nanosleep(&wait, NULL))) {
+            return err;
+        }
+    }
+    if ((err = clock_gettime(CLOCK_REALTIME, &stop))) {
+        return err;
+    }
+
+    // Total time for 100 nanosleep() + 2 clock_gettime()
+    config->qps_threshold_wait = ((stop.tv_sec - start.tv_sec) * 1000000000 + stop.tv_nsec - start.tv_nsec)
+                                 // divided by 100 runs
+                                 / 100
+                                 // add fudge
+                                 * 3
+                                 // converted to microseconds
+                                 / 1000;
+    if (config->qps_threshold_wait < 0) {
+        config->qps_threshold_wait = 0;
+    }
+
+    return 0;
+}
+
 static void
 setup(int argc, char** argv, config_t* config)
 {
@@ -558,6 +593,8 @@ setup(int argc, char** argv, config_t* config)
     config->timeout         = DEFAULT_TIMEOUT * MILLION;
     config->max_outstanding = DEFAULT_MAX_OUTSTANDING;
     config->mode            = sock_udp;
+
+    config->qps_threshold_wait = -1;
 
     perf_opt_add('f', perf_opt_string, "family",
         "address family of DNS transport, inet or inet6", "any",
@@ -637,6 +674,8 @@ setup(int argc, char** argv, config_t* config)
     perf_long_opt_add("latency-histogram", perf_opt_boolean, NULL,
         "collect and print detailed latency histograms", NULL, &config->latency_histogram);
 #endif
+    perf_long_opt_add("qps-threshold-wait", perf_opt_zpint, "microseconds",
+        "minimum threshold for enabling wait in rate limiting", stringify(config->qps_threshold_wait), &config->qps_threshold_wait);
 
     bool log_stdout = false;
     perf_opt_add('W', perf_opt_boolean, NULL, "log warnings and errors to stdout instead of stderr", NULL, &log_stdout);
@@ -730,6 +769,14 @@ setup(int argc, char** argv, config_t* config)
         perf_log_fatal("Unable to dynamic update, support not built in");
     }
 #endif
+
+    if (config->qps_threshold_wait < 0) {
+        int err = measure_nanosleep(config);
+        if (err) {
+            char __s[256];
+            perf_log_fatal("Unable to measure nanosleep(): %s", perf_strerror_r(errno, __s, sizeof(__s)));
+        }
+    }
 }
 
 static void
@@ -803,7 +850,7 @@ do_send(void* arg)
     stats_t*        stats;
     unsigned int    max_packet_size;
     perf_buffer_t   msg;
-    uint64_t        now, run_time, req_time;
+    uint64_t        now, req_time, wait_us, q_sent = 0, q_step = 0, q_slice;
     char            input_data[MAX_INPUT_DATA];
     perf_buffer_t   lines;
     perf_region_t   used;
@@ -824,8 +871,13 @@ do_send(void* arg)
     perf_buffer_init(&msg, packet_buffer, max_packet_size);
     perf_buffer_init(&lines, input_data, sizeof(input_data));
 
+    if (tinfo->max_qps > 0) {
+        q_step = MILLION / tinfo->max_qps;
+    }
     wait_for_start();
-    now = perf_get_time();
+    now      = perf_get_time();
+    req_time = now;
+    q_slice  = now + MILLION;
     while (!interrupted && now < times->stop_time) {
         /* Avoid flooding the network too quickly. */
         if (stats->num_sent < tinfo->max_outstanding && stats->num_sent % 2 == 1) {
@@ -838,13 +890,49 @@ do_send(void* arg)
 
         /* Rate limiting */
         if (tinfo->max_qps > 0) {
-            run_time = now - times->start_time;
-            req_time = (MILLION * stats->num_sent) / tinfo->max_qps;
-            if (req_time > run_time) {
-                usleep(req_time - run_time);
+            /* the 1 second time slice where q_sent is calculated over */
+            if (q_slice <= now) {
+                q_slice += MILLION;
+                q_sent   = 0;
+                req_time = now; // reset stepping, in case of clock sliding
+            }
+            /* limit QPS over the 1 second slice */
+            if (q_sent >= tinfo->max_qps) {
+                wait_us = q_slice - now;
+                if (config->qps_threshold_wait && wait_us > config->qps_threshold_wait) {
+                    wait_us -= config->qps_threshold_wait;
+                    struct timespec ts = { 0, 0 };
+                    if (wait_us >= MILLION) {
+                        ts.tv_sec  = wait_us / MILLION;
+                        ts.tv_nsec = (wait_us % MILLION) * 1000;
+                    } else {
+                        ts.tv_sec  = 0;
+                        ts.tv_nsec = wait_us * 1000;
+                    }
+                    nanosleep(&ts, NULL);
+                }
                 now = perf_get_time();
                 continue;
             }
+            /* handle stepping to the next window to send a query on */
+            if (req_time > now) {
+                wait_us = req_time - now;
+                if (config->qps_threshold_wait && wait_us > config->qps_threshold_wait) {
+                    wait_us -= config->qps_threshold_wait;
+                    struct timespec ts = { 0, 0 };
+                    if (wait_us >= MILLION) {
+                        ts.tv_sec  = wait_us / MILLION;
+                        ts.tv_nsec = (wait_us % MILLION) * 1000;
+                    } else {
+                        ts.tv_sec  = 0;
+                        ts.tv_nsec = wait_us * 1000;
+                    }
+                    nanosleep(&ts, NULL);
+                }
+                now = perf_get_time();
+                continue;
+            }
+            req_time += q_step;
         }
 
         PERF_LOCK(&tinfo->lock);
@@ -980,6 +1068,7 @@ do_send(void* arg)
             continue;
         }
         stats->num_sent++;
+        q_sent++;
 
         stats->total_request_size += length;
     }
