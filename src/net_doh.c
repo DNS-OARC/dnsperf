@@ -100,7 +100,7 @@ struct perf__doh_socket {
 
     bool is_ready, is_conn_ready, is_ssl_ready, is_sending, is_post_sending;
     // bool have_more; TODO
-    bool do_reconnect;
+    bool do_reconnect, do_connect;
 
     perf_sockaddr_t server, local;
     size_t          bufsize;
@@ -254,7 +254,7 @@ static void perf__doh_reconnect(struct perf_net_socket* sock)
     self->http2_code             = 0;
     self->http2_is_dns           = false;
 
-    perf__doh_connect(sock);
+    self->do_connect = true;
 }
 
 // static ssize_t _recv_callback(nghttp2_session *session, uint8_t *buf, size_t length, int flags, void *sock)
@@ -622,6 +622,10 @@ static int perf__doh_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
     if (self->do_reconnect) {
         perf__doh_reconnect(sock);
         self->do_reconnect = false;
+    }
+    if (self->do_connect) {
+        perf__doh_connect(sock);
+        self->do_connect = false;
     }
 
     if (self->is_ready) {
