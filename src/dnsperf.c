@@ -438,12 +438,16 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
 
     printf("\n");
 
-    if (!stats->num_conn_completed) {
+    if (!stats->num_conn_completed && !stats->num_conn_reconnect) {
+        fflush(stdout);
         return;
     }
 
     printf("Connection Statistics:\n\n");
-    printf("  Reconnections:        %" PRIu64 "\n\n", stats->num_conn_reconnect);
+    printf("  Reconnections:        %" PRIu64 " (%.2lf%% of %" PRIu64 " connections)\n\n",
+        stats->num_conn_reconnect,
+        PERF_SAFE_DIV(100.0 * stats->num_conn_reconnect, stats->num_conn_completed),
+        stats->num_conn_completed);
     latency_avg = PERF_SAFE_DIV(stats->conn_latency_sum, stats->num_conn_completed);
     printf("  Average Latency (s):  %u.%06u",
         (unsigned int)(latency_avg / MILLION),
@@ -467,6 +471,7 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
     }
 
     printf("\n");
+    fflush(stdout);
 }
 
 /*
