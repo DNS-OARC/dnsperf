@@ -183,15 +183,27 @@ perf_tsigkey_t* perf_tsig_parsekey(const char* arg)
         perf_log_fatal("unable to setup TSIG, OpenSSL HMAC context failed to be created");
     }
     HMAC_CTX_init(tsigkey->hmac);
-#else
+#elif OPENSSL_VERSION_NUMBER < 0x30000000L
     if (!(tsigkey->hmac = HMAC_CTX_new())) {
         perf_log_fatal("unable to setup TSIG, OpenSSL HMAC context failed to be created");
     }
+#else
+    if (!(tsigkey->pkey = EVP_PKEY_new_raw_private_key(EVP_PKEY_HMAC, 0, key, keylen))) {
+        perf_log_fatal("unable to setup TSIG, OpenSSL EVP PKEY failed to be created");
+    }
+    if (!(tsigkey->mdctx = EVP_MD_CTX_create())) {
+        perf_log_fatal("unable to setup TSIG, OpenSSL EVP MD context failed to be created");
+    }
+    if (!EVP_DigestSignInit(tsigkey->mdctx, 0, md, 0, tsigkey->pkey)) {
+        perf_log_fatal("unable to setup TSIG, OpenSSL EVP DigestSign init failed");
+    }
 #endif
 
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     if (!HMAC_Init_ex(tsigkey->hmac, key, keylen, md, 0)) {
         perf_log_fatal("unable to setup TSIG, OpenSSL HMAC init failed");
     }
+#endif
 
     free(key);
 
@@ -206,8 +218,11 @@ void perf_tsig_destroykey(perf_tsigkey_t** tsigkeyp)
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
     HMAC_CTX_cleanup((*tsigkeyp)->hmac);
     free((*tsigkeyp)->hmac);
-#else
+#elif OPENSSL_VERSION_NUMBER < 0x30000000L
     HMAC_CTX_free((*tsigkeyp)->hmac);
+#else
+    EVP_MD_CTX_free((*tsigkeyp)->mdctx);
+    EVP_PKEY_free((*tsigkeyp)->pkey);
 #endif
 
     free(*tsigkeyp);
@@ -222,20 +237,27 @@ perf_result_t perf_add_tsig(perf_buffer_t* packet, perf_tsigkey_t* tsigkey)
     unsigned char* base;
     size_t         rdlen, totallen;
     unsigned char  tmpdata[512], md[EVP_MAX_MD_SIZE];
-    unsigned int   mdlen;
     perf_buffer_t  tmp;
     uint32_t       now;
     perf_result_t  result;
 
     now = time(NULL);
 
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     if (!HMAC_Init_ex(tsigkey->hmac, 0, 0, 0, 0)) {
         perf_log_fatal("adding TSIG: OpenSSL HMAC reinit failed");
     }
-
     if (!HMAC_Update(tsigkey->hmac, perf_buffer_base(packet), perf_buffer_usedlength(packet))) {
         perf_log_fatal("adding TSIG: OpenSSL HMAC update failed");
     }
+#else
+    if (!EVP_DigestSignInit(tsigkey->mdctx, 0, 0, 0, 0)) {
+        perf_log_fatal("adding TSIG: OpenSSL EVP DigestSign reinit failed");
+    }
+    if (!EVP_DigestSignUpdate(tsigkey->mdctx, perf_buffer_base(packet), perf_buffer_usedlength(packet))) {
+        perf_log_fatal("adding TSIG: OpenSSL EVP DigestSign update failed");
+    }
+#endif
 
     /* Digest the TSIG record */
     perf_buffer_init(&tmp, tmpdata, sizeof tmpdata);
@@ -267,14 +289,23 @@ perf_result_t perf_add_tsig(perf_buffer_t* packet, perf_tsigkey_t* tsigkey)
     perf_buffer_putuint16(&tmp, 0); /* error */
     perf_buffer_putuint16(&tmp, 0); /* other length */
 
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
+    unsigned int mdlen = sizeof(md);
     if (!HMAC_Update(tsigkey->hmac, perf_buffer_base(&tmp), perf_buffer_usedlength(&tmp))) {
         perf_log_fatal("adding TSIG: OpenSSL HMAC update failed");
     }
-
-    mdlen = sizeof(md);
     if (!HMAC_Final(tsigkey->hmac, md, &mdlen)) {
         perf_log_fatal("adding TSIG: OpenSSL HMAC final failed");
     }
+#else
+    size_t mdlen = sizeof(md);
+    if (!EVP_DigestSignUpdate(tsigkey->mdctx, perf_buffer_base(&tmp), perf_buffer_usedlength(&tmp))) {
+        perf_log_fatal("adding TSIG: OpenSSL EVP DigestSign update failed");
+    }
+    if (!EVP_DigestSignFinal(tsigkey->mdctx, md, &mdlen)) {
+        perf_log_fatal("adding TSIG: OpenSSL EVP DigestSign final failed");
+    }
+#endif
 
     /* Make sure everything will fit */
     rdlen    = tsigkey->alglen + 18 + mdlen;

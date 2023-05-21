@@ -23,13 +23,23 @@
 #ifndef PERF_TSIG_H
 #define PERF_TSIG_H 1
 
+#include <openssl/opensslv.h>
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
 #include <openssl/hmac.h>
+#else
+#include <openssl/evp.h>
+#endif
 
 typedef struct perf_tsigkey {
     char        name[256];
     size_t      namelen, alglen;
     const char* alg;
-    HMAC_CTX*   hmac;
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
+    HMAC_CTX* hmac;
+#else
+    EVP_PKEY*   pkey;
+    EVP_MD_CTX* mdctx;
+#endif
 } perf_tsigkey_t;
 
 perf_tsigkey_t* perf_tsig_parsekey(const char* arg);

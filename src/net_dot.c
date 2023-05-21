@@ -175,6 +175,11 @@ static ssize_t perf__dot_recv(struct perf_net_socket* sock, void* buf, size_t le
             case SSL_ERROR_WANT_READ:
                 errno = EAGAIN;
                 break;
+#if OPENSSL_VERSION_NUMBER > 0x30000000L
+            case SSL_ERROR_SSL:
+                // OpenSSL 3.0+ returns this on EOF, treat everything as bad fd and reconnect
+                errno = EBADF;
+#endif
             case SSL_ERROR_SYSCALL:
                 switch (errno) {
                 case EBADF:

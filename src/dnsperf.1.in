@@ -485,6 +485,8 @@ available in interval statistics.
 Number of answers received within \fIstats_interval\fR can legitimately
 exceed number of queries sent, depending on answer latency, configured
 \fItimeout\fR, and \fIstats_interval\fR.
+
+Only available in \fBdnsperf\fR.
 .RE
 
 \fBlatency-histogram\fR
@@ -496,6 +498,29 @@ range for individual bins increases logarithmically.
 This is done to to limit amount of memory required for histograms
 and also allows to visualize latency using logarithmic percentile histograms
 with minimal postprocessing.
+
+Only available in \fBdnsperf\fR and if compile time support was detected.
+.RE
+
+\fBqps-threshold-wait=<microseconds>\fR
+.br
+.RS
+When using \fB-Q\fR to rate limit queries sent, this option control the
+minimum time (in microseconds) there should be between queries to use
+\fInanosleep()\fR to wait until sending the next query.
+Setting to zero (0) will disable any call to \fInanosleep()\fR between
+sending queries.
+
+If the time between queries is lower then this, then no wait is performed
+in order to have more precision on when to send the next query.
+This is because during high QPS rate limiting it can take more time just
+calling the functions to wait for when to send the next query then the
+actually time between queries.
+
+If not set, the average call-time to \fInanosleep()\fR will be measured
+during startup.
+
+Only available in \fBdnsperf\fR.
 .RE
 .SH "SEE ALSO"
 \fBresperf\fR(1)
