@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.11.2
+Version:        2.12.0
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -95,6 +95,35 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Sun May 21 2023 Jerry Lundström <lundstrom.jerry@gmail.com> 2.12.0-1
+- Release 2.12.0
+  * This release fixes a segfault when doing DNS-over-HTTPS and changes the
+    way maximum queries per second are handled.
+  * The DNS-over-HTTPS module handled reconnecting incorrectly and destroyed
+    the nghttp2 context during callbacks. Thanks to the help from
+    @kgillis2000 it was quickly found and fixed.
+  * The way maximum QPS is handled has been changed by Petr Špaček @pspacek
+    (ISC). The new way solves an over-shoot problem that happened due to
+    max QPS being counted for the whole runtime and based on completed
+    queries, not just sent.
+  * A new option `qps_threshold_wait` has also been added. This controls
+    the threshold for using `nanosleep()` between sending packet and the
+    default is measured on start-up. If the time between packets, based on
+    max QPS `-Q`, is smaller then no sleep will be performed. This improves
+    performance when doing high max QPS limiting.
+  * Other changes:
+    - `dnsperf`: Statistics output
+      - Fixed missing connection statistics if only reconnections happened
+      - Flush output to allow pipe/grep processing
+      - Add percentage on reconnections based on total connections
+    - Support OpenSSL 3.0+
+  * Commits:
+    9aca046 OpenSSL 3.0
+    6d3d6b4 Stats, DoH
+    316f901 qps_threshold_wait
+    ed52770 WIP: use busy wait only if necessary
+    32229b6 WIP: import nanosleep benchmark
+    1842b88 Fix dnsperf -Q to not overshot target value
 * Thu Mar 16 2023 Jerry Lundström <lundstrom.jerry@gmail.com> 2.11.2-1
 - Release 2.11.2
   * Fixed long option argument handling (again), wasn't completely fixed
