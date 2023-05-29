@@ -441,6 +441,13 @@ The HTTP method to use when querying with DNS-over-HTTPS, default is GET.
 Available methods are: GET, POST.
 .RE
 
+\fBtls-sni=\fISERVER_NAME\fR
+.br
+.RS
+The TLS Server Name Indication (SNI) to use when querying with DNS-over-HTTPS or DNS-over-TLS,
+defaults to leaving out the SNI extension in the client hello.
+.RE
+
 \fBsuppress=\fIMESSAGE[,MESSAGE,...]\fR
 .br
 .RS

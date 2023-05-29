@@ -28,6 +28,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <openssl/err.h>
 #include <sys/socket.h>
@@ -35,6 +36,7 @@
 #include <ck_pr.h>
 
 static SSL_CTX* ssl_ctx = 0;
+static const char* dot_sni = NULL;
 
 #define self ((struct perf__dot_socket*)sock)
 
@@ -61,6 +63,11 @@ struct perf__dot_socket {
     uint64_t     nqpc_ts;
 };
 
+void perf_net_dot_set_sni(const char* sni)
+{
+    dot_sni = sni;
+}
+
 static void perf__dot_connect(struct perf_net_socket* sock)
 {
     int ret;
@@ -84,6 +91,9 @@ static void perf__dot_connect(struct perf_net_socket* sock)
     }
     if (!(ret = SSL_set_fd(self->ssl, sock->fd))) {
         perf_log_fatal("SSL_set_fd(): %s", ERR_error_string(SSL_get_error(self->ssl, ret), 0));
+    }
+    if (dot_sni && !(ret = SSL_set_tlsext_host_name(self->ssl, dot_sni))) {
+        perf_log_fatal("SSL_set_tlsext_host_name(): %s", ERR_error_string(SSL_get_error(self->ssl, ret), 0));
     }
 
     if (self->server.sa.sa.sa_family == AF_INET6) {
