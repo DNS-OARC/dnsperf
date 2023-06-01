@@ -253,7 +253,7 @@ static void setup(int argc, char** argv)
     const char*  edns_option_str = NULL;
     const char*  doh_uri         = DEFAULT_DOH_URI;
     const char*  doh_method      = DEFAULT_DOH_METHOD;
-    const char*  tls_sni         = NULL;
+    const char*  tls_sni         = 0;
     const char*  local_suppress  = 0;
 
     size_t num_queries_per_conn = 0;
@@ -339,7 +339,7 @@ static void setup(int argc, char** argv)
     perf_long_opt_add("doh-method", perf_opt_string, "doh_method",
         "the HTTP method to use for DNS-over-HTTPS: GET or POST", DEFAULT_DOH_METHOD, &doh_method);
     perf_long_opt_add("tls-sni", perf_opt_string, "tls_sni",
-        "set the TLS Server Name Indication extension in the client hello for DoH and DoT", NULL, &tls_sni);
+        "the TLS SNI to use for TLS connections", NULL, &tls_sni);
     perf_long_opt_add("suppress", perf_opt_string, "message[,message,...]",
         "suppress messages/warnings, see dnsperf(1) man-page for list of message types", NULL, &local_suppress);
     perf_long_opt_add("num-queries-per-conn", perf_opt_uint, "queries",
@@ -370,15 +370,15 @@ static void setup(int argc, char** argv)
         }
     }
 
+    if (tls_sni) {
+        perf_net_tls_sni = tls_sni;
+    }
+
     if (doh_uri) {
         perf_net_doh_parse_uri(doh_uri);
     }
     if (doh_method) {
         perf_net_doh_parse_method(doh_method);
-    }
-    if (tls_sni && strlen(tls_sni)) {
-        perf_net_doh_set_sni(tls_sni);
-        perf_net_dot_set_sni(tls_sni);
     }
     perf_net_doh_set_max_concurrent_streams(max_outstanding);
 

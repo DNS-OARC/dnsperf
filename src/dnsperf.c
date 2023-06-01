@@ -587,6 +587,7 @@ setup(int argc, char** argv, config_t* config)
     const char* doh_uri        = DEFAULT_DOH_URI;
     const char* doh_method     = DEFAULT_DOH_METHOD;
     const char* local_suppress = 0;
+    const char* tls_sni        = 0;
 
     memset(config, 0, sizeof(*config));
     config->argc = argc;
@@ -681,6 +682,8 @@ setup(int argc, char** argv, config_t* config)
 #endif
     perf_long_opt_add("qps-threshold-wait", perf_opt_zpint, "microseconds",
         "minimum threshold for enabling wait in rate limiting", stringify(config->qps_threshold_wait), &config->qps_threshold_wait);
+    perf_long_opt_add("tls-sni", perf_opt_string, "tls_sni",
+        "the TLS SNI to use for TLS connections", NULL, &tls_sni);
 
     bool log_stdout = false;
     perf_opt_add('W', perf_opt_boolean, NULL, "log warnings and errors to stdout instead of stderr", NULL, &log_stdout);
@@ -708,6 +711,10 @@ setup(int argc, char** argv, config_t* config)
             server_port = DEFAULT_SERVER_PORT;
             break;
         }
+    }
+
+    if (tls_sni) {
+        perf_net_tls_sni = tls_sni;
     }
 
     if (doh_uri) {

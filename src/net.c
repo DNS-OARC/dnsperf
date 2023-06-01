@@ -31,6 +31,8 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 
+const char* perf_net_tls_sni = 0;
+
 enum perf_net_mode perf_net_parsemode(const char* mode)
 {
     if (!strcmp(mode, "udp")) {
