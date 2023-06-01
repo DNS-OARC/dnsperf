@@ -82,6 +82,9 @@ static void perf__dot_connect(struct perf_net_socket* sock)
     if (!(self->ssl = SSL_new(ssl_ctx))) {
         perf_log_fatal("SSL_new(): %s", ERR_error_string(ERR_get_error(), 0));
     }
+    if (perf_net_tls_sni && !(ret = SSL_set_tlsext_host_name(self->ssl, perf_net_tls_sni))) {
+        perf_log_fatal("SSL_set_tlsext_host_name(): %s", ERR_error_string(SSL_get_error(self->ssl, ret), 0));
+    }
     if (!(ret = SSL_set_fd(self->ssl, sock->fd))) {
         perf_log_fatal("SSL_set_fd(): %s", ERR_error_string(SSL_get_error(self->ssl, ret), 0));
     }
