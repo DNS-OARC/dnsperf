@@ -184,4 +184,6 @@ void perf_net_doh_stats_init();
 void perf_net_doh_stats_compile(struct perf_net_socket*);
 void perf_net_doh_stats_print();
 
+extern const char* perf_net_tls_sni;
+
 #endif

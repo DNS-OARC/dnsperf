@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.12.0
+Version:        2.13.0
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -95,6 +95,14 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Thu Jun 15 2023 Jerry Lundström <lundstrom.jerry@gmail.com> 2.13.0-1
+- Release 2.13.0
+  * This release adds a new option `-O tls-sni=...` to set the Server Name
+    Indication when using TLS transport, currently for DNS-over-TLS and
+    DNS-over-HTTPS.
+  * Commits:
+    dbe84f6 TLS SNI
+    5fb2282 Add TLS Server Name Indication extension support
 * Sun May 21 2023 Jerry Lundström <lundstrom.jerry@gmail.com> 2.12.0-1
 - Release 2.12.0
   * This release fixes a segfault when doing DNS-over-HTTPS and changes the
