@@ -1,3 +1,14 @@
+2023-06-15 Jerry Lundström
+
+    Release 2.13.0
+
+    This release adds a new option `-O tls-sni=...` to set the Server Name
+    Indication when using TLS transport, currently for DNS-over-TLS and
+    DNS-over-HTTPS.
+
+    dbe84f6 TLS SNI
+    5fb2282 Add TLS Server Name Indication extension support
+
 2023-05-21 Jerry Lundström
 
     Release 2.12.0
