@@ -13,7 +13,7 @@ queries.
 `dnsperf` "self-paces" the DNS query load to simulate network conditions.
 New features in `dnsperf` improve the precision of latency measurements and
 allow for per packet per-query latency reporting is possible. `dnsperf` is
-now multithreaded, multiple `dnsperf` clients can be supported in multicore
+now multithreaded, and multiple `dnsperf` clients can be supported in multicore
 systems (each client requires two cores). The output of `dnsperf` has also
 been improved so it is more concise and useful. Latency data can be used to
 make detailed graphs, so it is simple for network operators to take advantage
@@ -22,7 +22,7 @@ of the data.
 `resperf` systematically increases the query rate and monitors the response
 rate to simulate caching DNS services.
 
-See also the `dnsperf(1)` and `resperf(1)` man pages.
+See also the `dnsperf(1)` and `resperf(1)` main pages.
 
 More information may be found here:
 - https://www.dns-oarc.net/tools/dnsperf
@@ -35,12 +35,12 @@ General support and discussion:
 
 ## Usage
 
-`dnsperf` and `resperf` read input files describing DNS queries, and send
+`dnsperf` and `resperf` read input files describing DNS queries and send
 those queries to DNS servers to measure performance.
 
 ## Dependencies
 
-`dnsperf` requires a couple of libraries beside a normal C compiling
+`dnsperf` requires a couple of libraries besides a normal C compiling
 environment with autoconf, automake, libtool and pkgconfig.
 
 - [OpenSSL](https://www.openssl.org/) - for TSIG support
@@ -63,7 +63,7 @@ To install the dependencies under FreeBSD 12+ using `pkg`:
 pkg install -y openssl ldns concurrencykit libnghttp2
 ```
 
-To install the dependencies under OpenBSD 6+ using `pkg_add`:
+To install the dependencies under OpenBSD 6+ use `pkg_add`:
 ```
 pkg_add libldns nghttp2
 ```
