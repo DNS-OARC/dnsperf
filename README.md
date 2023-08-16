@@ -53,7 +53,7 @@ To install the dependencies under Debian/Ubuntu:
 apt-get install -y libssl-dev libldns-dev libck-dev libnghttp2-dev
 ```
 
-To install the dependencies under CentOS (with EPEL enabled):
+To install the dependencies under CentOS (with EPEL/PowerTools enabled):
 ```
 yum install -y openssl-devel ldns-devel ck-devel libnghttp2-devel
 ```
