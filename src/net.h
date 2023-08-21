@@ -28,8 +28,8 @@
 #include <assert.h>
 #include <stdbool.h>
 
-#define TCP_RECV_BUF_SIZE (16 * 1024)
-#define TCP_SEND_BUF_SIZE (4 * 1024)
+#define TCP_RECV_BUF_SIZE (65535 + 2)
+#define TCP_SEND_BUF_SIZE (65535 + 2)
 
 struct perf_sockaddr {
     union {
