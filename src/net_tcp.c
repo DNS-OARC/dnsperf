@@ -297,6 +297,9 @@ static int perf__tcp_sockready(struct perf_net_socket* sock, int pipe_fd, int64_
             dnslen = ntohs(dnslen);
             n      = sendto(sock->fd, self->sendbuf + self->sending, dnslen + 2 - self->sending, 0, 0, 0);
             if (n < 0) {
+                if (errno == EAGAIN) {
+                    return 0;
+                }
                 int fd = perf__tcp_connect(sock), oldfd = ck_pr_load_int(&sock->fd);
                 ck_pr_store_int(&sock->fd, fd);
                 close(oldfd);
@@ -364,7 +367,9 @@ conn_cont:
             dnslen = ntohs(dnslen);
             n      = sendto(sock->fd, self->sendbuf + self->sending, dnslen + 2 - self->sending, 0, 0, 0);
             if (n < 0) {
-                self->need_reconnect = true;
+                if (errno != EAGAIN) {
+                    self->need_reconnect = true;
+                }
                 return 0;
             }
             self->sending += n;
