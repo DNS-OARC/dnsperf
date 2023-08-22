@@ -900,53 +900,6 @@ do_send(void* arg)
             now = perf_get_time();
         }
 
-        /* Rate limiting */
-        if (tinfo->max_qps > 0) {
-            /* the 1 second time slice where q_sent is calculated over */
-            if (q_slice <= now) {
-                q_slice += MILLION;
-                q_sent   = 0;
-                req_time = now; // reset stepping, in case of clock sliding
-            }
-            /* limit QPS over the 1 second slice */
-            if (q_sent >= tinfo->max_qps) {
-                wait_us = q_slice - now;
-                if (config->qps_threshold_wait && wait_us > config->qps_threshold_wait) {
-                    wait_us -= config->qps_threshold_wait;
-                    struct timespec ts = { 0, 0 };
-                    if (wait_us >= MILLION) {
-                        ts.tv_sec  = wait_us / MILLION;
-                        ts.tv_nsec = (wait_us % MILLION) * 1000;
-                    } else {
-                        ts.tv_sec  = 0;
-                        ts.tv_nsec = wait_us * 1000;
-                    }
-                    nanosleep(&ts, NULL);
-                }
-                now = perf_get_time();
-                continue;
-            }
-            /* handle stepping to the next window to send a query on */
-            if (req_time > now) {
-                wait_us = req_time - now;
-                if (config->qps_threshold_wait && wait_us > config->qps_threshold_wait) {
-                    wait_us -= config->qps_threshold_wait;
-                    struct timespec ts = { 0, 0 };
-                    if (wait_us >= MILLION) {
-                        ts.tv_sec  = wait_us / MILLION;
-                        ts.tv_nsec = (wait_us % MILLION) * 1000;
-                    } else {
-                        ts.tv_sec  = 0;
-                        ts.tv_nsec = wait_us * 1000;
-                    }
-                    nanosleep(&ts, NULL);
-                }
-                now = perf_get_time();
-                continue;
-            }
-            req_time += q_step;
-        }
-
         /* Some sock might still be sending, try flush all of them */
         if (any_inprogress) {
             any_inprogress = 0;
@@ -957,11 +910,64 @@ do_send(void* arg)
             }
         }
 
+        /* Rate limiting */
+        if (tinfo->max_qps > 0) {
+            /* the 1 second time slice where q_sent is calculated over */
+            if (q_slice <= now) {
+                q_slice += MILLION;
+                q_sent   = 0;
+                req_time = now; // reset stepping, in case of clock sliding
+            }
+            /* limit QPS over the 1 second slice */
+            if (q_sent >= tinfo->max_qps) {
+                if (!any_inprogress) { // only if nothing is in-progress
+                    wait_us = q_slice - now;
+                    if (config->qps_threshold_wait && wait_us > config->qps_threshold_wait) {
+                        wait_us -= config->qps_threshold_wait;
+                        struct timespec ts = { 0, 0 };
+                        if (wait_us >= MILLION) {
+                            ts.tv_sec  = wait_us / MILLION;
+                            ts.tv_nsec = (wait_us % MILLION) * 1000;
+                        } else {
+                            ts.tv_sec  = 0;
+                            ts.tv_nsec = wait_us * 1000;
+                        }
+                        nanosleep(&ts, NULL);
+                    }
+                }
+                now = perf_get_time();
+                continue;
+            }
+            /* handle stepping to the next window to send a query on */
+            if (req_time > now) {
+                if (!any_inprogress) { // only if nothing is in-progress
+                    wait_us = req_time - now;
+                    if (config->qps_threshold_wait && wait_us > config->qps_threshold_wait) {
+                        wait_us -= config->qps_threshold_wait;
+                        struct timespec ts = { 0, 0 };
+                        if (wait_us >= MILLION) {
+                            ts.tv_sec  = wait_us / MILLION;
+                            ts.tv_nsec = (wait_us % MILLION) * 1000;
+                        } else {
+                            ts.tv_sec  = 0;
+                            ts.tv_nsec = wait_us * 1000;
+                        }
+                        nanosleep(&ts, NULL);
+                    }
+                }
+                now = perf_get_time();
+                continue;
+            }
+            req_time += q_step;
+        }
+
         PERF_LOCK(&tinfo->lock);
 
         /* Limit in-flight queries */
         if (num_outstanding(stats) >= tinfo->max_outstanding) {
-            PERF_TIMEDWAIT(&tinfo->cond, &tinfo->lock, &times->stop_time_ns, NULL);
+            if (!any_inprogress) { // only if nothing is in-progress
+                PERF_TIMEDWAIT(&tinfo->cond, &tinfo->lock, &times->stop_time_ns, NULL);
+            }
             PERF_UNLOCK(&tinfo->lock);
             now = perf_get_time();
             continue;
