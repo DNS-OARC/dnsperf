@@ -66,7 +66,7 @@
 
 #define TIMEOUT_CHECK_TIME 100000
 
-#define MAX_INPUT_DATA (64 * 1024)
+#define MAX_INPUT_DATA (64 * 1024) + 2
 
 #define MAX_SOCKETS 256
 
