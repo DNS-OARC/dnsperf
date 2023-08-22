@@ -947,6 +947,16 @@ do_send(void* arg)
             req_time += q_step;
         }
 
+        /* Some sock might still be sending, try flush all of them */
+        if (any_inprogress) {
+            any_inprogress = 0;
+            for (i = 0; i < tinfo->nsocks; i++) {
+                if (!perf_net_sockready(tinfo->socks[i], threadpipe[0], TIMEOUT_CHECK_TIME)) {
+                    any_inprogress = 1;
+                }
+            }
+        }
+
         PERF_LOCK(&tinfo->lock);
 
         /* Limit in-flight queries */
