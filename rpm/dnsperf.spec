@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.13.0
+Version:        2.13.1
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -95,6 +95,32 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed Aug 23 2023 Jerry Lundström <lundstrom.jerry@gmail.com> 2.13.1-1
+- Release 2.13.1
+  * This release fixes a few issues with in-progress queries and the TCP
+    transport module.
+  * When using stateful connections, such as TCP, if the full query couldn't
+    be sent in one go then the query and connection could get stuck as
+    "in-progress".
+    This could easily happen if you limited the in-flight queries to 1 and
+    sent very large DNS messages using the stream binary format.
+    Additional socket ready checks has been added to flush in-progress
+    queries as quickly as possible.
+  * The TCP module's handling of errors when continuing in-progress queries
+    has been fixed. Previously it would interpret EAGAIN as an unrecoverable
+    error and trigger a reconnect, dropping the quer-y/ies in-progress for
+    that connection.
+  * Other changes:
+    - Fix input data buffer to allow for maximum binary blob wire format, 2 byte size + max DNS message
+    - Mention PowerTools repository for building on CentOS etc
+  * Commits:
+    56e180c In-progress, bitmaps, clang-format
+    bbc48db In-progress
+    059619d In-progress
+    752575a TCP EAGAIN
+    d51a453 Max input
+    76764d7 64k TCP/DoT payload support
+    8201f50 Doc
 * Thu Jun 15 2023 Jerry Lundström <lundstrom.jerry@gmail.com> 2.13.0-1
 - Release 2.13.0
   * This release adds a new option `-O tls-sni=...` to set the Server Name
