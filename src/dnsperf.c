@@ -129,7 +129,7 @@ typedef struct {
     uint64_t latency_min;
     uint64_t latency_max;
 
-    uint64_t num_conn_reconnect;
+    uint64_t num_conn_attempts;
     uint64_t num_conn_completed;
 
     uint64_t conn_latency_sum;
@@ -294,7 +294,7 @@ diff_stats(const config_t* config, stats_t* last, stats_t* now, stats_t* diff)
     diff->latency_min         = 0; /* not enough data */
     diff->latency_max         = 0;
 
-    diff->num_conn_reconnect = now->num_conn_reconnect - last->num_conn_reconnect;
+    diff->num_conn_attempts = now->num_conn_attempts - last->num_conn_attempts;
     diff->num_conn_completed = now->num_conn_completed - last->num_conn_completed;
 
     diff->conn_latency_sum         = now->conn_latency_sum - last->conn_latency_sum;
@@ -438,16 +438,16 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
 
     printf("\n");
 
-    if (!stats->num_conn_completed && !stats->num_conn_reconnect) {
+    if (!stats->num_conn_completed && !stats->num_conn_attempts) {
         fflush(stdout);
         return;
     }
 
     printf("Connection Statistics:\n\n");
-    printf("  Reconnections:        %" PRIu64 " (%.2lf%% of %" PRIu64 " connections)\n\n",
-        stats->num_conn_reconnect,
-        PERF_SAFE_DIV(100.0 * stats->num_conn_reconnect, stats->num_conn_completed),
-        stats->num_conn_completed);
+    printf("  Connection attempts:  %" PRIu64 " (%" PRIu64 " successful, %.2lf%%)\n\n",
+        stats->num_conn_attempts,
+        stats->num_conn_completed,
+        PERF_SAFE_DIV(100.0 * stats->num_conn_completed, stats->num_conn_attempts));
     latency_avg = PERF_SAFE_DIV(stats->conn_latency_sum, stats->num_conn_completed);
     printf("  Average Latency (s):  %u.%06u",
         (unsigned int)(latency_avg / MILLION),
@@ -518,7 +518,7 @@ sum_stats(const config_t* config, stats_t* total)
             total->latency_max = stats->latency_max;
 
         total->num_conn_completed += stats->num_conn_completed;
-        total->num_conn_reconnect += stats->num_conn_reconnect;
+        total->num_conn_attempts += stats->num_conn_attempts;
 
         total->conn_latency_sum += stats->conn_latency_sum;
         total->conn_latency_sum_squares += stats->conn_latency_sum_squares;
@@ -1501,8 +1501,10 @@ static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t ev
             stats->conn_latency_max = elapsed_time;
         break;
 
+
     case perf_socket_event_reconnecting:
-        stats->num_conn_reconnect++;
+    case perf_socket_event_connecting:
+        stats->num_conn_attempts++;
         break;
 
     default:
