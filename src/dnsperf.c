@@ -294,7 +294,7 @@ diff_stats(const config_t* config, stats_t* last, stats_t* now, stats_t* diff)
     diff->latency_min         = 0; /* not enough data */
     diff->latency_max         = 0;
 
-    diff->num_conn_attempts = now->num_conn_attempts - last->num_conn_attempts;
+    diff->num_conn_attempts  = now->num_conn_attempts - last->num_conn_attempts;
     diff->num_conn_completed = now->num_conn_completed - last->num_conn_completed;
 
     diff->conn_latency_sum         = now->conn_latency_sum - last->conn_latency_sum;
@@ -1500,7 +1500,6 @@ static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t ev
         if (elapsed_time > stats->conn_latency_max)
             stats->conn_latency_max = elapsed_time;
         break;
-
 
     case perf_socket_event_reconnecting:
     case perf_socket_event_connecting:
