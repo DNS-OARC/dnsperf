@@ -23,7 +23,12 @@
 #ifndef PERF_UTIL_H
 #define PERF_UTIL_H 1
 
+#include "config.h"
 #include <pthread.h>
+#if defined(HAVE_PTHREAD_NP_H)
+#include <pthread_np.h>
+#endif /* if defined(HAVE_PTHREAD_NP_H) */
+
 #include <inttypes.h>
 #include <stdbool.h>
 #include <string.h>
@@ -157,4 +162,24 @@ static __inline__ uint64_t perf_get_time(void)
 
 #define PERF_SAFE_DIV(n, d) ((d) == 0 ? 0 : (n) / (d))
 
+static void
+perf_thread_setname(pthread_t thread, const char* name)
+{
+#if defined(HAVE_PTHREAD_SETNAME_NP) && !defined(__APPLE__)
+    /*
+     * macOS has pthread_setname_np but only works on the
+     * current thread so it's not used here
+     */
+#if defined(__NetBSD__)
+    (void)pthread_setname_np(thread, name, NULL);
+#else /* if defined(__NetBSD__) */
+    (void)pthread_setname_np(thread, name);
+#endif /* if defined(__NetBSD__) */
+#elif defined(HAVE_PTHREAD_SET_NAME_NP)
+    (void)pthread_set_name_np(thread, name);
+#else /* if defined(HAVE_PTHREAD_SETNAME_NP) && !defined(__APPLE__) */
+    (void)(thread);
+    (void)(name);
+#endif /* if defined(HAVE_PTHREAD_SETNAME_NP) && !defined(__APPLE__) */
+}
 #endif
