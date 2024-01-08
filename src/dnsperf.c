@@ -1513,7 +1513,7 @@ static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t ev
 
 static void
 threadinfo_init(threadinfo_t* tinfo, const config_t* config,
-    const times_t* times)
+    const times_t* times, int idx)
 {
     unsigned int offset, socket_offset, i;
 
@@ -1582,8 +1582,13 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
     }
     tinfo->current_sock = 0;
 
+    char name[32];
     PERF_THREAD(&tinfo->receiver, do_recv, tinfo);
+    snprintf(name, sizeof(name), "dnsperf-recv-%04d", idx);
+    perf_os_thread_setname(tinfo->receiver, name);
     PERF_THREAD(&tinfo->sender, do_send, tinfo);
+    snprintf(name, sizeof(name), "dnsperf-send-%04d", idx);
+    perf_os_thread_setname(tinfo->sender, name);
 }
 
 static void
@@ -1653,7 +1658,7 @@ int main(int argc, char** argv)
         perf_log_fatal("out of memory");
     }
     for (i = 0; i < config.threads; i++)
-        threadinfo_init(&threads[i], &config, &times);
+        threadinfo_init(&threads[i], &config, &times, i);
     if (config.stats_interval > 0) {
         stats_thread.config = &config;
         stats_thread.times  = &times;
