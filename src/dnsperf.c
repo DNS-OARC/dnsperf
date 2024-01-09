@@ -1582,12 +1582,12 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
     }
     tinfo->current_sock = 0;
 
-    char name[32];
+    char name[16]; // glibc is limited to 16 characters
     PERF_THREAD(&tinfo->receiver, do_recv, tinfo);
-    snprintf(name, sizeof(name), "dnsperf-recv-%04d", idx);
+    snprintf(name, sizeof(name), "perf-recv-%04d", idx);
     perf_os_thread_setname(tinfo->receiver, name);
     PERF_THREAD(&tinfo->sender, do_send, tinfo);
-    snprintf(name, sizeof(name), "dnsperf-send-%04d", idx);
+    snprintf(name, sizeof(name), "perf-send-%04d", idx);
     perf_os_thread_setname(tinfo->sender, name);
 }
 
