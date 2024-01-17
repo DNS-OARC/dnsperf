@@ -86,7 +86,7 @@ typedef struct {
     uint32_t            bufsize;
     bool                edns;
     bool                dnssec;
-    perf_tsigkey_t*     tsigkey;
+    const char*         tsigkey;
     perf_ednsoption_t*  edns_option;
     uint32_t            max_outstanding;
     uint32_t            max_qps;
@@ -582,7 +582,6 @@ setup(int argc, char** argv, config_t* config)
     in_port_t   local_port     = DEFAULT_LOCAL_PORT;
     const char* filename       = NULL;
     const char* edns_option    = NULL;
-    const char* tsigkey        = NULL;
     const char* mode           = 0;
     const char* doh_uri        = DEFAULT_DOH_URI;
     const char* doh_method     = DEFAULT_DOH_METHOD;
@@ -646,7 +645,7 @@ setup(int argc, char** argv, config_t* config)
         &config->dnssec);
     perf_opt_add('y', perf_opt_string, "[alg:]name:secret",
         "the TSIG algorithm, name and secret (base64)", NULL,
-        &tsigkey);
+        &config->tsigkey);
     perf_opt_add('q', perf_opt_uint, "num_queries",
         "the maximum number of queries outstanding",
         stringify(DEFAULT_MAX_OUTSTANDING),
@@ -753,8 +752,11 @@ setup(int argc, char** argv, config_t* config)
     if (config->dnssec || edns_option != NULL)
         config->edns = true;
 
-    if (tsigkey != NULL)
-        config->tsigkey = perf_tsig_parsekey(tsigkey);
+    if (config->tsigkey) {
+        // check TSIG key to die earlier than in threads
+        perf_tsigkey_t* k = perf_tsig_parsekey(config->tsigkey);
+        perf_tsig_destroykey(&k);
+    }
 
     if (edns_option != NULL)
         config->edns_option = perf_edns_parseoption(edns_option);
@@ -802,8 +804,6 @@ cleanup(config_t* config)
         close(mainpipe[i]);
         close(intrpipe[i]);
     }
-    if (config->tsigkey != NULL)
-        perf_tsig_destroykey(&config->tsigkey);
     if (config->edns_option != NULL)
         perf_edns_destroyoption(&config->edns_option);
 }
@@ -909,6 +909,7 @@ do_send(void* arg)
     perf_result_t   result;
     bool            all_fail;
     unsigned char   socketbits[(MAX_SOCKETS / 8) + 1] = {};
+    perf_tsigkey_t* tsigkey                           = 0;
 
     tinfo           = (threadinfo_t*)arg;
     config          = tinfo->config;
@@ -917,6 +918,9 @@ do_send(void* arg)
     max_packet_size = config->edns ? MAX_EDNS_PACKET : MAX_UDP_PACKET;
     perf_buffer_init(&msg, packet_buffer, max_packet_size);
     perf_buffer_init(&lines, input_data, sizeof(input_data));
+    if (config->tsigkey) {
+        tsigkey = perf_tsig_parsekey(config->tsigkey);
+    }
 
     if (tinfo->max_qps > 0) {
         q_step = MILLION / tinfo->max_qps;
@@ -1072,7 +1076,7 @@ do_send(void* arg)
             perf_buffer_usedregion(&lines, &used);
             result = perf_dns_buildrequest(&used, qid,
                 config->edns, config->dnssec, config->input_format == input_format_text_update,
-                config->tsigkey, config->edns_option,
+                tsigkey, config->edns_option,
                 &msg);
             break;
 
@@ -1155,6 +1159,10 @@ do_send(void* arg)
     tinfo->done_send_time = perf_get_time();
     tinfo->done_sending   = true;
     if (write(mainpipe[1], "", 1)) { // lgtm [cpp/empty-block]
+    }
+
+    if (tsigkey) {
+        perf_tsig_destroykey(&tsigkey);
     }
     return NULL;
 }
