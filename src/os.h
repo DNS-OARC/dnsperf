@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2023 OARC, Inc.
+ * Copyright 2019-2024 OARC, Inc.
  * Copyright 2017-2018 Akamai Technologies
  * Copyright 2006-2016 Nominum, Inc.
  * All rights reserved.
@@ -25,6 +25,7 @@
 
 #include <inttypes.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 void perf_os_blocksignal(int sig, bool block);
 
@@ -40,5 +41,7 @@ perf_os_waituntilanyreadable(struct perf_net_socket** socks, unsigned int nfds, 
 perf_result_t
 perf_os_waituntilanywritable(struct perf_net_socket** socks, unsigned int nfds, int pipe_fd,
     int64_t timeout);
+
+void perf_os_thread_setname(pthread_t thread, const char* name);
 
 #endif

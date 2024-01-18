@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2023 OARC, Inc.
+ * Copyright 2019-2024 OARC, Inc.
  * Copyright 2017-2018 Akamai Technologies
  * Copyright 2006-2016 Nominum, Inc.
  * All rights reserved.
@@ -86,7 +86,7 @@ typedef struct {
     uint32_t            bufsize;
     bool                edns;
     bool                dnssec;
-    perf_tsigkey_t*     tsigkey;
+    const char*         tsigkey;
     perf_ednsoption_t*  edns_option;
     uint32_t            max_outstanding;
     uint32_t            max_qps;
@@ -129,7 +129,7 @@ typedef struct {
     uint64_t latency_min;
     uint64_t latency_max;
 
-    uint64_t num_conn_reconnect;
+    uint64_t num_conn_attempts;
     uint64_t num_conn_completed;
 
     uint64_t conn_latency_sum;
@@ -294,7 +294,7 @@ diff_stats(const config_t* config, stats_t* last, stats_t* now, stats_t* diff)
     diff->latency_min         = 0; /* not enough data */
     diff->latency_max         = 0;
 
-    diff->num_conn_reconnect = now->num_conn_reconnect - last->num_conn_reconnect;
+    diff->num_conn_attempts  = now->num_conn_attempts - last->num_conn_attempts;
     diff->num_conn_completed = now->num_conn_completed - last->num_conn_completed;
 
     diff->conn_latency_sum         = now->conn_latency_sum - last->conn_latency_sum;
@@ -438,16 +438,16 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
 
     printf("\n");
 
-    if (!stats->num_conn_completed && !stats->num_conn_reconnect) {
+    if (!stats->num_conn_completed && !stats->num_conn_attempts) {
         fflush(stdout);
         return;
     }
 
     printf("Connection Statistics:\n\n");
-    printf("  Reconnections:        %" PRIu64 " (%.2lf%% of %" PRIu64 " connections)\n\n",
-        stats->num_conn_reconnect,
-        PERF_SAFE_DIV(100.0 * stats->num_conn_reconnect, stats->num_conn_completed),
-        stats->num_conn_completed);
+    printf("  Connection attempts:  %" PRIu64 " (%" PRIu64 " successful, %.2lf%%)\n\n",
+        stats->num_conn_attempts,
+        stats->num_conn_completed,
+        PERF_SAFE_DIV(100.0 * stats->num_conn_completed, stats->num_conn_attempts));
     latency_avg = PERF_SAFE_DIV(stats->conn_latency_sum, stats->num_conn_completed);
     printf("  Average Latency (s):  %u.%06u",
         (unsigned int)(latency_avg / MILLION),
@@ -518,7 +518,7 @@ sum_stats(const config_t* config, stats_t* total)
             total->latency_max = stats->latency_max;
 
         total->num_conn_completed += stats->num_conn_completed;
-        total->num_conn_reconnect += stats->num_conn_reconnect;
+        total->num_conn_attempts += stats->num_conn_attempts;
 
         total->conn_latency_sum += stats->conn_latency_sum;
         total->conn_latency_sum_squares += stats->conn_latency_sum_squares;
@@ -582,7 +582,6 @@ setup(int argc, char** argv, config_t* config)
     in_port_t   local_port     = DEFAULT_LOCAL_PORT;
     const char* filename       = NULL;
     const char* edns_option    = NULL;
-    const char* tsigkey        = NULL;
     const char* mode           = 0;
     const char* doh_uri        = DEFAULT_DOH_URI;
     const char* doh_method     = DEFAULT_DOH_METHOD;
@@ -646,7 +645,7 @@ setup(int argc, char** argv, config_t* config)
         &config->dnssec);
     perf_opt_add('y', perf_opt_string, "[alg:]name:secret",
         "the TSIG algorithm, name and secret (base64)", NULL,
-        &tsigkey);
+        &config->tsigkey);
     perf_opt_add('q', perf_opt_uint, "num_queries",
         "the maximum number of queries outstanding",
         stringify(DEFAULT_MAX_OUTSTANDING),
@@ -753,8 +752,11 @@ setup(int argc, char** argv, config_t* config)
     if (config->dnssec || edns_option != NULL)
         config->edns = true;
 
-    if (tsigkey != NULL)
-        config->tsigkey = perf_tsig_parsekey(tsigkey);
+    if (config->tsigkey) {
+        // check TSIG key to die earlier than in threads
+        perf_tsigkey_t* k = perf_tsig_parsekey(config->tsigkey);
+        perf_tsig_destroykey(&k);
+    }
 
     if (edns_option != NULL)
         config->edns_option = perf_edns_parseoption(edns_option);
@@ -802,8 +804,6 @@ cleanup(config_t* config)
         close(mainpipe[i]);
         close(intrpipe[i]);
     }
-    if (config->tsigkey != NULL)
-        perf_tsig_destroykey(&config->tsigkey);
     if (config->edns_option != NULL)
         perf_edns_destroyoption(&config->edns_option);
 }
@@ -909,6 +909,7 @@ do_send(void* arg)
     perf_result_t   result;
     bool            all_fail;
     unsigned char   socketbits[(MAX_SOCKETS / 8) + 1] = {};
+    perf_tsigkey_t* tsigkey                           = 0;
 
     tinfo           = (threadinfo_t*)arg;
     config          = tinfo->config;
@@ -917,6 +918,9 @@ do_send(void* arg)
     max_packet_size = config->edns ? MAX_EDNS_PACKET : MAX_UDP_PACKET;
     perf_buffer_init(&msg, packet_buffer, max_packet_size);
     perf_buffer_init(&lines, input_data, sizeof(input_data));
+    if (config->tsigkey) {
+        tsigkey = perf_tsig_parsekey(config->tsigkey);
+    }
 
     if (tinfo->max_qps > 0) {
         q_step = MILLION / tinfo->max_qps;
@@ -1072,7 +1076,7 @@ do_send(void* arg)
             perf_buffer_usedregion(&lines, &used);
             result = perf_dns_buildrequest(&used, qid,
                 config->edns, config->dnssec, config->input_format == input_format_text_update,
-                config->tsigkey, config->edns_option,
+                tsigkey, config->edns_option,
                 &msg);
             break;
 
@@ -1155,6 +1159,10 @@ do_send(void* arg)
     tinfo->done_send_time = perf_get_time();
     tinfo->done_sending   = true;
     if (write(mainpipe[1], "", 1)) { // lgtm [cpp/empty-block]
+    }
+
+    if (tsigkey) {
+        perf_tsig_destroykey(&tsigkey);
     }
     return NULL;
 }
@@ -1502,7 +1510,8 @@ static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t ev
         break;
 
     case perf_socket_event_reconnecting:
-        stats->num_conn_reconnect++;
+    case perf_socket_event_connecting:
+        stats->num_conn_attempts++;
         break;
 
     default:
@@ -1512,7 +1521,7 @@ static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t ev
 
 static void
 threadinfo_init(threadinfo_t* tinfo, const config_t* config,
-    const times_t* times)
+    const times_t* times, int idx)
 {
     unsigned int offset, socket_offset, i;
 
@@ -1581,8 +1590,13 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
     }
     tinfo->current_sock = 0;
 
+    char name[16]; // glibc is limited to 16 characters
     PERF_THREAD(&tinfo->receiver, do_recv, tinfo);
+    snprintf(name, sizeof(name), "perf-recv-%04d", idx);
+    perf_os_thread_setname(tinfo->receiver, name);
     PERF_THREAD(&tinfo->sender, do_send, tinfo);
+    snprintf(name, sizeof(name), "perf-send-%04d", idx);
+    perf_os_thread_setname(tinfo->sender, name);
 }
 
 static void
@@ -1652,7 +1666,7 @@ int main(int argc, char** argv)
         perf_log_fatal("out of memory");
     }
     for (i = 0; i < config.threads; i++)
-        threadinfo_init(&threads[i], &config, &times);
+        threadinfo_init(&threads[i], &config, &times, i);
     if (config.stats_interval > 0) {
         stats_thread.config = &config;
         stats_thread.times  = &times;

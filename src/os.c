@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2023 OARC, Inc.
+ * Copyright 2019-2024 OARC, Inc.
  * Copyright 2017-2018 Akamai Technologies
  * Copyright 2006-2016 Nominum, Inc.
  * All rights reserved.
@@ -31,6 +31,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <poll.h>
+
+#if defined(HAVE_PTHREAD_NP_H)
+#include <pthread_np.h>
+#endif /* if defined(HAVE_PTHREAD_NP_H) */
 
 void perf_os_blocksignal(int sig, bool block)
 {
@@ -148,4 +152,24 @@ perf_os_waituntilanywritable(struct perf_net_socket** socks, unsigned int nfds, 
     } else {
         return (PERF_R_SUCCESS);
     }
+}
+
+void perf_os_thread_setname(pthread_t thread, const char* name)
+{
+#if defined(HAVE_PTHREAD_SETNAME_NP) && !defined(__APPLE__)
+    /*
+     * macOS has pthread_setname_np but only works on the
+     * current thread so it's not used here
+     */
+#if defined(__NetBSD__)
+    (void)pthread_setname_np(thread, name, NULL);
+#else /* if defined(__NetBSD__) */
+    (void)pthread_setname_np(thread, name);
+#endif /* if defined(__NetBSD__) */
+#elif defined(HAVE_PTHREAD_SET_NAME_NP)
+    (void)pthread_set_name_np(thread, name);
+#else /* if defined(HAVE_PTHREAD_SETNAME_NP) && !defined(__APPLE__) */
+    (void)(thread);
+    (void)(name);
+#endif /* if defined(HAVE_PTHREAD_SETNAME_NP) && !defined(__APPLE__) */
 }

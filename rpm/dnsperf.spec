@@ -1,5 +1,5 @@
 Name:           dnsperf
-Version:        2.13.1
+Version:        2.14.0
 Release:        1%{?dist}
 Summary:        DNS Performance Testing Tool
 Group:          Productivity/Networking/DNS/Utilities
@@ -95,6 +95,27 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Thu Jan 18 2024 Jerry Lundström <lundstrom.jerry@gmail.com> 2.14.0-1
+- Release 2.14.0
+  * This release rewords connection statistics, adds names to threads and
+    fixes a bug with using TSIG in more than one thread.
+  * In "Connection Statistics", reconnections has been renamed to
+    connection attempts and now includes both the initial connection
+    attempt and following reconnections.
+  * If supported, threads will now be named after what they do, such as
+    "perf-send-<num>" and "perf-recv-<num>".
+  * The TSIG context was shared between all threads and would case a crash
+    if more than one sending thread was used. This has been fixed and TSIG
+    contexts are now per thread.
+  * Commits:
+    81dc36b TSIG context per thread
+    55011c6 Thread names
+    8bdd480 thread names
+    17c680d Set thread names for dnsperf
+    54e641d Add library function to set thread names
+    fb19440 Dockerfile
+    a80de21 Reword connection statistics
+    688a4fd Reword connection statistics
 * Wed Aug 23 2023 Jerry Lundström <lundstrom.jerry@gmail.com> 2.13.1-1
 - Release 2.13.1
   * This release fixes a few issues with in-progress queries and the TCP

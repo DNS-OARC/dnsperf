@@ -1,4 +1,4 @@
-# Copyright 2019-2023 OARC, Inc.
+# Copyright 2019-2024 OARC, Inc.
 # Copyright 2017-2018 Akamai Technologies
 # Copyright 2006-2016 Nominum, Inc.
 # All rights reserved.
@@ -16,11 +16,15 @@
 # limitations under the License.
 
 AC_PREREQ(2.64)
-AC_INIT([dnsperf], [2.13.1], [admin@dns-oarc.net], [dnsperf], [https://github.com/DNS-OARC/dnsperf/issues])
+AC_INIT([dnsperf], [2.14.0], [admin@dns-oarc.net], [dnsperf], [https://github.com/DNS-OARC/dnsperf/issues])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 AC_CONFIG_SRCDIR([src/dnsperf.c])
 AC_CONFIG_HEADER([src/config.h])
 AC_CONFIG_MACRO_DIR([m4])
+
+# for pthread_setname_np
+# needs to be called before any macros that run the C compiler
+AC_GNU_SOURCE
 
 # Checks for programs.
 AC_PROG_CC
@@ -55,6 +59,8 @@ AM_EXTRA_RECURSIVE_TARGETS([gcov])
 
 # Checks for support.
 AX_PTHREAD
+AC_CHECK_FUNCS([pthread_setname_np pthread_set_name_np])
+AC_CHECK_HEADERS([pthread_np.h], [], [], [#include <pthread.h>])
 AC_CHECK_LIB([m], [sqrt])
 AC_CHECK_HEADERS([stdatomic.h])
 AM_CONDITIONAL([HAVE_STDATOMIC], [test "x$ac_cv_header_stdatomic_h" != "xno"])

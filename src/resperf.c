@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2023 OARC, Inc.
+ * Copyright 2019-2024 OARC, Inc.
  * Copyright 2017-2018 Akamai Technologies
  * Copyright 2006-2016 Nominum, Inc.
  * All rights reserved.
@@ -149,7 +149,8 @@ static uint64_t num_queries_outstanding;
 static uint64_t num_responses_received;
 static uint64_t num_queries_timed_out;
 static uint64_t rcodecounts[16];
-static uint64_t num_reconnections;
+static uint64_t num_conn_completed;
+static uint64_t num_conn_attempts;
 
 static uint64_t time_now;
 static uint64_t time_of_program_start;
@@ -489,10 +490,12 @@ static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t ev
     case perf_socket_event_connected:
         b->connections++;
         b->conn_latency_sum += elapsed_time / (double)MILLION;
+        num_conn_completed++;
         break;
 
     case perf_socket_event_reconnecting:
-        num_reconnections++;
+    case perf_socket_event_connecting:
+        num_conn_attempts++;
         break;
 
     default:
@@ -545,8 +548,7 @@ print_statistics(void)
             perf_dns_rcode_strings[i], rcodecounts[i],
             (rcodecounts[i] * 100.0) / num_responses_received);
     }
-    printf("\n");
-    printf("  Reconnection(s):      %" PRIu64 "\n", num_reconnections);
+    printf("\n\n");
     printf("  Run time (s):         %u.%06u\n",
         (unsigned int)(run_time / MILLION),
         (unsigned int)(run_time % MILLION));
@@ -569,6 +571,10 @@ print_statistics(void)
     printf("  Maximum throughput:   %.6lf qps\n", max_throughput);
     printf("  Lost at that point:   %.2f%%\n", loss_at_max_throughput);
     printf("\n");
+    printf("  Connection attempts:  %" PRIu64 " (%" PRIu64 " successful, %.2lf%%)\n\n",
+        num_conn_attempts,
+        num_conn_completed,
+        PERF_SAFE_DIV(100.0 * num_conn_completed, num_conn_attempts));
 }
 
 /*
