@@ -16,7 +16,8 @@
 # limitations under the License.
 
 MAINTAINERCLEANFILES = $(srcdir)/Makefile.in $(srcdir)/config.h.in
-CLEANFILES = dnsperf.1 resperf.1 *.gcda *.gcno *.gcov
+CLEANFILES = dnsperf.1 resperf.1 *.gcda *.gcno *.gcov \
+  */*.gcda */*.gcno */*.gcov
 
 SUBDIRS = test
 
