@@ -914,6 +914,7 @@ end_loop:
     if (!plotf) {
         char __s[256];
         perf_log_fatal("could not open %s: %s", plotfile, perf_strerror_r(errno, __s, sizeof(__s)));
+        return 0; // fix clang scan-build
     }
 
     /* Print column headers */
