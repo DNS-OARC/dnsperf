@@ -45,17 +45,17 @@ if [ -n "$dumdohd" ]; then
     rm -f key.pem cert.pem
     openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/C=AU/ST=Some-State/O=Internet Widgits Pty Ltd"
 
-    $dumdohd 5353 key.pem cert.pem -D 100 &
+    $dumdohd 5354 key.pem cert.pem -D 100 &
     pid="$!"
     sleep 2
-    ../dnsperf -s 127.0.0.1 -p 5353 -d "$srcdir/datafile" -t 2 -l 2 -Q 10 -m doh
+    ../dnsperf -s 127.0.0.1 -p 5354 -d "$srcdir/datafile" -t 2 -l 2 -Q 10 -m doh
     kill "$pid"
     wait "$pid" || true
 
-    $dumdohd 5353 key.pem cert.pem -D 10 &
+    $dumdohd 5354 key.pem cert.pem -D 10 &
     pid="$!"
     sleep 2
-    ../dnsperf -s 127.0.0.1 -p 5353 -d "$srcdir/datafile" -t 2 -l 10 -Q 100 -m doh
+    ../dnsperf -s 127.0.0.1 -p 5354 -d "$srcdir/datafile" -t 2 -l 10 -Q 100 -m doh
     kill "$pid"
     wait "$pid" || true
 fi
