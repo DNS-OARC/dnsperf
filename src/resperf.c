@@ -151,6 +151,7 @@ static uint64_t num_queries_timed_out;
 static uint64_t rcodecounts[16];
 static uint64_t num_conn_completed;
 static uint64_t num_conn_attempts;
+static uint64_t num_response_unexpected;
 
 static uint64_t time_now;
 static uint64_t time_of_program_start;
@@ -535,6 +536,9 @@ print_statistics(void)
         num_responses_received);
     printf("  Queries lost:         %" PRIu64 "\n",
         num_queries_sent - num_responses_received);
+    if (num_response_unexpected > 0)
+        printf("  Unexpected IDs:       %" PRIu64 "\n",
+            num_response_unexpected);
     printf("  Response codes:       ");
     first_rcode = true;
     for (i = 0; i < 16; i++) {
@@ -761,6 +765,7 @@ try_process_response(unsigned int sockindex)
         if (!suppress.unexpected) {
             perf_log_warning("received a response with an unexpected id: %u", qid);
         }
+        num_response_unexpected++;
         return;
     }
     q = &queries[idx];
