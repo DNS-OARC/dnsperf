@@ -6,8 +6,8 @@ Build-Depends: debhelper (>= 10), build-essential, automake, autoconf,
  libtool, libssl-dev, pkg-config, libldns-dev, libck-dev, libnghttp2-dev
 Standards-Version: 3.9.4
 Homepage: https://www.dns-oarc.net/tools/dnsperf
-Vcs-Git: https://github.com/DNS-OARC/dnsperf.git
-Vcs-Browser: https://github.com/DNS-OARC/dnsperf
+Vcs-Git: https://codeberg.org/DNS-OARC/dnsperf.git
+Vcs-Browser: https://codeberg.org/DNS-OARC/dnsperf
 
 Package: dnsperf
 Architecture: any
