@@ -28,7 +28,7 @@ More information may be found here:
 - https://www.dns-oarc.net/tools/dnsperf
 
 Issues should be reported here:
-- https://github.com/DNS-OARC/dnsperf/issues
+- https://codeberg.org/DNS-OARC/dnsperf/issues
 
 General support and discussion:
 - Mattermost: https://chat.dns-oarc.net/community/channels/oarc-software
@@ -84,7 +84,7 @@ make install
 ## Building from Git repository
 
 ```
-git clone https://github.com/DNS-OARC/dnsperf.git
+git clone https://codeberg.org/DNS-OARC/dnsperf.git
 cd dnsperf
 ./autogen.sh
 ./configure [options]
