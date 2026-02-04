@@ -1,3 +1,5 @@
+# NOTE: Moved to https://codeberg.org/DNS-OARC/dnsperf
+
 # dnsperf
 
 [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=dns-oarc%3Adnsperf&metric=bugs)](https://sonarcloud.io/summary/new_code?id=dns-oarc%3Adnsperf) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=dns-oarc%3Adnsperf&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=dns-oarc%3Adnsperf)
